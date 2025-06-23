@@ -1,13 +1,5 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  FaTachometerAlt, 
-  FaUsers, 
-  FaChartBar, 
-  FaMoneyBillWave,
-  FaCog,
-  FaHome
-} from 'react-icons/fa';
 import Badge from '../ui/Badge';
 
 /**
@@ -15,35 +7,30 @@ import Badge from '../ui/Badge';
  * Provides navigation links for the admin dashboard
  */
 const AdminNav = () => {
-  // Navigation items with icons and paths
+  // Navigation items with paths
   const navItems = [
     { 
       name: 'Dashboard', 
-      icon: <FaTachometerAlt />, 
       path: '/admin/dashboard',
       badge: null
     },
     { 
       name: 'Players', 
-      icon: <FaUsers />, 
       path: '/admin/players',
       badge: null 
     },
     { 
       name: 'Game Statistics', 
-      icon: <FaChartBar />, 
       path: '/admin/game-stats',
       badge: null 
     },
     { 
       name: 'Transactions', 
-      icon: <FaMoneyBillWave />, 
       path: '/admin/transactions',
       badge: { text: 'New', variant: 'primary' }
     },
     { 
       name: 'Settings', 
-      icon: <FaCog />, 
       path: '/admin/settings',
       badge: null 
     }

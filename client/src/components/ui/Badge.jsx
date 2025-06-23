@@ -8,8 +8,7 @@ const Badge = ({
   className = '',
   glow = false,
   dot = false,
-  bordered = false,
-  icon = null
+  bordered = false
 }) => {
   // Define variant classes
   const variantClasses = {
@@ -55,9 +54,6 @@ const Badge = ({
     <span className={badgeClasses}>
       {dot && (
         <span className="mr-1.5 h-2 w-2 rounded-full bg-white"></span>
-      )}
-      {icon && (
-        <span className="mr-1">{icon}</span>
       )}
       {children}
     </span>

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useLocation, Navigate } from 'react-router-dom';
-import { FaBars, FaTimes, FaChartBar, FaUsers } from 'react-icons/fa';
 import AdminNav from './AdminNav';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -42,7 +41,7 @@ const AdminLayout = ({ children }) => {
             onClick={() => setSidebarOpen(prev => !prev)}
             className="p-2 rounded-md hover:bg-bg-elevated bg-white/5 backdrop-blur-sm border border-white/5"
           >
-            {sidebarOpen ? <FaTimes className="text-gray-300" /> : <FaBars className="text-gray-300" />}
+            {sidebarOpen ? "✕" : "≡"}
           </button>
         </div>
         
@@ -53,15 +52,15 @@ const AdminLayout = ({ children }) => {
         {/* Collapsed version of navigation when sidebar is closed */}
         <div className={`${sidebarOpen && 'hidden'} mt-6`}>
           <div className="flex flex-col items-center space-y-8 pt-4">
-            {/* Using just icons from AdminNav component */}
+            {/* Simple text alternatives instead of icons */}
             <a href="/admin/dashboard" className="p-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors">
-              <FaChartBar size={20} />
+              D
             </a>
             <a href="/admin/players" className="p-3 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors">
-              <FaUsers size={20} />
+              P
             </a>
             <a href="/admin/game-stats" className="p-3 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors">
-              <FaChartBar size={20} />
+              S
             </a>
           </div>
         </div>

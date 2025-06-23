@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Card from '../../components/ui/Card';
-import { FaChartBar, FaCalendarAlt, FaFilter } from 'react-icons/fa';
 import adminService from '../../services/admin/adminService';
 
 /**

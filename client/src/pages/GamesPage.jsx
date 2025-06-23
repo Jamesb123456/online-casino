@@ -9,54 +9,42 @@ const GamesPage = () => {
       id: 'crash',
       name: 'Crash',
       description: 'Watch the multiplier increase until it crashes. Cash out before it\'s too late!',
-      icon: '📈',
       bgColor: 'bg-gradient-to-br from-game-crash/30 to-bg-card',
-      iconBg: 'bg-game-crash/20',
       accentColor: 'border-game-crash'
     },
     {
       id: 'plinko',
       name: 'Plinko',
       description: 'Drop the ball and watch it bounce through pins to determine your payout.',
-      icon: '🔵',
       bgColor: 'bg-gradient-to-br from-game-plinko/30 to-bg-card',
-      iconBg: 'bg-game-plinko/20',
       accentColor: 'border-game-plinko'
     },
     {
       id: 'wheel',
       name: 'Wheel',
       description: 'Spin the wheel and win based on where it stops!',
-      icon: '🎡',
       bgColor: 'bg-gradient-to-br from-game-wheel/30 to-bg-card',
-      iconBg: 'bg-game-wheel/20',
       accentColor: 'border-game-wheel'
     },
     {
       id: 'roulette',
       name: 'Roulette',
       description: 'Classic casino roulette with multiple betting options.',
-      icon: '🎲',
       bgColor: 'bg-gradient-to-br from-game-roulette/30 to-bg-card',
-      iconBg: 'bg-game-roulette/20',
       accentColor: 'border-game-roulette'
     },
     {
       id: 'chicken',
       name: 'Chicken',
       description: 'How far will you go? Push your luck to the limit!',
-      icon: '🐔',
       bgColor: 'bg-gradient-to-br from-game-chicken/30 to-bg-card',
-      iconBg: 'bg-game-chicken/20',
       accentColor: 'border-game-chicken'
     },
     {
       id: 'blackjack',
       name: 'Blackjack',
       description: 'Beat the dealer by getting closer to 21 without going over.',
-      icon: '🃏',
       bgColor: 'bg-gradient-to-br from-game-blackjack/30 to-bg-card',
-      iconBg: 'bg-game-blackjack/20',
       accentColor: 'border-game-blackjack'
     }
   ];
@@ -90,8 +78,8 @@ const GameCard = ({ game }) => {
     >
       <div className={`h-52 ${game.bgColor} flex items-center justify-center relative overflow-hidden rounded-t-lg`}>
         <div className="absolute inset-0 opacity-20 bg-[url('/src/assets/pattern.png')]"></div>
-        <div className={`flex items-center justify-center w-24 h-24 ${game.iconBg} rounded-full relative z-10 ${game.accentColor} border-2`}>
-          <span className="text-6xl">{game.icon}</span>
+        <div className={`flex items-center justify-center w-24 h-24 rounded-full relative z-10 ${game.accentColor} border-2 bg-opacity-20 bg-gray-700`}>
+          <span className="text-2xl font-bold text-white">{game.name}</span>
         </div>
       </div>
       <div className="p-6">

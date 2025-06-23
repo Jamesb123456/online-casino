@@ -18,8 +18,6 @@ const Input = ({
   min,
   max,
   step,
-  leftIcon,
-  rightIcon,
   variant = 'default'
 }) => {
   const inputId = id || name;
@@ -47,12 +45,6 @@ const Input = ({
       )}
       
       <div className="relative">
-        {leftIcon && (
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-            {leftIcon}
-          </div>
-        )}
-        
         <input
           type={type}
           id={inputId}
@@ -68,20 +60,12 @@ const Input = ({
           step={step}
           className={`
             w-full px-4 py-3 border rounded-md focus:outline-none transition-colors duration-200
-            ${leftIcon ? 'pl-10' : ''}
-            ${rightIcon ? 'pr-10' : ''}
             ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500/30' : variantClass} 
             ${disabled ? 'bg-bg-subtle cursor-not-allowed opacity-60' : 'text-white'}
             focus:ring-4
             ${inputClassName}
           `}
         />
-        
-        {rightIcon && (
-          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-            {rightIcon}
-          </div>
-        )}
       </div>
       
       {error && <p className="mt-2 text-sm text-red-500">{error}</p>}

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { FaUsers, FaMoneyBillWave, FaGamepad, FaExclamationTriangle } from 'react-icons/fa';
 import Card from '../../components/ui/Card';
 import adminService from '../../services/admin/adminService';
 
@@ -125,9 +124,6 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-blue-600 to-blue-800">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-900 mr-4">
-              <FaUsers className="text-white text-xl" />
-            </div>
             <div>
               <p className="text-white text-sm">Total Players</p>
               <p className="text-white text-2xl font-bold">{stats.totalPlayers}</p>
@@ -138,9 +134,6 @@ const Dashboard = () => {
         
         <Card className="bg-gradient-to-br from-green-600 to-green-800">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-900 mr-4">
-              <FaMoneyBillWave className="text-white text-xl" />
-            </div>
             <div>
               <p className="text-white text-sm">Total Balance</p>
               <p className="text-white text-2xl font-bold">{formatCurrency(stats.totalBalance)}</p>
@@ -151,9 +144,6 @@ const Dashboard = () => {
         
         <Card className="bg-gradient-to-br from-purple-600 to-purple-800">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-purple-900 mr-4">
-              <FaGamepad className="text-white text-xl" />
-            </div>
             <div>
               <p className="text-white text-sm">Total Games</p>
               <p className="text-white text-2xl font-bold">{stats.totalGames}</p>
@@ -164,9 +154,6 @@ const Dashboard = () => {
         
         <Card className="bg-gradient-to-br from-red-600 to-red-800">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-red-900 mr-4">
-              <FaExclamationTriangle className="text-white text-xl" />
-            </div>
             <div>
               <p className="text-white text-sm">Alerts</p>
               <p className="text-white text-2xl font-bold">{stats.alerts.length}</p>

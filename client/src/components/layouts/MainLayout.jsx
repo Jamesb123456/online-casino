@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import ChatBox from '../chat/ChatBox';
 
 /**
  * MainLayout Component
@@ -67,6 +68,9 @@ const MainLayout = ({ children }) => {
           </div>
         </div>
       </footer>
+      
+      {/* Global Chat */}
+      <ChatBox />
     </div>
   );
 };

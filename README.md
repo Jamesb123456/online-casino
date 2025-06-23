@@ -9,6 +9,7 @@ A web-based online casino featuring multiple games with admin controls, user aut
 - Admin dashboard for balance management and statistics
 - Comprehensive game logging
 - Real-time game updates via Socket.IO
+- Global chat for authenticated users
 
 ## Technology Stack
 

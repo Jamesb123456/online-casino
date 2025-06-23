@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import initChatHandlers from './src/socket/chatHandler.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -126,6 +127,9 @@ io.on('connection', (socket) => {
     console.log('Client disconnected:', socket.id);
   });
 });
+
+// Initialize chat handlers
+initChatHandlers(io);
 
 // Start server
 const PORT = process.env.PORT || 5001; // Changed default port to 5001

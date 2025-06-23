@@ -95,7 +95,7 @@ const Header = () => {
           <nav className="hidden md:flex items-center space-x-1">
             <NavLink to="/" label="Home" />
             <NavLink to="/games" label="Games" />
-            <NavLink to="/leaderboard" label="Leaderboard" />
+            {/* <NavLink to="/leaderboard" label="Leaderboard" /> */}
             
             {isAuthenticated ? (
               <>

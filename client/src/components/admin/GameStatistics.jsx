@@ -191,9 +191,9 @@ const GameStatistics = () => {
       <Card className="bg-gray-800 text-white">
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center">
-            <FaCalendarAlt className="mr-2 text-gray-400" />
+            <span className="mr-2 text-gray-400">📅</span>
             <select
-              className="bg-gray-700 border border-gray-600 rounded-md p-2"
+              className="bg-gray-700 border border-gray-600 rounded-md p-2 text-white"
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
             >
@@ -205,9 +205,9 @@ const GameStatistics = () => {
           </div>
           
           <div className="flex items-center">
-            <FaFilter className="mr-2 text-gray-400" />
+            <span className="mr-2 text-gray-400">🔍</span>
             <select
-              className="bg-gray-700 border border-gray-600 rounded-md p-2"
+              className="bg-gray-700 border border-gray-600 rounded-md p-2 text-white"
               value={gameFilter}
               onChange={(e) => setGameFilter(e.target.value)}
             >
@@ -261,7 +261,7 @@ const GameStatistics = () => {
           {/* Game Breakdown */}
           <Card className="bg-gray-800 text-white">
             <div className="flex items-center mb-4">
-              <FaChartBar className="mr-2 text-blue-400" />
+              <span className="mr-2 text-blue-400 text-xl">📊</span>
               <h2 className="text-xl font-bold">Game Performance</h2>
             </div>
             

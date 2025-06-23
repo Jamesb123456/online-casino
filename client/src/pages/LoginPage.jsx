@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import MainLayout from '../components/layouts/MainLayout';
+import MainLayout from '../layouts/MainLayout';
 import { AuthContext } from '../contexts/AuthContext';
 
 const LoginPage = () => {
@@ -49,7 +49,7 @@ const LoginPage = () => {
 
   return (
     <MainLayout>
-      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 bg-gradient-to-b from-[#0f1923] to-[#1a2c3d]">
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 ">
         <div className="w-full max-w-md">
           {/* Card with gold accent border */}
           <div className="bg-[#192c3d] rounded-lg shadow-2xl overflow-hidden border border-[#2a3f52]">

@@ -301,7 +301,8 @@ const PlayerManagement = () => {
           className="flex items-center" 
           onClick={() => setShowAddModal(true)}
         >
-          <FaPlus className="mr-2" /> Add Player
+          <span className="mr-2">➕</span>
+          Add Player
         </Button>
       </div>
       
@@ -309,11 +310,11 @@ const PlayerManagement = () => {
         <div className="flex justify-between items-center mb-4">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-              <FaSearch className="text-gray-400" />
+              <span className="text-gray-400">🔍</span>
             </div>
             <input
               type="text"
-              className="pl-10 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
               placeholder="Search players..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -368,25 +369,29 @@ const PlayerManagement = () => {
                       <Button 
                         color="primary" 
                         size="sm" 
-                        className="mr-2"
+                        className="mr-2 flex items-center"
                         onClick={() => handleFundClick(player)}
                       >
-                        <FaCoins />
+                        <span className="mr-1">💰</span>
+                        Funds
                       </Button>
                       <Button 
                         color="warning" 
                         size="sm"
-                        className="mr-2"
+                        className="mr-2 flex items-center"
                         onClick={() => handleEditClick(player)}
                       >
-                        <FaEdit />
+                        <span className="mr-1">✏️</span>
+                        Edit
                       </Button>
                       <Button 
                         color="danger" 
                         size="sm" 
+                        className="flex items-center"
                         onClick={() => handleDeleteClick(player)}
                       >
-                        <FaTrash />
+                        <span className="mr-1">🗑️</span>
+                        Delete
                       </Button>
                     </td>
                   </tr>
@@ -412,7 +417,7 @@ const PlayerManagement = () => {
             <input
               type="text"
               name="username"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={formData.username}
               onChange={handleInputChange}
             />
@@ -423,7 +428,7 @@ const PlayerManagement = () => {
             <input
               type="email"
               name="email"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={formData.email}
               onChange={handleInputChange}
             />

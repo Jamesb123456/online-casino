@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -100,6 +101,30 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
+// Verify admin status
+router.get('/verify-admin', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Check if user has admin role
+    const isAdmin = user.role === 'admin';
+    
+    res.status(200).json({
+      isAdmin,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        balance: user.balance
+      }
+    });
+  } catch (error) {
+    console.error('Admin verification error:', error);
+    res.status(500).json({ message: 'Server error during admin verification' });
   }
 });
 

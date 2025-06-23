@@ -7,31 +7,36 @@ import Badge from '../ui/Badge';
  * Provides navigation links for the admin dashboard
  */
 const AdminNav = () => {
-  // Navigation items with paths
+  // Navigation items with paths and text icons
   const navItems = [
     { 
       name: 'Dashboard', 
       path: '/admin/dashboard',
+      icon: '📊',
       badge: null
     },
     { 
       name: 'Players', 
       path: '/admin/players',
+      icon: '👥',
       badge: null 
     },
     { 
       name: 'Game Statistics', 
       path: '/admin/game-stats',
+      icon: '📈',
       badge: null 
     },
     { 
       name: 'Transactions', 
       path: '/admin/transactions',
+      icon: '💰',
       badge: { text: 'New', variant: 'primary' }
     },
     { 
       name: 'Settings', 
       path: '/admin/settings',
+      icon: '⚙️',
       badge: null 
     }
   ];
@@ -46,14 +51,12 @@ const AdminNav = () => {
               className={({ isActive }) => 
                 `flex items-center py-3.5 px-4 rounded-lg transition-all duration-200 ${
                   isActive 
-                    ? 'bg-primary/20 text-primary font-medium' 
-                    : 'hover:bg-white/5 hover:text-white'
+                    ? 'bg-blue-600/20 text-blue-400 font-medium' 
+                    : 'hover:bg-gray-700/50 hover:text-white'
                 }`
               }
             >
-              <span className={`mr-3 text-lg transition-colors ${
-                ({ isActive }) => isActive ? 'text-primary' : 'text-gray-400'
-              }`}>
+              <span className="mr-3 text-lg">
                 {item.icon}
               </span>
               <span>{item.name}</span>
@@ -74,16 +77,16 @@ const AdminNav = () => {
         ))}
       </ul>
       
-      <div className="mt-auto border-t border-gray-800 pt-6 px-4">
+      <div className="mt-auto border-t border-gray-700 pt-6 px-4">
         <NavLink 
           to="/" 
           className={({isActive}) => 
             `flex items-center py-2.5 px-3 rounded-lg text-sm transition-colors ${
-              isActive ? 'bg-accent/10 text-accent' : 'text-gray-400 hover:text-white hover:bg-white/5'
+              isActive ? 'bg-yellow-600/20 text-yellow-400' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
             }`
           }
         >
-          <FaHome className="mr-2" />
+          <span className="mr-2">🏠</span>
           Return to Casino
         </NavLink>
       </div>

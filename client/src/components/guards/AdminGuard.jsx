@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import api from '../../services/api';
+import { AuthContext } from '../../contexts/AuthContext';
+import Loading from '../ui/Loading';
 
 /**
  * AdminGuard Component
@@ -8,57 +9,26 @@ import api from '../../services/api';
  * Redirects to login page if user is not authenticated as admin
  */
 const AdminGuard = ({ children }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user, loading, isAuthenticated } = useContext(AuthContext);
   const location = useLocation();
 
-  useEffect(() => {
-    const verifyAdmin = async () => {
-      try {
-        // Check if user has admin token in localStorage
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          setIsAdmin(false);
-          setIsLoading(false);
-          return;
-        }
-
-        // Verify token is valid and has admin privileges
-        const response = await api.get('/auth/verify-admin', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-
-        if (response.data && response.data.isAdmin) {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch (error) {
-        console.error('Error verifying admin status:', error);
-        setIsAdmin(false);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    verifyAdmin();
-  }, []);
-
-  if (isLoading) {
+  if (loading) {
     // Show loading indicator while checking credentials
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+        <Loading size="lg" message="Verifying admin access..." />
       </div>
     );
   }
 
-  if (!isAdmin) {
-    // Redirect to login if not admin
+  if (!isAuthenticated) {
+    // Redirect to login if not authenticated
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (!user || user.role !== 'admin') {
+    // Redirect to home if not admin
+    return <Navigate to="/" replace />;
   }
 
   return children;

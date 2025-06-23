@@ -5,7 +5,7 @@
 
 // Import models and dependencies
 import Message from '../models/Message.js';
-import User from '../models/User.js';
+import User from '../../models/User.js';
 import jwt from 'jsonwebtoken';
 
 /**

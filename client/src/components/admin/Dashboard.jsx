@@ -116,124 +116,144 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-white mb-6">Dashboard</h1>
+      <h1 className="text-3xl font-bold text-white mb-6">📊 Dashboard</h1>
       
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-600 to-blue-800">
-          <div className="flex items-center">
+        <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-white text-sm">Total Players</p>
+              <p className="text-white text-sm font-medium">Total Players</p>
               <p className="text-white text-2xl font-bold">{stats.totalPlayers}</p>
               <p className="text-blue-200 text-xs">{stats.activePlayers} active now</p>
             </div>
+            <div className="text-3xl">👥</div>
           </div>
-        </Card>
+        </div>
         
-        <Card className="bg-gradient-to-br from-green-600 to-green-800">
-          <div className="flex items-center">
+        <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-white text-sm">Total Balance</p>
+              <p className="text-white text-sm font-medium">Total Balance</p>
               <p className="text-white text-2xl font-bold">{formatCurrency(stats.totalBalance)}</p>
               <p className="text-green-200 text-xs">All players combined</p>
             </div>
+            <div className="text-3xl">💰</div>
           </div>
-        </Card>
+        </div>
         
-        <Card className="bg-gradient-to-br from-purple-600 to-purple-800">
-          <div className="flex items-center">
+        <div className="bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-white text-sm">Total Games</p>
+              <p className="text-white text-sm font-medium">Total Games</p>
               <p className="text-white text-2xl font-bold">{stats.totalGames}</p>
               <p className="text-purple-200 text-xs">Across all game types</p>
             </div>
+            <div className="text-3xl">🎮</div>
           </div>
-        </Card>
+        </div>
         
-        <Card className="bg-gradient-to-br from-red-600 to-red-800">
-          <div className="flex items-center">
+        <div className="bg-gradient-to-br from-red-600 to-red-800 rounded-lg p-6 shadow-lg">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-white text-sm">Alerts</p>
+              <p className="text-white text-sm font-medium">Alerts</p>
               <p className="text-white text-2xl font-bold">{stats.alerts.length}</p>
               <p className="text-red-200 text-xs">Requiring attention</p>
             </div>
+            <div className="text-3xl">⚠️</div>
           </div>
-        </Card>
+        </div>
       </div>
       
       {/* Game Statistics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-gray-800 text-white">
-          <h2 className="text-xl font-bold mb-4">Game Statistics</h2>
+        <div className="bg-gray-800 rounded-lg p-6 shadow-lg border border-gray-700">
+          <h2 className="text-xl font-bold mb-4 text-white flex items-center">
+            <span className="mr-2">📈</span>
+            Game Statistics
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="py-2 px-4">Game</th>
-                  <th className="py-2 px-4">Played</th>
-                  <th className="py-2 px-4">House Profit</th>
+                <tr className="border-b border-gray-600">
+                  <th className="py-3 px-4 text-gray-300 font-medium">Game</th>
+                  <th className="py-3 px-4 text-gray-300 font-medium">Played</th>
+                  <th className="py-3 px-4 text-gray-300 font-medium">House Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {gameStats.map((game, index) => (
-                  <tr key={index} className="border-b border-gray-700 hover:bg-gray-700">
-                    <td className="py-2 px-4">{game.name}</td>
-                    <td className="py-2 px-4">{game.played}</td>
-                    <td className="py-2 px-4 text-green-400">{formatCurrency(game.profit)}</td>
+                  <tr key={index} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
+                    <td className="py-3 px-4 text-white font-medium">{game.name}</td>
+                    <td className="py-3 px-4 text-gray-300">{game.played.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-green-400 font-semibold">{formatCurrency(game.profit)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
         
         {/* Recent Transactions */}
-        <Card className="bg-gray-800 text-white">
-          <h2 className="text-xl font-bold mb-4">Recent Transactions</h2>
+        <div className="bg-gray-800 rounded-lg p-6 shadow-lg border border-gray-700">
+          <h2 className="text-xl font-bold mb-4 text-white flex items-center">
+            <span className="mr-2">💳</span>
+            Recent Transactions
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="py-2 px-4">User</th>
-                  <th className="py-2 px-4">Type</th>
-                  <th className="py-2 px-4">Amount</th>
-                  <th className="py-2 px-4">Time</th>
+                <tr className="border-b border-gray-600">
+                  <th className="py-3 px-4 text-gray-300 font-medium">User</th>
+                  <th className="py-3 px-4 text-gray-300 font-medium">Type</th>
+                  <th className="py-3 px-4 text-gray-300 font-medium">Amount</th>
+                  <th className="py-3 px-4 text-gray-300 font-medium">Time</th>
                 </tr>
               </thead>
               <tbody>
                 {stats.recentTransactions.map((transaction) => (
-                  <tr key={transaction.id} className="border-b border-gray-700 hover:bg-gray-700">
-                    <td className="py-2 px-4">{transaction.user}</td>
-                    <td className="py-2 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        transaction.type === 'deposit' ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+                  <tr key={transaction.id} className="border-b border-gray-700 hover:bg-gray-700/50 transition-colors">
+                    <td className="py-3 px-4 text-white font-medium">{transaction.user}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        transaction.type === 'deposit' ? 'bg-green-900/50 text-green-300 border border-green-700' : 'bg-red-900/50 text-red-300 border border-red-700'
                       }`}>
                         {transaction.type}
                       </span>
                     </td>
-                    <td className="py-2 px-4">{formatCurrency(transaction.amount)}</td>
-                    <td className="py-2 px-4">{formatTime(transaction.timestamp)}</td>
+                    <td className="py-3 px-4 text-gray-300 font-semibold">{formatCurrency(transaction.amount)}</td>
+                    <td className="py-3 px-4 text-gray-400">{formatTime(transaction.timestamp)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </div>
       
       {/* Alerts */}
-      <Card className="bg-gray-800 text-white">
-        <h2 className="text-xl font-bold mb-4">System Alerts</h2>
+      <div className="bg-gray-800 rounded-lg p-6 shadow-lg border border-gray-700">
+        <h2 className="text-xl font-bold mb-4 text-white flex items-center">
+          <span className="mr-2">🔔</span>
+          System Alerts
+        </h2>
         <div className="space-y-3">
           {stats.alerts.map((alert) => (
-            <div key={alert.id} className={`p-3 rounded-md ${
-              alert.type === 'warning' ? 'bg-yellow-900 text-yellow-200' : 'bg-blue-900 text-blue-200'
+            <div key={alert.id} className={`p-4 rounded-md border ${
+              alert.type === 'warning' 
+                ? 'bg-yellow-900/30 text-yellow-200 border-yellow-700' 
+                : 'bg-blue-900/30 text-blue-200 border-blue-700'
             }`}>
-              {alert.message}
+              <div className="flex items-start">
+                <span className="mr-2 text-lg">
+                  {alert.type === 'warning' ? '⚠️' : 'ℹ️'}
+                </span>
+                <span>{alert.message}</span>
+              </div>
             </div>
           ))}
         </div>
-      </Card>
+      </div>
     </div>
   );
 };

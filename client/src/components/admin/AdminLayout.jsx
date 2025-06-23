@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useLocation, Navigate } from 'react-router-dom';
-import { FaBars, FaTimes } from 'react-icons/fa';
+import { FaBars, FaTimes, FaChartBar, FaUsers } from 'react-icons/fa';
 import AdminNav from './AdminNav';
+import Button from '../ui/Button';
+import Badge from '../ui/Badge';
 
 /**
  * Admin Dashboard Layout
@@ -19,37 +21,46 @@ const AdminLayout = ({ children }) => {
     return <Navigate to="/login" />;
   }
 
-  // We no longer need navigation items here as they're now in AdminNav component
-
   return (
-    <div className="flex h-screen bg-gray-900">
+    <div className="flex h-screen bg-bg-body">
       {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'w-64' : 'w-16'} h-screen bg-gray-800 text-white transition-all duration-300 fixed`}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className={`text-xl font-bold text-purple-500 ${!sidebarOpen && 'hidden'}`}>Admin Portal</h2>
+      <div 
+        className={`
+          ${sidebarOpen ? 'w-72' : 'w-20'} 
+          h-screen bg-bg-card border-r border-gray-800 text-white 
+          transition-all duration-300 fixed 
+          shadow-xl z-30
+        `}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+          <div className={`transition-opacity duration-300 ${!sidebarOpen && 'opacity-0 w-0 overflow-hidden'}`}>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-primary-light text-transparent bg-clip-text">
+              Admin Portal
+            </h2>
+          </div>
           <button 
             onClick={() => setSidebarOpen(prev => !prev)}
-            className="p-1 rounded-md hover:bg-gray-700"
+            className="p-2 rounded-md hover:bg-bg-elevated bg-white/5 backdrop-blur-sm border border-white/5"
           >
-            {sidebarOpen ? <FaTimes /> : <FaBars />}
+            {sidebarOpen ? <FaTimes className="text-gray-300" /> : <FaBars className="text-gray-300" />}
           </button>
         </div>
         
-        <div className={`${!sidebarOpen && 'hidden'}`}>
+        <div className={`transition-opacity duration-300 ${!sidebarOpen && 'opacity-0 w-0 overflow-hidden'}`}>
           <AdminNav />
         </div>
         
         {/* Collapsed version of navigation when sidebar is closed */}
-        <div className={`${sidebarOpen && 'hidden'} mt-4`}>
-          <div className="flex flex-col items-center space-y-6 pt-4">
+        <div className={`${sidebarOpen && 'hidden'} mt-6`}>
+          <div className="flex flex-col items-center space-y-8 pt-4">
             {/* Using just icons from AdminNav component */}
-            <a href="/admin/dashboard" className="p-2 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white">
+            <a href="/admin/dashboard" className="p-3 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors">
               <FaChartBar size={20} />
             </a>
-            <a href="/admin/players" className="p-2 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white">
+            <a href="/admin/players" className="p-3 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors">
               <FaUsers size={20} />
             </a>
-            <a href="/admin/game-stats" className="p-2 rounded-md hover:bg-gray-700 text-gray-300 hover:text-white">
+            <a href="/admin/game-stats" className="p-3 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors">
               <FaChartBar size={20} />
             </a>
           </div>
@@ -57,22 +68,31 @@ const AdminLayout = ({ children }) => {
       </div>
       
       {/* Main Content */}
-      <div className={`flex-1 ${sidebarOpen ? 'ml-64' : 'ml-16'} transition-all duration-300`}>
+      <div className={`flex-1 ${sidebarOpen ? 'ml-72' : 'ml-20'} transition-all duration-300`}>
         {/* Header */}
-        <header className="bg-gray-800 p-4 text-white">
+        <header className="bg-bg-card bg-opacity-70 backdrop-blur-lg px-6 py-4 text-white border-b border-gray-800 shadow-md sticky top-0 z-20">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">Casino Admin</h1>
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-300 text-transparent bg-clip-text">
+                Casino Admin
+              </h1>
+              <Badge variant="primary" className="ml-4" size="sm">Management Suite</Badge>
+            </div>
+            
             <div className="flex items-center space-x-4">
-              <span className="text-purple-300">Admin User</span>
-              <button className="px-3 py-1 bg-purple-600 rounded-md hover:bg-purple-700 transition-colors">
+              <div className="px-3 py-1.5 bg-bg-subtle rounded-full text-sm font-medium border border-gray-800">
+                <span className="text-gray-400 mr-2">Admin:</span>
+                <span className="text-primary">SuperUser</span>
+              </div>
+              <Button variant="outline" size="sm">
                 Logout
-              </button>
+              </Button>
             </div>
           </div>
         </header>
         
         {/* Page Content */}
-        <main className="p-6 bg-gray-900 min-h-screen">
+        <main className="p-6 bg-bg-body min-h-screen">
           {children}
         </main>
       </div>

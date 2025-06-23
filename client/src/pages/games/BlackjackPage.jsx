@@ -1,6 +1,6 @@
 import React, { useContext, useState } from 'react';
-import MainLayout from '../../components/layouts/MainLayout';
-import BlackjackGame from '../../components/games/blackjack/BlackjackGame';
+import MainLayout from '../../layouts/MainLayout';
+import BlackjackGame from '../../games/blackjack/BlackjackGame';
 import { AuthContext } from '../../contexts/AuthContext'; // Assuming you have an auth context
 
 /**

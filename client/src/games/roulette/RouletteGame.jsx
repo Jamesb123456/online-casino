@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import RouletteWheel from './RouletteWheel';
 import RouletteBettingPanel from './RouletteBettingPanel';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
-import rouletteSocketService from './rouletteSocketService';
+import { AuthContext } from '../../contexts/AuthContext';
+import rouletteSocketService from '../../services/socket/rouletteSocketService';
 import { BET_TYPES } from './rouletteUtils';
 
 const RouletteGame = () => {

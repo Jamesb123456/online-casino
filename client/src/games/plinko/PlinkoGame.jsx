@@ -7,12 +7,7 @@ import {
   generatePlinkoPath,
   getBucketFromPath
 } from './plinkoUtils';
-import {
-  joinPlinkoGame,
-  leavePlinkoGame,
-  onGameResult,
-  dropBall
-} from './plinkoSocketService';
+import plinkoSocketService from '../../services/socket/plinkoSocketService';
 
 // For development, toggle between mock and real socket
 const USE_MOCK_SOCKET = true;

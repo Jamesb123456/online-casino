@@ -4,8 +4,10 @@ import CrashBettingPanel from './CrashBettingPanel';
 import CrashHistory from './CrashHistory';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
-import {
-  initializeSocket,
+import crashSocketService from '../../services/socket/crashSocketService';
+
+// Destructure the methods from the service
+const {
   joinCrashGame,
   leaveCrashGame,
   onGameStateChange,
@@ -13,9 +15,9 @@ import {
   onGameStarting,
   onGameStarted,
   onGameCrashed,
-  placeBet as socketPlaceBet,
-  cashOut as socketCashOut
-} from './crashSocketService';
+  placeBet,
+  cashOut
+} = crashSocketService;
 
 // For development, toggle between mock and real socket
 // In production, this would be determined by environment variables

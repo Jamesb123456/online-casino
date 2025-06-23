@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import WheelBoard from './WheelBoard';
 import WheelBettingPanel from './WheelBettingPanel';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
+import { AuthContext } from '../../contexts/AuthContext';
+import wheelSocketService from '../../services/socket/wheelSocketService';
 import { 
   getWheelSegments, 
   generateWheelResult,

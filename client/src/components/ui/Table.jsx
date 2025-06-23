@@ -11,26 +11,57 @@ const Table = ({
   headerClassName = '',
   bodyClassName = '',
   rowClassName = '',
+  variant = 'default'
 }) => {
+  // Define variant styles
+  const variants = {
+    default: {
+      wrapper: 'bg-bg-card',
+      header: 'bg-bg-elevated',
+      row: 'bg-bg-card',
+      rowAlt: 'bg-bg-elevated bg-opacity-50',
+      hover: 'bg-primary bg-opacity-10',
+      border: 'border-gray-800'
+    },
+    primary: {
+      wrapper: 'bg-bg-card',
+      header: 'bg-primary bg-opacity-20',
+      row: 'bg-bg-card',
+      rowAlt: 'bg-primary bg-opacity-5',
+      hover: 'bg-primary bg-opacity-10',
+      border: 'border-primary border-opacity-20'
+    },
+    accent: {
+      wrapper: 'bg-bg-card',
+      header: 'bg-accent bg-opacity-20',
+      row: 'bg-bg-card',
+      rowAlt: 'bg-accent bg-opacity-5',
+      hover: 'bg-accent bg-opacity-10',
+      border: 'border-accent border-opacity-20'
+    }
+  };
+
+  const selectedVariant = variants[variant] || variants.default;
+
   // Define conditional classes
   const tableClasses = `
-    min-w-full bg-gray-900 text-white
-    ${bordered ? 'border border-gray-700' : ''}
+    min-w-full text-white
+    ${bordered ? `border ${selectedVariant.border}` : ''}
     ${className}
   `;
 
   const headerClasses = `
-    bg-gray-800 text-left
+    ${selectedVariant.header} text-left
     ${headerClassName}
   `;
 
   const bodyClasses = `
-    bg-gray-900
+    ${selectedVariant.row}
     ${bodyClassName}
   `;
 
   return (
-    <div className="overflow-x-auto rounded-lg shadow">
+    <div className={`overflow-x-auto rounded-xl shadow-card ${selectedVariant.wrapper}`}>
       <table className={tableClasses}>
         <thead className={headerClasses}>
           <tr>
@@ -38,8 +69,8 @@ const Table = ({
               <th
                 key={index}
                 className={`
-                  py-3 px-4 font-semibold border-b border-gray-700
-                  ${compact ? 'py-2 px-3 text-sm' : ''}
+                  py-4 px-6 font-semibold border-b ${selectedVariant.border} text-white
+                  ${compact ? 'py-3 px-4 text-sm' : ''}
                 `}
               >
                 {column.header || column.accessor || ''}
@@ -52,8 +83,9 @@ const Table = ({
             <tr
               key={rowIndex}
               className={`
-                ${striped && rowIndex % 2 === 0 ? 'bg-gray-800' : ''}
-                ${hoverable ? 'hover:bg-gray-700' : ''}
+                ${striped && rowIndex % 2 === 0 ? selectedVariant.rowAlt : ''}
+                ${hoverable ? `hover:${selectedVariant.hover}` : ''}
+                transition-colors
                 ${rowClassName}
               `}
             >
@@ -66,7 +98,7 @@ const Table = ({
                   <td
                     key={colIndex}
                     className={`
-                      py-3 px-4 border-b border-gray-700
+                      py-4 px-6 border-b ${selectedVariant.border}
                       ${compact ? 'py-2 px-3 text-sm' : ''}
                       ${column.className || ''}
                     `}
@@ -81,7 +113,7 @@ const Table = ({
             <tr>
               <td
                 colSpan={columns.length}
-                className="py-6 px-4 text-center text-gray-400"
+                className="py-8 px-6 text-center text-gray-400"
               >
                 No data available
               </td>

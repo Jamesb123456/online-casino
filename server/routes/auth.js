@@ -7,16 +7,15 @@ const router = express.Router();
 // Register a new user
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, password } = req.body;
+    const email = req.body.email || ''; // Make email optional
     
-    // Check if user already exists
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { username }] 
-    });
+    // Check if user already exists (by username only)
+    const existingUser = await User.findOne({ username });
     
     if (existingUser) {
       return res.status(400).json({ 
-        message: 'User with this email or username already exists' 
+        message: 'User with this username already exists' 
       });
     }
     
@@ -58,10 +57,10 @@ router.post('/register', async (req, res) => {
 // Login user
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
     
-    // Find user by email
-    const user = await User.findOne({ email });
+    // Find user by username
+    const user = await User.findOne({ username });
     
     // Check if user exists
     if (!user) {

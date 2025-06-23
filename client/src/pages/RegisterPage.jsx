@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
+import { AuthContext } from '../contexts/AuthContext';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
     username: '',
-    email: '',
     password: '',
     confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { register } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
@@ -31,20 +34,24 @@ const RegisterPage = () => {
     setError('');
     
     try {
-      // In a real implementation, this would make an API call to the backend
-      console.log('Registration attempt with:', formData);
+      // Create registration data (without email)
+      const registrationData = {
+        username: formData.username,
+        password: formData.password
+      };
       
-      // For demo purposes, simulate a successful registration
-      setTimeout(() => {
-        // Redirect to login page after successful registration
-        console.log('Registration successful');
-        setLoading(false);
-        window.location.href = '/login'; // This would use a proper router in real implementation
-      }, 1000);
+      console.log('Registration attempt with:', registrationData);
+      
+      // Call the register function from AuthContext
+      const user = await register(registrationData);
+      console.log('Registration successful:', user);
+      
+      // Redirect to home page after successful registration
+      navigate('/');
       
     } catch (error) {
       console.error('Registration error:', error);
-      setError('Registration failed. Please try again.');
+      setError(error.message || 'Registration failed. Please try again.');
       setLoading(false);
     }
   };
@@ -75,19 +82,7 @@ const RegisterPage = () => {
             />
           </div>
           
-          <div className="mb-4">
-            <label htmlFor="email" className="block text-gray-300 mb-2">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-              placeholder="Enter your email"
-            />
-          </div>
+
           
           <div className="mb-4">
             <label htmlFor="password" className="block text-gray-300 mb-2">Password</label>

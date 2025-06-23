@@ -33,7 +33,7 @@ const BlackjackPage = () => {
         </div>
         
         {/* Game instructions */}
-        <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+        <div className="mb-6 p-4 bg-[#1a2c3d] rounded-lg border border-[#2a3f52]">
           <h2 className="text-xl font-semibold text-white mb-2">How to Play</h2>
           <ul className="list-disc pl-5 text-gray-300 space-y-1">
             <li>Place your bet and click "Deal Cards" to start</li>
@@ -45,7 +45,7 @@ const BlackjackPage = () => {
         </div>
         
         {/* Blackjack game */}
-        <div className="bg-gray-800 p-4 rounded-lg shadow-xl">
+        <div className="bg-[#1a2c3d] p-4 rounded-lg shadow-xl border border-[#2a3f52]">
           <BlackjackGame 
             initialBalance={user?.balance || 1000} 
             useMock={useMock} 

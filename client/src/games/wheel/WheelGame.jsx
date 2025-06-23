@@ -23,6 +23,19 @@ const WheelGame = () => {
   const [gameResult, setGameResult] = useState(null);
   const [gameHistory, setGameHistory] = useState([]);
   const [maxMultiplier, setMaxMultiplier] = useState(0);
+  const [spins, setSpins] = useState(0);
+
+  // Helper function for formatting numbers with English locale
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatNumber = (number) => {
+    return new Intl.NumberFormat('en-US').format(number);
+  };
 
   // Update segments when difficulty changes
   useEffect(() => {
@@ -53,6 +66,7 @@ const WheelGame = () => {
     
     // In a real implementation, we would send the bet to the server 
     // and get the result back, using socket.io
+    setSpins(spins + 1);
   }, [isSpinning, betAmount, difficulty, segments]);
 
   // Handle spin completion
@@ -81,7 +95,7 @@ const WheelGame = () => {
     };
     
     // Update game history
-    setGameHistory(prev => [result, ...prev.slice(0, 9)]);
+    setGameHistory(prev => [result, ...prev]);
     
     // Set game result to display
     setGameResult(result);
@@ -118,8 +132,8 @@ const WheelGame = () => {
                 ${gameResult.profit >= 0 ? 'bg-green-600' : 'bg-red-600'}
               `}>
                 {gameResult.profit >= 0 ? 
-                  `+${gameResult.profit.toFixed(2)}` : 
-                  `${gameResult.profit.toFixed(2)}`
+                  `+${formatCurrency(gameResult.profit)}` : 
+                  `-${formatCurrency(Math.abs(gameResult.profit))}`
                 }
               </div>
             )}
@@ -141,10 +155,10 @@ const WheelGame = () => {
               </thead>
               <tbody>
                 {gameHistory.length > 0 ? (
-                  gameHistory.map(game => (
+                  gameHistory.slice(0, 10).map(game => (
                     <tr key={game.id} className="border-b border-gray-800">
                       <td className="py-2">{formatTime(game.timestamp)}</td>
-                      <td className="py-2">{game.betAmount.toFixed(2)}</td>
+                      <td className="py-2">{formatCurrency(game.betAmount)}</td>
                       <td className="py-2 capitalize">
                         <Badge 
                           color={
@@ -159,7 +173,7 @@ const WheelGame = () => {
                       <td className={`py-2 font-bold ${
                         game.profit >= 0 ? 'text-green-500' : 'text-red-500'
                       }`}>
-                        {game.profit >= 0 ? '+' : ''}{game.profit.toFixed(2)}
+                        {game.profit >= 0 ? '+' : ''}{formatCurrency(game.profit)}
                       </td>
                     </tr>
                   ))
@@ -192,12 +206,12 @@ const WheelGame = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-xs text-gray-400">Spins</div>
-              <div className="text-lg font-bold">{gameHistory.length}</div>
+              <div className="text-lg font-bold">{formatNumber(gameHistory.length)}</div>
             </div>
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-xs text-gray-400">Total Wagered</div>
               <div className="text-lg font-bold">
-                {gameHistory.reduce((sum, game) => sum + game.betAmount, 0).toFixed(2)}
+                {formatCurrency(gameHistory.reduce((sum, game) => sum + game.betAmount, 0))}
               </div>
             </div>
             <div className="bg-gray-800 p-3 rounded">
@@ -207,15 +221,15 @@ const WheelGame = () => {
                   ? 'text-green-500' 
                   : 'text-red-500'
               }`}>
-                {gameHistory.reduce((sum, game) => sum + game.profit, 0).toFixed(2)}
+                {formatCurrency(gameHistory.reduce((sum, game) => sum + game.profit, 0))}
               </div>
             </div>
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-xs text-gray-400">Best Win</div>
               <div className="text-lg font-bold text-green-500">
                 {gameHistory.length > 0
-                  ? Math.max(...gameHistory.map(g => g.profit)).toFixed(2)
-                  : '0.00'
+                  ? formatCurrency(Math.max(...gameHistory.map(g => g.profit)))
+                  : formatCurrency(0)
                 }
               </div>
             </div>

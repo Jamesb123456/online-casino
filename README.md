@@ -4,7 +4,7 @@ A web-based online casino featuring multiple games with admin controls, user aut
 
 ## Features
 
-- Multiple casino games (Crash, Plinko, Wheel, Roulette, Chicken, Blackjack)
+- Multiple casino games (Crash, Plinko, Wheel, Roulette, Blackjack)
 - User authentication system
 - Admin dashboard for balance management and statistics
 - Comprehensive game logging

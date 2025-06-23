@@ -34,7 +34,6 @@ const Footer = () => {
               <FooterLink to="/games/wheel" label="Wheel" />
               <FooterLink to="/games/roulette" label="Roulette" />
               <FooterLink to="/games/blackjack" label="Blackjack" />
-              <FooterLink to="/games/chicken" label="Chicken" />
             </ul>
           </div>
           

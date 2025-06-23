@@ -33,13 +33,7 @@ const GamesPage = () => {
       bgColor: 'bg-gradient-to-br from-game-roulette/30 to-bg-card',
       accentColor: 'border-game-roulette'
     },
-    {
-      id: 'chicken',
-      name: 'Chicken',
-      description: 'How far will you go? Push your luck to the limit!',
-      bgColor: 'bg-gradient-to-br from-game-chicken/30 to-bg-card',
-      accentColor: 'border-game-chicken'
-    },
+
     {
       id: 'blackjack',
       name: 'Blackjack',

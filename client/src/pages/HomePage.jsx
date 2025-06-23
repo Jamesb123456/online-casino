@@ -45,13 +45,6 @@ const HomePage = () => {
       path: '/games/wheel',
       imageBg: 'bg-gradient-to-br from-yellow-500 to-yellow-700'
     },
-    { 
-      id: 6, 
-      title: 'Chicken',
-      description: 'Test your luck in this exciting game of chance!',
-      path: '/games/chicken',
-      imageBg: 'bg-gradient-to-br from-orange-500 to-orange-700'
-    },
   ];
   
   return (

@@ -62,8 +62,7 @@ const Dashboard = () => {
             { name: 'Crash', played: 1245, profit: 7823.45 },
             { name: 'Plinko', played: 892, profit: 5245.78 },
             { name: 'Roulette', played: 1032, profit: 6721.23 },
-            { name: 'Wheel', played: 754, profit: 4378.12 },
-            { name: 'Chicken', played: 370, profit: 2145.67 },
+            { name: 'Wheel', played: 754, profit: 4378.12 }
           ]);
         }
       } catch (error) {
@@ -91,8 +90,7 @@ const Dashboard = () => {
           { name: 'Crash', played: 1245, profit: 7823.45 },
           { name: 'Plinko', played: 892, profit: 5245.78 },
           { name: 'Roulette', played: 1032, profit: 6721.23 },
-          { name: 'Wheel', played: 754, profit: 4378.12 },
-          { name: 'Chicken', played: 370, profit: 2145.67 },
+          { name: 'Blackjack', played: 612, profit: 3897.45 }
         ]);
       } finally {
         setIsLoading(false);

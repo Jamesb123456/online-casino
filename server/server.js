@@ -103,27 +103,6 @@ io.on('connection', (socket) => {
     });
   });
   
-  // Chicken game namespace
-  const chickenNamespace = io.of('/chicken');
-  
-  chickenNamespace.on('connection', (socket) => {
-    console.log('Client connected to chicken namespace:', socket.id);
-    
-    // Get user from socket (simplified - in real app would use authentication)
-    const user = { _id: socket.id, balance: 1000 };
-    
-    // Initialize database connection
-    const db = mongoose.connection.db;
-    
-    // Initialize chicken handlers
-    require('./src/socket/chickenHandler')(chickenNamespace, db);
-    
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('Client disconnected from chicken namespace:', socket.id);
-    });
-  });
-  
   // Blackjack game namespace
   const blackjackNamespace = io.of('/blackjack');
   

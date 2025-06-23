@@ -112,7 +112,6 @@ casino-project/
 │   │   │   ├── plinko/
 │   │   │   ├── wheel/
 │   │   │   ├── roulette/
-│   │   │   ├── chicken/
 │   │   │   └── blackjack/
 │   │   ├── hooks/             # Custom React hooks
 │   │   ├── layouts/           # Page layouts
@@ -194,12 +193,7 @@ casino-project/
    - Inside and outside betting options
    - Realistic wheel animation
 
-5. **Chicken Game** - Week 5
-   - Risk-based multiplier system
-   - Dynamic odds calculation
-   - Game state visualization
-
-6. **Blackjack Game** - Week 6
+5. **Blackjack Game** - Week 5
    - Card dealing system
    - Standard blackjack rules
    - Hit/stand/split/double down options

@@ -89,7 +89,6 @@ const SidebarNav = () => {
             { path: '/games/blackjack', label: 'Blackjack' },
             { path: '/games/plinko', label: 'Plinko' },
             { path: '/games/wheel', label: 'Wheel' },
-            { path: '/games/chicken', label: 'Chicken' },
           ]} 
         />
 

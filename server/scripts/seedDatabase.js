@@ -138,7 +138,7 @@ const seedDatabase = async () => {
     if (existingGameSessions === 0 && samplePlayers.length > 0) {
       console.log('Generating sample game data...');
       
-      const gameTypes = ['crash', 'plinko', 'wheel', 'roulette', 'chicken', 'blackjack'];
+      const gameTypes = ['crash', 'plinko', 'wheel', 'roulette', 'blackjack'];
       
       // Generate between 3-5 game sessions for each player for each game type
       for (const player of samplePlayers) {
@@ -164,9 +164,6 @@ const seedDatabase = async () => {
                 break;
               case 'roulette':
                 multiplier = isWin ? 2 : 0;
-                break;
-              case 'chicken':
-                multiplier = isWin ? (Math.random() * 3) + 1 : 0;
                 break;
               case 'blackjack':
                 multiplier = isWin ? 2 : 0;

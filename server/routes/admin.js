@@ -94,7 +94,6 @@ router.get('/stats', (req, res) => {
       plinko: 0,
       wheel: 0,
       roulette: 0,
-      chicken: 0,
       blackjack: 0
     },
     totalBetsAmount: 0,
@@ -255,7 +254,6 @@ router.get('/transactions/stats', async (req, res) => {
         plinko: await Transaction.countDocuments({ ...timeRange, gameType: 'plinko' }),
         wheel: await Transaction.countDocuments({ ...timeRange, gameType: 'wheel' }),
         roulette: await Transaction.countDocuments({ ...timeRange, gameType: 'roulette' }),
-        chicken: await Transaction.countDocuments({ ...timeRange, gameType: 'chicken' }),
         blackjack: await Transaction.countDocuments({ ...timeRange, gameType: 'blackjack' })
       };
     }

@@ -9,7 +9,7 @@ const GameSessionSchema = new mongoose.Schema({
   },
   gameType: {
     type: String,
-    enum: ['crash', 'plinko', 'wheel', 'roulette', 'chicken', 'blackjack'],
+    enum: ['crash', 'plinko', 'wheel', 'roulette', 'blackjack'],
     required: true,
     index: true
   },

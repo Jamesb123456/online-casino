@@ -197,8 +197,6 @@ function calculateHouseEdge(gameType) {
       return 0.04; // ~4%
     case 'plinko':
       return 0.02; // ~2%
-    case 'chicken':
-      return 0.035; // ~3.5%
     default:
       return 0.02; // Default house edge
   }

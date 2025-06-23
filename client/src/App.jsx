@@ -21,7 +21,6 @@ import CrashPage from './pages/games/CrashPage'
 import PlinkoPage from './pages/games/PlinkoPage'
 import WheelPage from './pages/games/WheelPage'
 import RoulettePage from './pages/games/RoulettePage'
-import ChickenPage from './pages/ChickenPage'
 import BlackjackPage from './pages/games/BlackjackPage'
 
 // Admin Components
@@ -45,7 +44,6 @@ const router = createBrowserRouter(
       <Route path="/games/plinko" element={<PlinkoPage />} />
       <Route path="/games/wheel" element={<WheelPage />} />
       <Route path="/games/roulette" element={<RoulettePage />} />
-      <Route path="/games/chicken" element={<ChickenPage />} />
       <Route path="/games/blackjack" element={<BlackjackPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />

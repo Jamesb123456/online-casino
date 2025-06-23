@@ -42,8 +42,7 @@ export const colors = {
     plinko: '#8B5CF6', // Purple for plinko
     wheel: '#F59E0B', // Amber for wheel
     roulette: '#10B981', // Green for roulette
-    blackjack: '#3B82F6', // Blue for blackjack
-    chicken: '#EC4899'  // Pink for chicken game
+    blackjack: '#3B82F6' // Blue for blackjack
   },
   
   // Status colors

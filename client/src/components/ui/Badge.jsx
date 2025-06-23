@@ -20,7 +20,6 @@ const Badge = ({
     warning: 'bg-game-wheel text-white',
     info: 'bg-game-blackjack text-white',
     purple: 'bg-game-plinko text-white',
-    pink: 'bg-game-chicken text-white',
     dark: 'bg-bg-subtle text-gray-300',
     light: 'bg-white/10 text-white',
     outline: 'bg-transparent border border-primary/70 text-primary',

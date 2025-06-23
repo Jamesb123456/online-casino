@@ -38,14 +38,7 @@ router.get('/', authenticate, (req, res) => {
       maxBet: 5000,
       thumbnail: '/images/games/roulette.jpg'
     },
-    {
-      id: 'chicken',
-      name: 'Chicken',
-      description: 'How far will you go? Push your luck to the limit!',
-      minBet: 10,
-      maxBet: 5000,
-      thumbnail: '/images/games/chicken.jpg'
-    },
+
     {
       id: 'blackjack',
       name: 'Blackjack',
@@ -72,7 +65,7 @@ router.post('/:gameId/bet', authenticate, async (req, res) => {
     }
     
     // Check if game exists
-    const validGames = ['crash', 'plinko', 'wheel', 'roulette', 'chicken', 'blackjack'];
+    const validGames = ['crash', 'plinko', 'wheel', 'roulette', 'blackjack'];
     if (!validGames.includes(gameId)) {
       return res.status(404).json({ message: 'Game not found' });
     }

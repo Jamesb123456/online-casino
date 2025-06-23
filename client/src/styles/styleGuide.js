@@ -69,10 +69,6 @@ const styleGuide = {
         primary: '#f59e0b',
         gradient: 'linear-gradient(to bottom right, #f59e0b, #d97706)',
       },
-      chicken: {
-        primary: '#f97316',
-        gradient: 'linear-gradient(to bottom right, #f97316, #c2410c)',
-      },
     },
   },
   

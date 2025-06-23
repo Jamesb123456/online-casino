@@ -28,7 +28,7 @@ const BalanceSchema = new mongoose.Schema({
   },
   gameType: {
     type: String,
-    enum: ['crash', 'plinko', 'wheel', 'roulette', 'chicken', 'blackjack', null],
+    enum: ['crash', 'plinko', 'wheel', 'roulette', 'blackjack', null],
     default: null,
     index: true
   },

@@ -73,7 +73,7 @@ const GameStatistics = () => {
   // Generate mock data based on filters
   const generateMockData = (timeRange, gameFilter) => {
     // Base data
-    const games = ['Crash', 'Plinko', 'Wheel', 'Roulette', 'Chicken'];
+    const games = ['Crash', 'Plinko', 'Wheel', 'Roulette'];
     let multiplier = 1;
     
     // Adjust data volume based on time range
@@ -216,7 +216,6 @@ const GameStatistics = () => {
               <option value="plinko">Plinko</option>
               <option value="wheel">Wheel</option>
               <option value="roulette">Roulette</option>
-              <option value="chicken">Chicken</option>
             </select>
           </div>
         </div>

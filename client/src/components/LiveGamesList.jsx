@@ -36,11 +36,6 @@ const GameIcon = ({ game, size = "sm" }) => {
         <path d="M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M12,10.5A1.5,1.5 0 0,1 13.5,12A1.5,1.5 0 0,1 12,13.5A1.5,1.5 0 0,1 10.5,12A1.5,1.5 0 0,1 12,10.5M7.5,10.5A1.5,1.5 0 0,1 9,12A1.5,1.5 0 0,1 7.5,13.5A1.5,1.5 0 0,1 6,12A1.5,1.5 0 0,1 7.5,10.5M16.5,10.5A1.5,1.5 0 0,1 18,12A1.5,1.5 0 0,1 16.5,13.5A1.5,1.5 0 0,1 15,12A1.5,1.5 0 0,1 16.5,10.5Z" />
       </svg>
     ),
-    chicken: (
-      <svg viewBox="0 0 24 24" className={`${sizeClasses[size]} text-[#EC4899]`} fill="currentColor">
-        <path d="M8,15A13,13 0 0,1 21,8V7H17V8A9,9 0 0,0 8,17H7V21H8A13,13 0 0,1 21,8M19,5A15,15 0 0,0 4,20H2V22H4A17,17 0 0,1 21,5V3H19V5M16,3H6C4.9,3 4,3.9 4,5V15A3,3 0 0,0 7,18H17A3,3 0 0,0 20,15V7C20,4.79 18.21,3 16,3M7,7H9V9H7V7M7,11H9V13H7V11M13,15H11V13H13V15M13,11H11V9H13V11M13,7H11V5H13V7M17,13H15V11H17V13Z" />
-      </svg>
-    ),
   };
   
   return icons[game] || (
@@ -59,7 +54,6 @@ const GameFilterButton = ({ game, isActive, onClick }) => {
     blackjack: 'Blackjack',
     plinko: 'Plinko',
     wheel: 'Wheel',
-    chicken: 'Chicken',
   };
 
   return (
@@ -236,7 +230,6 @@ const LiveGamesList = () => {
     { id: 3002, type: 'blackjack', players: 3 },
     { id: 4001, type: 'plinko', players: 5 },
     { id: 5004, type: 'wheel', players: 7 },
-    { id: 6001, type: 'chicken', players: 4 },
   ];
   
   // Filter games based on active filter
@@ -302,7 +295,7 @@ const LiveGamesList = () => {
           isActive={activeFilter === 'all'} 
           onClick={setActiveFilter} 
         />
-        {['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'chicken'].map(game => (
+        {['crash', 'roulette', 'blackjack', 'plinko', 'wheel'].map(game => (
           <GameFilterButton 
             key={game}
             game={game} 

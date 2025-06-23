@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { formatMultiplier, getMultiplierColor } from './crashUtils';
 import CrashBettingPanel from './CrashBettingPanel';
 import CrashHistory from './CrashHistory';
+import CrashPlayersList from './CrashPlayersList';
+import CrashActiveBets from './CrashActiveBets';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import crashSocketService from '../../services/socket/crashSocketService';
@@ -15,6 +17,12 @@ const {
   onGameStarting,
   onGameStarted,
   onGameCrashed,
+  onPlayerBet,
+  onPlayerCashout,
+  onActivePlayers,
+  onPlayerJoined,
+  onPlayerLeft,
+  onCurrentBets,
   placeBet,
   cashOut
 } = crashSocketService;
@@ -40,6 +48,20 @@ const useMockSocket = () => {
     { id: 4, crashPoint: 7.85, timestamp: new Date().getTime() - 240000 },
     { id: 5, crashPoint: 1.15, timestamp: new Date().getTime() - 300000 },
   ]);
+  
+  // Mock multiplayer data
+  const [activePlayers, setActivePlayers] = useState([
+    { id: 'player1', username: 'JohnDoe', avatar: null, joinedAt: Date.now() - 300000 },
+    { id: 'player2', username: 'AliceSmith', avatar: null, joinedAt: Date.now() - 200000 },
+    { id: 'player3', username: 'BobJohnson', avatar: null, joinedAt: Date.now() - 100000 },
+    { id: 'player4', username: 'EveWilliams', avatar: null, joinedAt: Date.now() - 50000 },
+  ]);
+  
+  const [activeBets, setActiveBets] = useState([
+    { userId: 'player1', username: 'JohnDoe', amount: 25, autoCashoutAt: 2.0, cashedOut: false },
+    { userId: 'player2', username: 'AliceSmith', amount: 50, autoCashoutAt: 1.5, cashedOut: false },
+    { userId: 'player3', username: 'BobJohnson', amount: 100, autoCashoutAt: null, cashedOut: false },
+  ]);
 
   // Mock game cycle
   useEffect(() => {
@@ -58,6 +80,13 @@ const useMockSocket = () => {
         crashPoint,
         currentMultiplier: 1.00
       }));
+      
+      // Reset bets for new game
+      setActiveBets(prev => prev.map(bet => ({
+        ...bet,
+        cashedOut: false,
+        cashedOutAt: null
+      })));
 
       startTime = Date.now();
       
@@ -73,6 +102,10 @@ const useMockSocket = () => {
             ...prev,
             currentMultiplier: parseFloat(newMultiplier.toFixed(2))
           }));
+          
+          // Process auto cashouts for mock players
+          processAutoCashouts(newMultiplier);
+          
           animationFrameId = requestAnimationFrame(updateMultiplier);
         } else {
           // Game crashed
@@ -98,6 +131,24 @@ const useMockSocket = () => {
       };
       
       animationFrameId = requestAnimationFrame(updateMultiplier);
+    };
+    
+    // Process auto cashouts for mock players
+    const processAutoCashouts = (currentMultiplier) => {
+      setActiveBets(prev => {
+        return prev.map(bet => {
+          if (!bet.cashedOut && bet.autoCashoutAt && currentMultiplier >= bet.autoCashoutAt) {
+            const profit = bet.amount * bet.autoCashoutAt - bet.amount;
+            return {
+              ...bet,
+              cashedOut: true,
+              cashedOutAt: bet.autoCashoutAt,
+              profit: profit
+            };
+          }
+          return bet;
+        });
+      });
     };
 
     const startCountdown = () => {
@@ -145,6 +196,8 @@ const useMockSocket = () => {
   return { 
     gameState, 
     history,
+    activePlayers,
+    activeBets,
     placeBet: mockPlaceBet,
     cashOut: mockCashOut
   };
@@ -161,11 +214,22 @@ const useRealSocket = () => {
   });
 
   const [history, setHistory] = useState([]);
+  const [activePlayers, setActivePlayers] = useState([]);
+  const [activeBets, setActiveBets] = useState([]);
 
   // Initialize socket and subscribe to events
   useEffect(() => {
+    // Initialize Socket.IO connection with user info
+    // In a real app, this would come from authentication
+    const userInfo = {
+      userId: `user_${Math.floor(Math.random() * 10000)}`,
+      username: `Player_${Math.floor(Math.random() * 10000)}`,
+      avatar: null
+    };
+    
     // Initialize Socket.IO connection
-    initializeSocket();
+    crashSocketService.setUser(userInfo);
+    crashSocketService.connect(userInfo);
     
     // Join crash game room
     joinCrashGame();
@@ -196,6 +260,9 @@ const useRealSocket = () => {
         status: 'waiting',
         countdown: data.countdown || 5
       }));
+      
+      // Clear active bets for new game
+      setActiveBets([]);
     });
 
     // Subscribe to game started event
@@ -203,8 +270,7 @@ const useRealSocket = () => {
       setGameState(prev => ({
         ...prev,
         status: 'running',
-        currentMultiplier: 1.00,
-        players: data.players || []
+        currentMultiplier: 1.00
       }));
     });
 
@@ -229,6 +295,66 @@ const useRealSocket = () => {
         ]);
       }
     });
+    
+    // Subscribe to active players updates
+    const unsubActivePlayers = onActivePlayers((players) => {
+      console.log('Active players update:', players);
+      setActivePlayers(players);
+    });
+    
+    // Subscribe to player joined events
+    const unsubPlayerJoined = onPlayerJoined((player) => {
+      console.log('Player joined:', player);
+      setActivePlayers(prev => [...prev, player]);
+    });
+    
+    // Subscribe to player left events
+    const unsubPlayerLeft = onPlayerLeft((player) => {
+      console.log('Player left:', player);
+      setActivePlayers(prev => prev.filter(p => p.id !== player.id));
+    });
+    
+    // Subscribe to current bets updates
+    const unsubCurrentBets = onCurrentBets((bets) => {
+      console.log('Current bets update:', bets);
+      setActiveBets(bets);
+    });
+    
+    // Subscribe to player bet events
+    const unsubPlayerBet = onPlayerBet((bet) => {
+      console.log('Player bet:', bet);
+      setActiveBets(prev => {
+        // Check if this player already has a bet
+        const existingBetIndex = prev.findIndex(b => b.userId === bet.userId);
+        if (existingBetIndex >= 0) {
+          // Replace existing bet
+          const newBets = [...prev];
+          newBets[existingBetIndex] = bet;
+          return newBets;
+        } else {
+          // Add new bet
+          return [...prev, bet];
+        }
+      });
+    });
+    
+    // Subscribe to player cashout events
+    const unsubPlayerCashout = onPlayerCashout((cashout) => {
+      console.log('Player cashout:', cashout);
+      setActiveBets(prev => {
+        return prev.map(bet => {
+          if (bet.userId === cashout.userId) {
+            return {
+              ...bet,
+              cashedOut: true,
+              cashedOutAt: cashout.multiplier,
+              profit: cashout.profit
+            };
+          }
+          return bet;
+        });
+      });
+    });
 
     // Cleanup function
     return () => {
@@ -241,6 +367,12 @@ const useRealSocket = () => {
       unsubGameStarting();
       unsubGameStarted();
       unsubGameCrashed();
+      unsubActivePlayers();
+      unsubPlayerJoined();
+      unsubPlayerLeft();
+      unsubCurrentBets();
+      unsubPlayerBet();
+      unsubPlayerCashout();
     };
   }, []);
 
@@ -273,6 +405,8 @@ const useRealSocket = () => {
   return { 
     gameState, 
     history,
+    activePlayers,
+    activeBets,
     placeBet: realPlaceBet,
     cashOut: realCashOut
   };
@@ -280,8 +414,14 @@ const useRealSocket = () => {
 
 const CrashGame = () => {
   // Use either mock or real socket based on flag
-  const { gameState, history, placeBet: socketPlaceBet, cashOut: socketCashOut } = 
-    USE_MOCK_SOCKET ? useMockSocket() : useRealSocket();
+  const { 
+    gameState, 
+    history, 
+    activePlayers = [], 
+    activeBets = [], 
+    placeBet: socketPlaceBet, 
+    cashOut: socketCashOut 
+  } = USE_MOCK_SOCKET ? useMockSocket() : useRealSocket();
   
   const [bet, setBet] = useState({
     amount: 10,
@@ -523,7 +663,16 @@ const CrashGame = () => {
           </Card>
         </div>
         
-        <CrashHistory history={history} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CrashHistory history={history} />
+          <CrashPlayersList players={activePlayers} />
+        </div>
+        
+        {/* Active bets from all players */}
+        <CrashActiveBets 
+          bets={activeBets} 
+          currentMultiplier={gameState.currentMultiplier} 
+        />
       </div>
       
       <div className="lg:w-4/12">

@@ -6,14 +6,31 @@ class CrashSocketService {
     this.isConnected = false;
     this.namespace = '/crash';
     this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    this.currentUser = null;
+  }
+  
+  /**
+   * Set current user information for socket authentication
+   * @param {Object} user - User information
+   */
+  setUser(user) {
+    this.currentUser = user;
   }
 
   /**
    * Initialize socket connection to crash namespace
+   * @param {Object} userInfo - Optional user information (username, avatar)
    */
-  connect() {
+  connect(userInfo = null) {
     if (!this.socket) {
       console.log(`Connecting to crash socket at ${this.apiUrl}${this.namespace}`);
+      
+      // Merge provided userInfo with stored currentUser data
+      const authData = {
+        userId: (userInfo?.userId || this.currentUser?.id || `user_${Date.now()}`),
+        username: (userInfo?.username || this.currentUser?.username || `Player_${Math.floor(Math.random() * 10000)}`),
+        avatar: (userInfo?.avatar || this.currentUser?.avatar || null)
+      };
       
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
@@ -21,6 +38,7 @@ class CrashSocketService {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        auth: authData
       });
 
       // Socket connection event listeners
@@ -121,6 +139,42 @@ class CrashSocketService {
   onPlayerCashout(callback) {
     if (!this.socket) return;
     this.socket.on('playerCashout', callback);
+  }
+  
+  /**
+   * Listen for active players list updates
+   * @param {Function} callback 
+   */
+  onActivePlayers(callback) {
+    if (!this.socket) return;
+    this.socket.on('activePlayers', callback);
+  }
+  
+  /**
+   * Listen for player joined events
+   * @param {Function} callback 
+   */
+  onPlayerJoined(callback) {
+    if (!this.socket) return;
+    this.socket.on('playerJoined', callback);
+  }
+  
+  /**
+   * Listen for player left events
+   * @param {Function} callback 
+   */
+  onPlayerLeft(callback) {
+    if (!this.socket) return;
+    this.socket.on('playerLeft', callback);
+  }
+  
+  /**
+   * Listen for current bets update
+   * @param {Function} callback 
+   */
+  onCurrentBets(callback) {
+    if (!this.socket) return;
+    this.socket.on('currentBets', callback);
   }
 
   /**

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import RouletteWheel from './RouletteWheel';
 import RouletteBettingPanel from './RouletteBettingPanel';
+import RoulettePlayersList from './RoulettePlayersList';
+import RouletteActiveBets from './RouletteActiveBets';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -19,6 +21,10 @@ const RouletteGame = () => {
   const [currentBets, setCurrentBets] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const [useMockData, setUseMockData] = useState(true); // Toggle for mock mode/socket mode
+  
+  // Multiplayer state
+  const [activePlayers, setActivePlayers] = useState([]);
+  const [multiplayerBets, setMultiplayerBets] = useState([]);
 
   // Socket connection effect
   useEffect(() => {
@@ -26,8 +32,16 @@ const RouletteGame = () => {
     if (!useMockData) {
       const connectSocket = async () => {
         try {
-          // Connect to socket
-          await rouletteSocketService.connect();
+          // Initialize user info for multiplayer
+          const userInfo = {
+            userId: `user_${Math.floor(Math.random() * 10000)}`,
+            username: `Player_${Math.floor(Math.random() * 10000)}`,
+            avatar: null
+          };
+          
+          // Set user info and connect to socket
+          rouletteSocketService.setUser(userInfo);
+          await rouletteSocketService.connect(userInfo);
           setIsConnected(true);
           
           // Join roulette game
@@ -37,8 +51,34 @@ const RouletteGame = () => {
             setGameHistory(gameData.history || []);
           }
           
-          // Set up event listeners
-          rouletteSocketService.on('game_result', (data) => {
+          // Set up multiplayer event listeners
+          rouletteSocketService.onActivePlayers((players) => {
+            console.log('Active players update:', players);
+            setActivePlayers(players);
+          });
+          
+          rouletteSocketService.onPlayerJoined((player) => {
+            console.log('Player joined:', player);
+            setActivePlayers(prev => [...prev, player]);
+          });
+          
+          rouletteSocketService.onPlayerLeft((player) => {
+            console.log('Player left:', player);
+            setActivePlayers(prev => prev.filter(p => p.id !== player.id));
+          });
+          
+          rouletteSocketService.onCurrentBets((bets) => {
+            console.log('Current bets update:', bets);
+            setMultiplayerBets(bets);
+          });
+          
+          rouletteSocketService.onPlayerBet((bet) => {
+            console.log('Player bet:', bet);
+            setMultiplayerBets(prev => [...prev, bet]);
+          });
+          
+          // Set up game event listeners
+          rouletteSocketService.onGameResult((data) => {
             console.log('Received game result:', data);
           });
           
@@ -55,6 +95,19 @@ const RouletteGame = () => {
         rouletteSocketService.disconnect();
         setIsConnected(false);
       };
+    } else {
+      // Mock data for multiplayer in development
+      setActivePlayers([
+        { id: 'player1', username: 'JohnDoe', avatar: null, joinedAt: Date.now() - 300000 },
+        { id: 'player2', username: 'AliceSmith', avatar: null, joinedAt: Date.now() - 200000 },
+        { id: 'player3', username: 'BobJohnson', avatar: null, joinedAt: Date.now() - 100000 },
+      ]);
+      
+      setMultiplayerBets([
+        { id: 'bet1', userId: 'player1', username: 'JohnDoe', type: 'RED', value: '', amount: 25 },
+        { id: 'bet2', userId: 'player2', username: 'AliceSmith', type: 'STRAIGHT', value: '17', amount: 10 },
+        { id: 'bet3', userId: 'player3', username: 'BobJohnson', type: 'EVEN', value: '', amount: 50 },
+      ]);
     }
   }, [useMockData]);
 
@@ -416,6 +469,11 @@ const RouletteGame = () => {
           balance={balance}
         />
         
+        {/* Active bets from all players */}
+        <div className="mt-4">
+          <RouletteActiveBets bets={multiplayerBets} />
+        </div>
+        
         {/* Game statistics */}
         <Card title="Statistics" className="mt-4">
           <div className="grid grid-cols-2 gap-4">
@@ -448,6 +506,11 @@ const RouletteGame = () => {
                 }
               </div>
             </div>
+          </div>
+          
+          {/* Active players list */}
+          <div className="mt-4 border-t border-gray-700 pt-4">
+            <RoulettePlayersList players={activePlayers} />
           </div>
           
           {/* Socket connection toggle */}

@@ -6,14 +6,27 @@ class RouletteSocketService {
     this.isConnected = false;
     this.namespace = '/roulette';
     this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    this.user = null;
+  }
+  
+  /**
+   * Set current user information for authentication
+   * @param {Object} user - User information with userId, username, avatar
+   */
+  setUser(user) {
+    this.user = user;
   }
 
   /**
    * Initialize socket connection to roulette namespace
+   * @param {Object} userInfo - Optional user info to override this.user
    */
-  connect() {
+  connect(userInfo = null) {
     if (!this.socket) {
       console.log(`Connecting to roulette socket at ${this.apiUrl}${this.namespace}`);
+      
+      // Use provided userInfo or fallback to this.user
+      const user = userInfo || this.user || {};
       
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
@@ -21,6 +34,11 @@ class RouletteSocketService {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        auth: {
+          userId: user.userId,
+          username: user.username,
+          avatar: user.avatar
+        }
       });
 
       // Socket connection event listeners
@@ -158,6 +176,51 @@ class RouletteSocketService {
   onError(callback) {
     if (!this.socket) return;
     this.socket.on('error', callback);
+  }
+  
+  /**
+   * Listen for active players list update
+   * @param {Function} callback 
+   */
+  onActivePlayers(callback) {
+    if (!this.socket) return;
+    this.socket.on('roulette:activePlayers', callback);
+  }
+  
+  /**
+   * Listen for player joined event
+   * @param {Function} callback 
+   */
+  onPlayerJoined(callback) {
+    if (!this.socket) return;
+    this.socket.on('roulette:playerJoined', callback);
+  }
+  
+  /**
+   * Listen for player left event
+   * @param {Function} callback 
+   */
+  onPlayerLeft(callback) {
+    if (!this.socket) return;
+    this.socket.on('roulette:playerLeft', callback);
+  }
+  
+  /**
+   * Listen for player bet event
+   * @param {Function} callback 
+   */
+  onPlayerBet(callback) {
+    if (!this.socket) return;
+    this.socket.on('roulette:playerBet', callback);
+  }
+  
+  /**
+   * Listen for current bets update
+   * @param {Function} callback 
+   */
+  onCurrentBets(callback) {
+    if (!this.socket) return;
+    this.socket.on('roulette:currentBets', callback);
   }
 }
 

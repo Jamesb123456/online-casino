@@ -11,6 +11,11 @@ const activeSessions = new Map();
 // Store game history (in-memory for now, would be DB in production)
 const gameHistory = [];
 
+// Multiplayer data structures
+const connectedUsers = new Map(); // Map of userId -> socket info
+const activePlayers = new Map();  // Map of userId -> player info
+const currentBets = [];           // Array of all active bets from all players
+
 /**
  * Get wheel segments configuration based on difficulty
  * @param {String} difficulty - Difficulty level (easy, medium, hard)
@@ -99,10 +104,42 @@ const generateWheelResult = (serverSeed = '', segments) => {
  * @param {Object} user - Authenticated user information
  */
 function initWheelHandlers(io, socket, user) {
-  const userId = user?._id || socket.id;
+  // Extract user info from socket handshake auth or fallback to defaults
+  const auth = socket.handshake.auth || {};
+  const userId = auth.userId || user?._id || socket.id;
+  const username = auth.username || user?.username || `Player_${userId.substring(0, 5)}`;
+  const avatar = auth.avatar || user?.avatar || null;
   
   // Join the wheel namespace/room
   socket.join('wheel');
+  
+  // Track connected user
+  connectedUsers.set(userId, {
+    socketId: socket.id,
+    userId,
+    username,
+    avatar,
+    balance: user?.balance || 1000 // Demo balance if no user
+  });
+  
+  // Add to active players
+  const playerInfo = {
+    id: userId,
+    username,
+    avatar,
+    joinedAt: new Date()
+  };
+  
+  activePlayers.set(userId, playerInfo);
+  
+  // Broadcast to other clients that a new player has joined
+  socket.broadcast.emit('wheel:playerJoined', playerInfo);
+  
+  // Send current active players to the new client
+  socket.emit('wheel:activePlayers', Array.from(activePlayers.values()));
+  
+  // Send current bets to the new client
+  socket.emit('wheel:currentBets', currentBets);
   
   // Create or get user session
   if (!activeSessions.has(userId)) {
@@ -116,6 +153,7 @@ function initWheelHandlers(io, socket, user) {
     // Log session initialization
     loggingService.logGameEvent('wheel', 'session_start', {
       userId,
+      username,
       initialBalance: user?.balance || 1000,
       timestamp: new Date()
     }, userId);
@@ -169,6 +207,25 @@ function initWheelHandlers(io, socket, user) {
       
       // Deduct bet amount from balance
       session.balance -= betAmount;
+      
+      // Create bet object with player info
+      const betId = `bet_${Date.now()}_${userId}`;
+      const playerInfo = activePlayers.get(userId);
+      const bet = {
+        id: betId,
+        userId,
+        username: playerInfo.username,
+        avatar: playerInfo.avatar,
+        betAmount,
+        difficulty,
+        timestamp: new Date()
+      };
+      
+      // Add to current bets
+      currentBets.push(bet);
+      
+      // Broadcast the bet to all clients
+      socket.broadcast.emit('wheel:playerBet', bet);
       
       // Generate a unique game ID
       const gameId = Date.now().toString();
@@ -325,6 +382,23 @@ function initWheelHandlers(io, socket, user) {
       const session = activeSessions.get(userId);
       session.isPlaying = false;
     }
+    
+    // Remove from active players for multiplayer tracking
+    if (activePlayers.has(userId)) {
+      const playerInfo = activePlayers.get(userId);
+      activePlayers.delete(userId);
+      
+      // Broadcast to other clients that a player has left
+      socket.broadcast.emit('wheel:playerLeft', { 
+        id: userId,
+        username: playerInfo.username
+      });
+      
+      console.log(`Wheel: Player left - ${playerInfo.username} (${userId})`);
+    }
+    
+    // Remove from connected users
+    connectedUsers.delete(userId);
   });
 }
 

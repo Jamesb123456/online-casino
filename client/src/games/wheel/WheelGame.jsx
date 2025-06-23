@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
 import WheelBoard from './WheelBoard';
 import WheelBettingPanel from './WheelBettingPanel';
+import WheelPlayersList from './WheelPlayersList';
+import WheelActiveBets from './WheelActiveBets';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -14,6 +16,8 @@ import {
 } from './wheelUtils';
 
 const WheelGame = () => {
+  const { user } = useContext(AuthContext);
+  
   // Game state
   const [betAmount, setBetAmount] = useState(10);
   const [difficulty, setDifficulty] = useState('medium');
@@ -24,6 +28,10 @@ const WheelGame = () => {
   const [gameHistory, setGameHistory] = useState([]);
   const [maxMultiplier, setMaxMultiplier] = useState(0);
   const [spins, setSpins] = useState(0);
+  
+  // Multiplayer state
+  const [activePlayers, setActivePlayers] = useState([]);
+  const [currentBets, setCurrentBets] = useState([]);
 
   // Helper function for formatting numbers with English locale
   const formatCurrency = (amount) => {
@@ -46,6 +54,52 @@ const WheelGame = () => {
     const max = Math.max(...newSegments.map(s => s.multiplier));
     setMaxMultiplier(max);
   }, [difficulty]);
+  
+  // Initialize socket connection and event listeners
+  useEffect(() => {
+    // Set user information for socket authentication
+    if (user) {
+      wheelSocketService.setUser({
+        userId: user.id,
+        username: user.username,
+        avatar: user.avatar
+      });
+    }
+    
+    // Connect to socket
+    wheelSocketService.connect();
+    
+    // Set up multiplayer event listeners
+    wheelSocketService.onActivePlayers((players) => {
+      console.log('Received active players:', players);
+      setActivePlayers(players);
+    });
+    
+    wheelSocketService.onPlayerJoined((player) => {
+      console.log('Player joined:', player);
+      setActivePlayers(prev => [...prev, player]);
+    });
+    
+    wheelSocketService.onPlayerLeft((player) => {
+      console.log('Player left:', player);
+      setActivePlayers(prev => prev.filter(p => p.id !== player.id));
+    });
+    
+    wheelSocketService.onCurrentBets((bets) => {
+      console.log('Received current bets:', bets);
+      setCurrentBets(bets);
+    });
+    
+    wheelSocketService.onPlayerBet((bet) => {
+      console.log('Player bet:', bet);
+      setCurrentBets(prev => [...prev, bet]);
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      wheelSocketService.disconnect();
+    };
+  }, [user]);
 
   // Handle wheel spin
   const handleSpin = useCallback(() => {
@@ -116,6 +170,11 @@ const WheelGame = () => {
       <div className="lg:w-8/12 space-y-4">
         {/* Game board */}
         <div className="relative">
+          {/* Multiplayer components */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <WheelPlayersList players={activePlayers} />
+            <WheelActiveBets bets={currentBets} />
+          </div>
           <div className="bg-gray-800 rounded-lg p-4">
             <WheelBoard
               segments={segments}

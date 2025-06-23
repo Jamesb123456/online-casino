@@ -2,6 +2,11 @@
  * Crash game socket handler
  * This module handles the Crash game socket events and integrates with the balanceService
  * for centralized balance management across the casino.
+ * 
+ * Multiplayer features:
+ * - Single shared game state for all connected users
+ * - Real-time player bet and cashout broadcasting
+ * - Active player tracking and presence management
  */
 
 const balanceService = require('../services/balanceService');
@@ -27,8 +32,11 @@ module.exports = function(namespace) {
   // Store active bets by user
   const activeBets = new Map();
   
-  // Store user connections
+  // Store user connections with additional player info
   const connectedUsers = new Map();
+  
+  // Track active players in the room
+  const activePlayers = new Map();
   
   // Game history
   const gameHistory = [];
@@ -37,11 +45,26 @@ module.exports = function(namespace) {
   namespace.on('connection', (socket) => {
     console.log('Client connected to crash namespace:', socket.id);
     
-    // Extract user ID from socket (in production, this would use proper authentication)
+    // Extract user ID and info from socket (in production, this would use proper authentication)
     const userId = socket.handshake.auth.userId || socket.id;
+    const username = socket.handshake.auth.username || `Player_${userId.substring(0, 5)}`;
+    const avatar = socket.handshake.auth.avatar || null;
     
-    // Store user connection
-    connectedUsers.set(userId, { socket, balance: 1000 }); // Default balance, would be fetched from DB in production
+    // Store user connection with player info
+    connectedUsers.set(userId, { 
+      socket, 
+      balance: 1000, // Default balance, would be fetched from DB in production
+      username,
+      avatar
+    });
+    
+    // Add to active players list
+    activePlayers.set(userId, {
+      id: userId,
+      username,
+      avatar,
+      joinedAt: Date.now()
+    });
     
     // Send initial game state
     socket.emit('gameState', {
@@ -53,6 +76,34 @@ module.exports = function(namespace) {
     
     // Send game history
     socket.emit('gameHistory', gameHistory.slice(-10));
+    
+    // Send current active bets from all players
+    const currentBets = Array.from(activeBets.entries()).map(([betUserId, bet]) => {
+      const player = activePlayers.get(betUserId) || { username: 'Unknown', avatar: null };
+      return {
+        userId: betUserId,
+        username: player.username,
+        avatar: player.avatar,
+        amount: bet.amount,
+        autoCashoutAt: bet.autoCashoutAt,
+        cashedOut: bet.cashedOut,
+        cashedOutAt: bet.cashedOutAt,
+        profit: bet.profit
+      };
+    });
+    
+    socket.emit('currentBets', currentBets);
+    
+    // Send active players list
+    const playersList = Array.from(activePlayers.values());
+    socket.emit('activePlayers', playersList);
+    
+    // Broadcast new player joined to all other clients
+    socket.broadcast.emit('playerJoined', {
+      id: userId,
+      username,
+      avatar
+    });
     
     /**
      * Handle placing bet
@@ -114,9 +165,14 @@ module.exports = function(namespace) {
           timestamp: new Date()
         });
         
-        // Notify everyone about the new bet
+        // Get player info for the broadcast
+        const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
+        
+        // Notify everyone about the new bet with player details
         namespace.emit('playerBet', {
           userId,
+          username: playerInfo.username,
+          avatar: playerInfo.avatar,
           amount,
           autoCashoutAt
         });
@@ -179,11 +235,17 @@ module.exports = function(namespace) {
           method: 'manual_cashout'
         });
 
-        // Notify everyone about the cashout
+        // Get player info for the broadcast
+        const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
+        
+        // Notify everyone about the cashout with player details
         namespace.emit('playerCashout', {
           userId,
+          username: playerInfo.username,
+          avatar: playerInfo.avatar,
           multiplier: cashoutMultiplier,
-          profit
+          profit,
+          amount: bet.amount
         });
         
         // Return success to client
@@ -204,7 +266,21 @@ module.exports = function(namespace) {
      */
     socket.on('disconnect', () => {
       console.log('Client disconnected from crash namespace:', socket.id);
+      
+      // Remove from connected users
       connectedUsers.delete(userId);
+      
+      // Remove from active players and notify others
+      if (activePlayers.has(userId)) {
+        const playerInfo = activePlayers.get(userId);
+        activePlayers.delete(userId);
+        
+        // Broadcast player left to all remaining clients
+        namespace.emit('playerLeft', {
+          id: userId,
+          username: playerInfo.username
+        });
+      }
     });
   });
   
@@ -323,11 +399,17 @@ module.exports = function(namespace) {
           console.error('Error recording auto-cashout win:', error);
         }
         
-        // Notify everyone about the cashout
+        // Get player info for the broadcast
+        const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
+        
+        // Notify everyone about the cashout with player details
         namespace.emit('playerCashout', {
           userId,
+          username: playerInfo.username,
+          avatar: playerInfo.avatar,
           multiplier: cashoutMultiplier,
           profit,
+          amount: bet.amount,
           automatic: true
         });
         

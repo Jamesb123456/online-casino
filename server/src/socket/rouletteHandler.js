@@ -1,6 +1,7 @@
 /**
  * Roulette Game Socket Handler
  * Handles all socket.io events for the Roulette game
+ * Implements multiplayer functionality with shared game state
  */
 const balanceService = require('../services/balanceService');
 const loggingService = require('../services/loggingService');
@@ -8,8 +9,17 @@ const loggingService = require('../services/loggingService');
 // Store active game sessions
 const activeSessions = new Map();
 
+// Store connected users with their socket and balance
+const connectedUsers = new Map();
+
+// Store active players with their details (for multiplayer)
+const activePlayers = new Map();
+
 // Store game history (in-memory for now, would be DB in production)
 const gameHistory = [];
+
+// Store current active bets from all players
+const currentBets = [];
 
 /**
  * Standard roulette numbers and their configurations
@@ -218,7 +228,12 @@ const calculateRotationAngle = (index) => {
  * @param {Object} user - Authenticated user information
  */
 function initRouletteHandlers(io, socket, user) {
-  const userId = user?._id || socket.id;
+  // Extract user info from socket auth or fallback to user object or socket.id
+  const userId = socket.handshake.auth.userId || user?._id || socket.id;
+  const username = socket.handshake.auth.username || user?.username || `Player_${userId.substring(0, 5)}`;
+  const avatar = socket.handshake.auth.avatar || user?.avatar || null;
+  
+  console.log(`Roulette: User connected - ${username} (${userId})`);
   
   // Join the roulette namespace/room
   socket.join('roulette');
@@ -240,6 +255,28 @@ function initRouletteHandlers(io, socket, user) {
       timestamp: new Date()
     }, userId);
   }
+  
+  // Add to connected users
+  connectedUsers.set(userId, { socket, balance: user?.balance || 1000, username, avatar });
+  
+  // Add to active players for multiplayer tracking
+  activePlayers.set(userId, { 
+    id: userId, 
+    username, 
+    avatar, 
+    joinedAt: Date.now() 
+  });
+  
+  // Emit active players list to the new client
+  socket.emit('roulette:activePlayers', Array.from(activePlayers.values()));
+  
+  // Broadcast to other clients that a new player has joined
+  socket.broadcast.emit('roulette:playerJoined', { 
+    id: userId, 
+    username, 
+    avatar, 
+    joinedAt: Date.now() 
+  });
   
   /**
    * Handle joining the roulette game
@@ -291,9 +328,12 @@ function initRouletteHandlers(io, socket, user) {
         throw new Error('Insufficient balance');
       }
       
-      // Create bet object
+      // Create bet object with player information
       const bet = {
         id: Date.now().toString(),
+        userId,
+        username: connectedUsers.get(userId)?.username || 'Unknown Player',
+        avatar: connectedUsers.get(userId)?.avatar,
         type,
         value: value || '',
         amount,
@@ -305,6 +345,12 @@ function initRouletteHandlers(io, socket, user) {
       
       // Add bet to current bets
       session.currentBets.push(bet);
+      
+      // Add to global currentBets for multiplayer
+      currentBets.push(bet);
+      
+      // Broadcast bet to all players in the room
+      io.to('roulette').emit('roulette:playerBet', bet);
       
       // Use balanceService to record the bet transaction
       await balanceService.placeBet(userId, amount, 'roulette', {
@@ -524,6 +570,23 @@ function initRouletteHandlers(io, socket, user) {
       const session = activeSessions.get(userId);
       session.isSpinning = false;
     }
+    
+    // Remove from active players for multiplayer tracking
+    if (activePlayers.has(userId)) {
+      const playerInfo = activePlayers.get(userId);
+      activePlayers.delete(userId);
+      
+      // Broadcast to other clients that a player has left
+      socket.broadcast.emit('roulette:playerLeft', { 
+        id: userId,
+        username: playerInfo.username
+      });
+      
+      console.log(`Roulette: Player left - ${playerInfo.username} (${userId})`);
+    }
+    
+    // Remove from connected users
+    connectedUsers.delete(userId);
   });
 }
 

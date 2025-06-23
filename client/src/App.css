@@ -1,0 +1,43 @@
+/* Base styles for the casino application */
+
+:root {
+  --primary: #6d28d9;
+  --primary-hover: #5b21b6;
+  --secondary: #10b981;
+  --secondary-hover: #059669;
+  --accent: #f97316;
+  --accent-hover: #ea580c;
+  --background: #0f172a;
+  --foreground: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* App container */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Game animations */
+.spin-animation {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

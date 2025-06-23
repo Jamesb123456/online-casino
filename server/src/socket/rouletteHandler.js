@@ -1,0 +1,532 @@
+/**
+ * Roulette Game Socket Handler
+ * Handles all socket.io events for the Roulette game
+ */
+const balanceService = require('../services/balanceService');
+const loggingService = require('../services/loggingService');
+
+// Store active game sessions
+const activeSessions = new Map();
+
+// Store game history (in-memory for now, would be DB in production)
+const gameHistory = [];
+
+/**
+ * Standard roulette numbers and their configurations
+ * For European roulette (single zero)
+ */
+const ROULETTE_NUMBERS = [
+  { number: 0, color: 'green' },
+  { number: 32, color: 'red' },
+  { number: 15, color: 'black' },
+  { number: 19, color: 'red' },
+  { number: 4, color: 'black' },
+  { number: 21, color: 'red' },
+  { number: 2, color: 'black' },
+  { number: 25, color: 'red' },
+  { number: 17, color: 'black' },
+  { number: 34, color: 'red' },
+  { number: 6, color: 'black' },
+  { number: 27, color: 'red' },
+  { number: 13, color: 'black' },
+  { number: 36, color: 'red' },
+  { number: 11, color: 'black' },
+  { number: 30, color: 'red' },
+  { number: 8, color: 'black' },
+  { number: 23, color: 'red' },
+  { number: 10, color: 'black' },
+  { number: 5, color: 'red' },
+  { number: 24, color: 'black' },
+  { number: 16, color: 'red' },
+  { number: 33, color: 'black' },
+  { number: 1, color: 'red' },
+  { number: 20, color: 'black' },
+  { number: 14, color: 'red' },
+  { number: 31, color: 'black' },
+  { number: 9, color: 'red' },
+  { number: 22, color: 'black' },
+  { number: 18, color: 'red' },
+  { number: 29, color: 'black' },
+  { number: 7, color: 'red' },
+  { number: 28, color: 'black' },
+  { number: 12, color: 'red' },
+  { number: 35, color: 'black' },
+  { number: 3, color: 'red' },
+  { number: 26, color: 'black' }
+];
+
+/**
+ * Betting options for roulette
+ */
+const BET_TYPES = {
+  STRAIGHT: { name: 'Straight Up', payout: 35 },
+  SPLIT: { name: 'Split', payout: 17 },
+  STREET: { name: 'Street', payout: 11 },
+  CORNER: { name: 'Corner', payout: 8 },
+  FIVE: { name: 'Five', payout: 6 },
+  LINE: { name: 'Line', payout: 5 },
+  COLUMN: { name: 'Column', payout: 2 },
+  DOZEN: { name: 'Dozen', payout: 2 },
+  RED: { name: 'Red', payout: 1 },
+  BLACK: { name: 'Black', payout: 1 },
+  ODD: { name: 'Odd', payout: 1 },
+  EVEN: { name: 'Even', payout: 1 },
+  LOW: { name: 'Low', payout: 1 },
+  HIGH: { name: 'High', payout: 1 }
+};
+
+/**
+ * Get all numbers for a specific bet type
+ * @param {String} betType - Type of bet from BET_TYPES
+ * @param {Number|String} value - Value associated with bet (e.g., number for STRAIGHT)
+ * @returns {Array<Number>} - Array of numbers included in this bet
+ */
+const getBetNumbers = (betType, value) => {
+  switch(betType) {
+    case 'STRAIGHT':
+      return [parseInt(value)];
+    
+    case 'RED':
+      return ROULETTE_NUMBERS
+        .filter(num => num.color === 'red')
+        .map(num => num.number);
+    
+    case 'BLACK':
+      return ROULETTE_NUMBERS
+        .filter(num => num.color === 'black')
+        .map(num => num.number);
+    
+    case 'ODD':
+      return ROULETTE_NUMBERS
+        .filter(num => num.number > 0 && num.number % 2 === 1)
+        .map(num => num.number);
+    
+    case 'EVEN':
+      return ROULETTE_NUMBERS
+        .filter(num => num.number > 0 && num.number % 2 === 0)
+        .map(num => num.number);
+    
+    case 'LOW':
+      return Array.from({ length: 18 }, (_, i) => i + 1);
+    
+    case 'HIGH':
+      return Array.from({ length: 18 }, (_, i) => i + 19);
+    
+    case 'DOZEN':
+      const dozenStart = parseInt(value) * 12 - 11;
+      return Array.from({ length: 12 }, (_, i) => i + dozenStart);
+    
+    case 'COLUMN':
+      // Column 1: 1, 4, 7, ..., 34
+      // Column 2: 2, 5, 8, ..., 35
+      // Column 3: 3, 6, 9, ..., 36
+      const col = parseInt(value);
+      return Array.from({ length: 12 }, (_, i) => i * 3 + col);
+    
+    default:
+      return [];
+  }
+};
+
+/**
+ * Check if a bet wins based on the winning number
+ * @param {String} betType - Type of bet
+ * @param {Number|String} betValue - Value of the bet
+ * @param {Number} winningNumber - The winning roulette number
+ * @returns {Boolean} - True if bet wins, false otherwise
+ */
+const isBetWinner = (betType, betValue, winningNumber) => {
+  const winningNumbers = getBetNumbers(betType, betValue);
+  return winningNumbers.includes(winningNumber);
+};
+
+/**
+ * Calculate winning amount based on bet type and amount
+ * @param {String} betType - Type of bet from BET_TYPES
+ * @param {Number} betAmount - Amount bet
+ * @param {Boolean} isWinner - Whether the bet wins
+ * @returns {Number} - Winning amount (0 if bet loses)
+ */
+const calculateWinnings = (betType, betAmount, isWinner) => {
+  if (!isWinner) return 0;
+  
+  const { payout } = BET_TYPES[betType] || { payout: 0 };
+  return betAmount * (payout + 1); // Return original bet + winnings
+};
+
+/**
+ * Generate a random roulette spin result
+ * Uses a provably fair algorithm (simplified for demo)
+ * 
+ * @param {String} serverSeed - Server generated seed for fairness
+ * @returns {Object} - Result with winning number and color
+ */
+const generateSpinResult = (serverSeed = '') => {
+  // In a real implementation, this would use a cryptographic hash function
+  // Here we're using a simplified approach for demonstration
+  
+  // Create a deterministic but seemingly random value from the seeds
+  const seedString = `${serverSeed}-${Date.now()}`;
+  let hash = 0;
+  
+  for (let i = 0; i < seedString.length; i++) {
+    const char = seedString.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+
+  // Use the hash to select a number
+  const index = Math.abs(hash) % ROULETTE_NUMBERS.length;
+  const result = ROULETTE_NUMBERS[index];
+  
+  return {
+    number: result.number,
+    color: result.color,
+    index: index,
+    timestamp: new Date()
+  };
+};
+
+/**
+ * Calculate the rotation angle for the roulette wheel
+ * @param {Number} index - Index of the winning pocket in ROULETTE_NUMBERS array
+ * @returns {Number} - Rotation angle in degrees
+ */
+const calculateRotationAngle = (index) => {
+  // Base rotation 
+  const baseRotation = 0;
+  
+  // Calculate pocket angle
+  const pocketAngle = 360 / ROULETTE_NUMBERS.length;
+  
+  // Target angle for the pocket (plus some random offset to make it look natural)
+  const targetAngle = baseRotation + (index * pocketAngle);
+  
+  // Add random offset within the pocket (to make it look more natural)
+  const randomOffset = Math.random() * (pocketAngle * 0.6) - (pocketAngle * 0.3);
+  
+  // Add multiple full rotations to make the wheel spin
+  const fullRotations = 6 * 360; // 6 full rotations
+  
+  return fullRotations - (targetAngle + randomOffset);
+};
+
+/**
+ * Initialize Roulette socket handlers
+ * @param {Object} io - Socket.io instance
+ * @param {Object} socket - Client socket connection
+ * @param {Object} user - Authenticated user information
+ */
+function initRouletteHandlers(io, socket, user) {
+  const userId = user?._id || socket.id;
+  
+  // Join the roulette namespace/room
+  socket.join('roulette');
+  
+  // Create or get user session
+  if (!activeSessions.has(userId)) {
+    activeSessions.set(userId, {
+      userId,
+      balance: user?.balance || 1000, // Demo balance if no user
+      history: [],
+      currentBets: [],
+      isSpinning: false
+    });
+    
+    // Log session initialization
+    loggingService.logGameEvent('roulette', 'session_start', {
+      userId,
+      initialBalance: user?.balance || 1000,
+      timestamp: new Date()
+    }, userId);
+  }
+  
+  /**
+   * Handle joining the roulette game
+   */
+  socket.on('roulette:join', async (data, callback) => {
+    try {
+      // Get recent game history (limited to last 10 results)
+      const recentHistory = gameHistory.slice(-10);
+      
+      // Get user session
+      const session = activeSessions.get(userId);
+      
+      // Return game state to the client
+      const response = {
+        success: true,
+        balance: session.balance,
+        history: recentHistory
+      };
+      
+      if (callback) callback(response);
+      
+    } catch (error) {
+      console.error('Error joining Roulette game:', error);
+      if (callback) callback({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Handle placing a bet
+   */
+  socket.on('roulette:place_bet', async (data, callback) => {
+    try {
+      // Validate bet data
+      const { type, value, amount } = data;
+      
+      if (!type || !BET_TYPES[type]) {
+        throw new Error('Invalid bet type');
+      }
+      
+      if (!amount || isNaN(amount) || amount <= 0) {
+        throw new Error('Invalid bet amount');
+      }
+      
+      // Get user session
+      const session = activeSessions.get(userId);
+      
+      // Check if user has enough balance
+      if (session.balance < amount) {
+        throw new Error('Insufficient balance');
+      }
+      
+      // Create bet object
+      const bet = {
+        id: Date.now().toString(),
+        type,
+        value: value || '',
+        amount,
+        timestamp: new Date()
+      };
+      
+      // Deduct bet amount from balance
+      session.balance -= amount;
+      
+      // Add bet to current bets
+      session.currentBets.push(bet);
+      
+      // Use balanceService to record the bet transaction
+      await balanceService.placeBet(userId, amount, 'roulette', {
+        betType: type, 
+        betValue: value,
+        rouletteSessionId: bet.id
+      });
+      
+      // Log bet placement
+      loggingService.logBetPlaced('roulette', bet.id, userId, amount, {
+        betType: type,
+        betValue: value,
+        timestamp: new Date()
+      });
+      
+      // Return response
+      const response = {
+        success: true,
+        betId: bet.id,
+        balance: session.balance,
+        currentBets: session.currentBets
+      };
+      
+      if (callback) callback(response);
+      
+    } catch (error) {
+      console.error('Error placing bet:', error);
+      if (callback) callback({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Handle spinning the wheel
+   */
+  socket.on('roulette:spin', async (data, callback) => {
+    try {
+      // Get user session
+      const session = activeSessions.get(userId);
+      
+      // Check if there are any bets
+      if (session.currentBets.length === 0) {
+        throw new Error('No bets placed');
+      }
+      
+      // Check if already spinning
+      if (session.isSpinning) {
+        throw new Error('Wheel is already spinning');
+      }
+      
+      // Set spinning state
+      session.isSpinning = true;
+      
+      // Generate spin result
+      const serverSeed = Math.random().toString(36).substring(2, 15);
+      const result = generateSpinResult(serverSeed);
+      
+      // Calculate angle for animation
+      const angle = calculateRotationAngle(result.index);
+      
+      // Process all bets
+      const processedBets = session.currentBets.map(bet => {
+        const isWinner = isBetWinner(bet.type, bet.value, result.number);
+        const winAmount = calculateWinnings(bet.type, bet.amount, isWinner);
+        const profit = isWinner ? (winAmount - bet.amount) : -bet.amount;
+        
+        return {
+          ...bet,
+          isWinner,
+          winAmount,
+          profit
+        };
+      });
+      
+      // Calculate total winnings and profit
+      const totalWinnings = processedBets.reduce((sum, bet) => sum + (bet.winAmount || 0), 0);
+      const totalProfit = processedBets.reduce((sum, bet) => sum + bet.profit, 0);
+      
+      // Add winnings to balance
+      session.balance += totalWinnings;
+      
+      // Use balanceService to record win transaction if there are any winnings
+      if (totalWinnings > 0) {
+        await balanceService.recordWin(userId, 
+          processedBets.reduce((sum, bet) => sum + bet.amount, 0), // total bet amount
+          totalWinnings, 
+          'roulette',
+          {
+            winningNumber: result.number,
+            winningColor: result.color,
+            bets: processedBets.map(bet => ({
+              type: bet.type,
+              value: bet.value,
+              amount: bet.amount,
+              isWinner: bet.isWinner
+            }))
+          }
+        );
+      }
+      
+      // Create game result
+      const gameResult = {
+        id: Date.now().toString(),
+        userId,
+        timestamp: new Date(),
+        winningNumber: result.number,
+        winningColor: result.color,
+        bets: processedBets,
+        totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
+        totalWinnings,
+        totalProfit
+      };
+      
+      // Log game end and results
+      loggingService.logGameEnd('roulette', gameResult.id, {
+        winningNumber: result.number,
+        winningColor: result.color
+      }, {
+        totalBets: processedBets.length,
+        totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
+        totalWinnings,
+        profit: totalProfit
+      });
+      
+      // Add to history
+      gameHistory.push(gameResult);
+      session.history.push(gameResult);
+      
+      // Clear current bets
+      session.currentBets = [];
+      
+      // Return result to client
+      const response = {
+        success: true,
+        gameId: gameResult.id,
+        winningNumber: result.number,
+        winningColor: result.color,
+        targetAngle: angle,
+        bets: processedBets,
+        totalWinnings,
+        totalProfit,
+        balance: session.balance
+      };
+      
+      if (callback) callback(response);
+      
+      // Broadcast to room that a new game happened (for real-time updates)
+      socket.to('roulette').emit('roulette:game_result', {
+        userId,
+        winningNumber: result.number,
+        winningColor: result.color,
+        timestamp: new Date()
+      });
+      
+      // Reset spinning state after a delay (simulating animation time)
+      setTimeout(() => {
+        if (activeSessions.has(userId)) {
+          const updatedSession = activeSessions.get(userId);
+          updatedSession.isSpinning = false;
+        }
+      }, 10000); // 10 seconds for wheel animation
+      
+    } catch (error) {
+      console.error('Error spinning wheel:', error);
+      if (callback) callback({ success: false, error: error.message });
+      
+      // Reset spinning state in case of error
+      if (activeSessions.has(userId)) {
+        const session = activeSessions.get(userId);
+        session.isSpinning = false;
+      }
+    }
+  });
+
+  /**
+   * Handle getting game history
+   */
+  socket.on('roulette:get_history', async (data, callback) => {
+    try {
+      const limit = data?.limit || 10;
+      
+      // Get user session
+      const session = activeSessions.get(userId);
+      
+      // Get recent game history (limited to specified number)
+      const userHistory = session.history.slice(-limit);
+      const globalHistory = gameHistory.slice(-limit);
+      
+      // Return history to the client
+      const response = {
+        success: true,
+        userHistory,
+        globalHistory
+      };
+      
+      if (callback) callback(response);
+      
+    } catch (error) {
+      console.error('Error getting Roulette history:', error);
+      if (callback) callback({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * Handle user leaving the game
+   */
+  socket.on('roulette:leave', () => {
+    // No specific cleanup needed here, general disconnect handler will take care of it
+    socket.leave('roulette');
+  });
+
+  /**
+   * Handle user disconnect
+   */
+  socket.on('disconnect', () => {
+    // Keep user session for reconnection but mark as inactive
+    if (activeSessions.has(userId)) {
+      const session = activeSessions.get(userId);
+      session.isSpinning = false;
+    }
+  });
+}
+
+module.exports = {
+  initRouletteHandlers
+};

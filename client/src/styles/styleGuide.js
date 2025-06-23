@@ -1,8 +1,8 @@
 /**
- * Virtual Casino Style Guide
+ * Platinum Casino Style Guide
  * 
  * This file contains the core design tokens and styling guidelines
- * for the Virtual Casino application. Use these values consistently
+ * for the Platinum Casino application. Use these values consistently
  * across components to maintain a unified look and feel.
  */
 

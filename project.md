@@ -1,7 +1,7 @@
-# Comprehensive Online Casino Website Project Plan
+# Comprehensive Platinum Casino Website Project Plan
 
 ## 1. Project Overview
-- **Project Name:** Virtual Casino Platform
+- **Project Name:** Platinum Casino
 - **Description:** A web-based online casino featuring multiple games with admin controls, user authentication, and comprehensive logging.
 - **Primary Goals:** Create an engaging casino experience without real money transactions, admin-controlled balances, and detailed analytics.
 - **Constraints:** Must run on Windows Server, MongoDB database, React frontend with Tailwind CSS.

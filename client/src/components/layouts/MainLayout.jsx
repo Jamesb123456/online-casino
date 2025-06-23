@@ -13,7 +13,7 @@ const MainLayout = ({ children }) => {
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center">
             <Link to="/" className="text-amber-500 font-bold text-xl">
-              Virtual Casino
+              Platinum Casino
             </Link>
             <nav className="hidden md:block ml-8">
               <ul className="flex space-x-6">
@@ -51,7 +51,7 @@ const MainLayout = ({ children }) => {
         <div className="container mx-auto px-4 py-6">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="text-sm text-gray-400 mb-4 md:mb-0">
-              © {new Date().getFullYear()} Virtual Casino. All rights reserved.
+              © {new Date().getFullYear()} Platinum Casino. All rights reserved.
             </div>
             <div className="flex space-x-6">
               <Link to="/terms" className="text-sm text-gray-400 hover:text-white transition-colors">

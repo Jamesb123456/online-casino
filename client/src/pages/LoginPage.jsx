@@ -59,7 +59,7 @@ const LoginPage = () => {
             {/* Logo/branding area */}
             <div className="text-center pt-8 pb-4">
               <h1 className="text-3xl font-bold text-white mb-1">
-                <span className="text-[#ffc107]">Virtual</span> Casino
+                <span className="text-[#ffc107]">Platinum</span> Casino
               </h1>
               <p className="text-gray-400 text-sm">Sign in to your account</p>
             </div>

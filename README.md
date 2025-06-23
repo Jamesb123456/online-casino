@@ -1,4 +1,4 @@
-# Virtual Casino Platform
+# Platinum Casino
 
 A web-based online casino featuring multiple games with admin controls, user authentication, and comprehensive logging.
 

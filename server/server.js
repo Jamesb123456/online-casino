@@ -54,7 +54,7 @@ app.use('/api/admin', adminRoutes);
 
 // Root route
 app.get('/', (req, res) => {
-  res.send('Virtual Casino API is running');
+  res.send('Platinum Casino API is running');
 });
 
 // Socket.io connection

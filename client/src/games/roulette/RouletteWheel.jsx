@@ -165,7 +165,7 @@ const RouletteWheel = ({
     ctx.font = 'bold 14px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('CASINO ROYALE', centerX, centerY - 10);
+    ctx.fillText('PLATINUM CASINO', centerX, centerY - 10);
     ctx.font = '12px Arial';
     ctx.fillText('ROULETTE', centerX, centerY + 10);
     

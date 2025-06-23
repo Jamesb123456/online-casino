@@ -64,7 +64,7 @@ const HomePage = () => {
         <div className="container mx-auto px-4 py-16 md:py-24 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-              <span className="text-[#ffc107]">Virtual Casino</span> - Play & Win
+              <span className="text-[#ffc107]">Platinum Casino</span> - Play & Win
             </h1>
             <p className="text-xl text-gray-300 mb-8">
               Experience the thrill of casino games from the comfort of your home.
@@ -121,7 +121,7 @@ const HomePage = () => {
       <div className="bg-[#1a2c3d] py-16">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-4">Why Choose Virtual Casino</h2>
+            <h2 className="text-3xl font-bold text-white mb-4">Why Choose Platinum Casino</h2>
             <p className="text-gray-300">We offer the best online casino experience with secure payments and exciting bonuses</p>
           </div>
           

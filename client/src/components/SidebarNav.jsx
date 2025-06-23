@@ -73,7 +73,7 @@ const SidebarNav = () => {
       {/* Logo area */}
       <div className="flex items-center px-6 py-6 border-b border-[#2a3f52]">
         <div className="font-bold text-2xl text-white">
-          <span className="text-[#ffc107]">Virtual</span> Casino
+          <span className="text-[#ffc107]">Platinum</span> Casino
         </div>
       </div>
 

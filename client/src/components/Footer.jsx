@@ -63,7 +63,7 @@ const Footer = () => {
         
         <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center">
           <div className="text-gray-500 text-sm mb-4 md:mb-0">
-            &copy; {currentYear} Virtual Casino Platform. All rights reserved.
+            &copy; {currentYear} Platinum Casino Platform. All rights reserved.
           </div>
           <div className="flex items-center">
             <img src="/secure-badge.png" alt="Secure Gaming" className="h-10 w-auto" onError={(e) => e.target.style.display = 'none'} />

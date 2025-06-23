@@ -10,7 +10,6 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Loading from './components/ui/Loading'
 import { ToastProvider } from './context/ToastContext'
 import { AuthProvider } from './contexts/AuthContext'
-import './App.css'
 
 // Page Components
 import HomePage from './pages/HomePage'

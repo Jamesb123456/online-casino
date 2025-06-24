@@ -65,7 +65,9 @@ export const logout = () => {
  */
 export const getCurrentUser = async () => {
   try {
-    return await api.get(AUTH_ENDPOINTS.PROFILE);
+    const userData = await api.get(AUTH_ENDPOINTS.PROFILE);
+    console.log('User profile data:', userData); // Log the returned user data
+    return userData;
   } catch (error) {
     console.error('Get user profile error:', error);
     throw error;

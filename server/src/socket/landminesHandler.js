@@ -5,6 +5,9 @@
 const balanceService = require('../services/balanceService');
 const loggingService = require('../services/loggingService');
 
+// Import GameStat model for tracking statistics
+const GameStat = require('../../models/GameStat.js').default;
+
 // Store active game sessions
 const activeSessions = new Map();
 
@@ -302,6 +305,11 @@ function initLandminesHandlers(io, socket, user) {
         session.history.push(gameResult);
         session.currentGame = null;
         
+        // Update game statistics (loss)
+        GameStat.updateStats('landmines', game.betAmount, 0).catch(err => {
+          console.error('Failed to update game stats:', err);
+        });
+        
         // Return result to client
         const response = {
           success: true,
@@ -498,6 +506,11 @@ function initLandminesHandlers(io, socket, user) {
     gameHistory.push(gameResult);
     session.history.push(gameResult);
     session.currentGame = null;
+    
+    // Update game statistics (win)
+    GameStat.updateStats('landmines', game.betAmount, winAmount).catch(err => {
+      console.error('Failed to update game stats:', err);
+    });
     
     // Return result to client
     const response = {

@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "start:ts": "node --loader ts-node/esm server.ts",
-    "dev": "nodemon --exec \"node --loader ts-node/esm\" server.ts",
+    "dev": "bun run --watch server.ts",
     "dev:full": "nodemon --exec \"node --loader ts-node/esm\" server.ts",
     "dev:js": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",

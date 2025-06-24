@@ -37,36 +37,18 @@ const PlayerManagement = () => {
     const fetchPlayers = async () => {
       try {
         const response = await adminService.getPlayers();
-        if (response.players) {
+        if (response && response.players) {
           setPlayers(response.players);
           setFilteredPlayers(response.players);
         } else {
-          // Fallback to mock data if API not available during development
-          const mockPlayers = [
-            { id: 1, username: 'player123', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
-            { id: 2, username: 'gambler456', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
-            { id: 3, username: 'luckywin789', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
-            { id: 4, username: 'highroller22', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
-            { id: 5, username: 'inactive_user', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
-          ];
-          
-          setPlayers(mockPlayers);
-          setFilteredPlayers(mockPlayers);
-          console.warn('Using mock player data as API returned unexpected format');
+          console.error('API returned unexpected format for players');
+          setPlayers([]);
+          setFilteredPlayers([]);
         }
       } catch (error) {
         console.error('Error fetching players:', error);
-        // Fallback to mock data if API not available
-        const mockPlayers = [
-          { id: 1, username: 'player123', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
-          { id: 2, username: 'gambler456', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
-          { id: 3, username: 'luckywin789', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
-          { id: 4, username: 'highroller22', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
-          { id: 5, username: 'inactive_user', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
-        ];
-        
-        setPlayers(mockPlayers);
-        setFilteredPlayers(mockPlayers);
+        setPlayers([]);
+        setFilteredPlayers([]);
       } finally {
         setIsLoading(false);
       }

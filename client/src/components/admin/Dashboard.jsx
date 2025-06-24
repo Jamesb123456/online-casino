@@ -30,23 +30,14 @@ const Dashboard = () => {
         if (dashboardStats) {
           setStats(dashboardStats);
         } else {
-          // Fallback to mock data if API response is unexpected
-          console.warn('Using mock dashboard data as API returned unexpected format');
+          console.error('API returned unexpected format for dashboard stats');
           setStats({
-            totalPlayers: 324,
-            activePlayers: 47,
-            totalBalance: 128745.32,
-            totalGames: 4293,
-            recentTransactions: [
-              { id: 1, user: 'player123', type: 'deposit', amount: 500, timestamp: '2023-05-01T14:32:21' },
-              { id: 2, user: 'gambler456', type: 'withdrawal', amount: 1200, timestamp: '2023-05-01T12:15:43' },
-              { id: 3, user: 'luckywin789', type: 'deposit', amount: 750, timestamp: '2023-05-01T10:45:12' },
-              { id: 4, user: 'highroller22', type: 'deposit', amount: 2000, timestamp: '2023-05-01T09:23:05' },
-            ],
-            alerts: [
-              { id: 1, type: 'warning', message: 'Unusual withdrawal activity detected for user highroller22' },
-              { id: 2, type: 'info', message: 'System maintenance scheduled for tomorrow at 03:00 UTC' },
-            ]
+            totalPlayers: 0,
+            activePlayers: 0,
+            totalBalance: 0,
+            totalGames: 0,
+            recentTransactions: [],
+            alerts: []
           });
         }
         
@@ -56,42 +47,27 @@ const Dashboard = () => {
         if (gameStatsData && gameStatsData.games) {
           setGameStats(gameStatsData.games);
         } else {
-          // Fallback to mock game stats if API response is unexpected
-          console.warn('Using mock game stats as API returned unexpected format');
-          setGameStats([
-            { name: 'Crash', played: 1245, profit: 7823.45 },
-            { name: 'Plinko', played: 892, profit: 5245.78 },
-            { name: 'Roulette', played: 1032, profit: 6721.23 },
-            { name: 'Wheel', played: 754, profit: 4378.12 }
-          ]);
+          console.error('API returned unexpected format for game stats');
+          setGameStats([]);
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         
-        // Fallback to mock data if API call fails
+        // Empty state data if API call fails
         setStats({
-          totalPlayers: 324,
-          activePlayers: 47,
-          totalBalance: 128745.32,
-          totalGames: 4293,
-          recentTransactions: [
-            { id: 1, user: 'player123', type: 'deposit', amount: 500, timestamp: '2023-05-01T14:32:21' },
-            { id: 2, user: 'gambler456', type: 'withdrawal', amount: 1200, timestamp: '2023-05-01T12:15:43' },
-            { id: 3, user: 'luckywin789', type: 'deposit', amount: 750, timestamp: '2023-05-01T10:45:12' },
-            { id: 4, user: 'highroller22', type: 'deposit', amount: 2000, timestamp: '2023-05-01T09:23:05' },
-          ],
-          alerts: [
-            { id: 1, type: 'warning', message: 'Unusual withdrawal activity detected for user highroller22' },
-            { id: 2, type: 'info', message: 'System maintenance scheduled for tomorrow at 03:00 UTC' },
-          ]
+          totalPlayers: 0,
+          activePlayers: 0,
+          totalBalance: 0,
+          totalGames: 0,
+          recentTransactions: [],
+          alerts: [{
+            id: Date.now(),
+            type: 'warning',
+            message: 'Failed to load dashboard data. Please try again later.'
+          }]
         });
         
-        setGameStats([
-          { name: 'Crash', played: 1245, profit: 7823.45 },
-          { name: 'Plinko', played: 892, profit: 5245.78 },
-          { name: 'Roulette', played: 1032, profit: 6721.23 },
-          { name: 'Blackjack', played: 612, profit: 3897.45 }
-        ]);
+        setGameStats([]);
       } finally {
         setIsLoading(false);
       }

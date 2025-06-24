@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSocket } from '../contexts/SocketContext';
 import { Link } from 'react-router-dom';
 
 // Game Icon Component
@@ -222,15 +223,33 @@ const LiveGameItem = ({ game }) => {
 
 const LiveGamesList = () => {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [liveGames, setLiveGames] = useState([]);
+  const { socket } = useSocket();
   
-  // Mock live games data
-  const liveGames = [
-    { id: 1001, type: 'crash', players: 12 },
-    { id: 2003, type: 'roulette', players: 8 },
-    { id: 3002, type: 'blackjack', players: 3 },
-    { id: 4001, type: 'plinko', players: 5 },
-    { id: 5004, type: 'wheel', players: 7 },
-  ];
+  useEffect(() => {
+    if (!socket) return;
+    
+    // Request current live games when component mounts
+    socket.emit('get_live_games');
+    
+    // Listen for live games updates
+    const handleLiveGames = (games) => {
+      console.log('Received live games data:', games);
+      setLiveGames(games);
+    };
+    
+    socket.on('live_games', handleLiveGames);
+    
+    // Set up interval to refresh data
+    const refreshInterval = setInterval(() => {
+      socket.emit('get_live_games');
+    }, 15000); // Refresh every 15 seconds
+    
+    return () => {
+      socket.off('live_games', handleLiveGames);
+      clearInterval(refreshInterval);
+    };
+  }, [socket]);
   
   // Filter games based on active filter
   const filteredGames = activeFilter === 'all' 

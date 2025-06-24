@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import initChatHandlers from './src/socket/chatHandler.js';
+import initLiveGamesHandlers from './src/socket/liveGamesHandler.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -130,6 +131,9 @@ io.on('connection', (socket) => {
 
 // Initialize chat handlers
 initChatHandlers(io);
+
+// Initialize live games handlers
+initLiveGamesHandlers(io);
 
 // Start server
 const PORT = process.env.PORT || 5001; // Changed default port to 5001

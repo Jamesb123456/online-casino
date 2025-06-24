@@ -35,12 +35,18 @@ class ChatSocketService {
         this.disconnect();
         
         // Create socket connection with auth token
-        this.socket = io(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/chat`, {
+        // Socket.IO namespace should be direct to the server without /api
+        const socketUrl = 'http://localhost:5001'; // Hardcode to correct port
+        console.log('Connecting to chat server at:', socketUrl);
+        
+        this.socket = io(`${socketUrl}/chat`, {
           auth: { token },
-          transports: ['websocket'],
+          transports: ['polling'], // Use only polling since WebSocket is failing
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 20000, // Increase timeout for polling
         });
 
         // Set up event listeners

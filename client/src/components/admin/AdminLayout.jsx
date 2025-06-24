@@ -3,6 +3,7 @@ import { useLocation, Navigate } from 'react-router-dom';
 import AdminNav from './AdminNav';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
+import useAuth from '../../hooks/useAuth';
 
 /**
  * Admin Dashboard Layout
@@ -11,13 +12,24 @@ import Badge from '../ui/Badge';
 const AdminLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const { user, loading, logout } = useAuth();
   
-  // Mock authentication state - in a real app, would use auth context
-  const isAdmin = true; // This should come from your auth context
+  // Check if user is logged in and has admin role
+  const isAdmin = user && user.role === 'admin';
+  
+  // Show loading state while auth is being checked
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-3">Loading admin panel...</span>
+      </div>
+    );
+  }
   
   // If not admin, redirect to login
   if (!isAdmin) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" state={{ from: location }} />;
   }
 
   return (
@@ -81,9 +93,13 @@ const AdminLayout = ({ children }) => {
             <div className="flex items-center space-x-4">
               <div className="px-3 py-1.5 bg-gray-700 rounded-full text-sm font-medium border border-gray-600">
                 <span className="text-gray-400 mr-2">Admin:</span>
-                <span className="text-blue-400">SuperUser</span>
+                <span className="text-blue-400">{user.username}</span>
               </div>
-              <Button variant="outline" size="sm">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => logout()}
+              >
                 Logout
               </Button>
             </div>

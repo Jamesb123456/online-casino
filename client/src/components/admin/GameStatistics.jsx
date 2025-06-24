@@ -12,7 +12,7 @@ const GameStatistics = () => {
   const [gameFilter, setGameFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   
-  // Mock statistics data - would be fetched from API in real app
+  // Statistics data fetched from API
   const [statistics, setStatistics] = useState({
     totalBets: 0,
     totalWagered: 0,
@@ -39,16 +39,31 @@ const GameStatistics = () => {
           // Use the real statistics data from the API
           setStatistics(response.statistics);
         } else {
-          // Fallback to mock data if API response is unexpected
-          console.warn('Using mock game statistics as API returned unexpected format');
-          const mockData = generateMockData(timeRange, gameFilter);
-          setStatistics(mockData);
+          // Return empty data if API response is unexpected
+          console.error('API returned unexpected format for game statistics');
+          setStatistics({
+            totalBets: 0,
+            totalWagered: 0,
+            houseProfit: 0,
+            averageBet: 0,
+            gameBreakdown: [],
+            dailyData: [],
+            topPlayers: []
+          });
         }
       } catch (error) {
         console.error('Error fetching game statistics:', error);
-        // Fallback to mock data if API call fails
-        const mockData = generateMockData(timeRange, gameFilter);
-        setStatistics(mockData);
+        // Return empty data if API call fails
+        setStatistics({
+          totalBets: 0,
+          totalWagered: 0,
+          houseProfit: 0,
+          averageBet: 0,
+          gameBreakdown: [],
+          dailyData: [],
+          topPlayers: [],
+          error: 'Failed to load statistics. Please try again later.'
+        });
       } finally {
         setIsLoading(false);
       }
@@ -68,119 +83,6 @@ const GameStatistics = () => {
   // Format percentage
   const formatPercentage = (value) => {
     return `${(value * 100).toFixed(2)}%`;
-  };
-  
-  // Generate mock data based on filters
-  const generateMockData = (timeRange, gameFilter) => {
-    // Base data
-    const games = ['Crash', 'Plinko', 'Wheel', 'Roulette'];
-    let multiplier = 1;
-    
-    // Adjust data volume based on time range
-    switch (timeRange) {
-      case 'day':
-        multiplier = 1;
-        break;
-      case 'week':
-        multiplier = 7;
-        break;
-      case 'month':
-        multiplier = 30;
-        break;
-      case 'year':
-        multiplier = 365;
-        break;
-      default:
-        multiplier = 7;
-    }
-    
-    // Generate game breakdown
-    const gameBreakdown = games.map(game => {
-      const bets = Math.floor(Math.random() * 1000 + 100) * multiplier;
-      const wagered = Math.floor(Math.random() * 10000 + 1000) * multiplier;
-      const profit = wagered * (Math.random() * 0.1 + 0.02); // 2-12% house edge
-      
-      return {
-        name: game,
-        bets,
-        wagered,
-        profit,
-        edge: profit / wagered
-      };
-    });
-    
-    // Filter by game if needed
-    const filteredBreakdown = gameFilter === 'all' 
-      ? gameBreakdown 
-      : gameBreakdown.filter(game => game.name.toLowerCase() === gameFilter.toLowerCase());
-    
-    // Daily data for charts (last 7 days or adjusted based on timeRange)
-    const days = timeRange === 'day' ? 1 : 
-                timeRange === 'week' ? 7 : 
-                timeRange === 'month' ? 30 : 365;
-                
-    const dailyData = Array(days).fill(0).map((_, index) => {
-      // Get date string
-      const date = new Date();
-      date.setDate(date.getDate() - (days - 1 - index));
-      
-      return {
-        date: date.toISOString().split('T')[0],
-        bets: Math.floor(Math.random() * 1000 + 100),
-        profit: Math.floor(Math.random() * 1000 + 100),
-        uniquePlayers: Math.floor(Math.random() * 100 + 10)
-      };
-    });
-    
-    // Top players
-    const topPlayers = [
-      {
-        username: 'highroller22',
-        totalWagered: 75000 * multiplier,
-        gamesPlayed: 450 * multiplier,
-        netProfit: -5200 * multiplier
-      },
-      {
-        username: 'luckywin789',
-        totalWagered: 52000 * multiplier,
-        gamesPlayed: 320 * multiplier,
-        netProfit: 3700 * multiplier
-      },
-      {
-        username: 'gambler456',
-        totalWagered: 47500 * multiplier,
-        gamesPlayed: 290 * multiplier,
-        netProfit: -1850 * multiplier
-      },
-      {
-        username: 'player123',
-        totalWagered: 31000 * multiplier,
-        gamesPlayed: 210 * multiplier,
-        netProfit: -950 * multiplier
-      },
-      {
-        username: 'casinoking',
-        totalWagered: 28500 * multiplier,
-        gamesPlayed: 180 * multiplier,
-        netProfit: -1200 * multiplier
-      }
-    ];
-    
-    // Calculate totals
-    const totalBets = filteredBreakdown.reduce((sum, game) => sum + game.bets, 0);
-    const totalWagered = filteredBreakdown.reduce((sum, game) => sum + game.wagered, 0);
-    const houseProfit = filteredBreakdown.reduce((sum, game) => sum + game.profit, 0);
-    const averageBet = totalBets > 0 ? totalWagered / totalBets : 0;
-    
-    return {
-      totalBets,
-      totalWagered,
-      houseProfit,
-      averageBet,
-      gameBreakdown: filteredBreakdown,
-      dailyData,
-      topPlayers
-    };
   };
   
   return (

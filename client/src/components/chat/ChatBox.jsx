@@ -26,6 +26,7 @@ const ChatBox = () => {
         return;
       }
       
+      console.log('Attempting to connect to chat service...');
       chatSocketService.connect(token)
         .then(() => {
           setIsConnected(true);
@@ -33,6 +34,18 @@ const ChatBox = () => {
         })
         .catch(err => {
           console.error('Failed to connect to chat:', err);
+          // Try one more time after a short delay
+          setTimeout(() => {
+            console.log('Retrying chat connection...');
+            chatSocketService.connect(token)
+              .then(() => {
+                setIsConnected(true);
+                console.log('Connected to chat service on retry');
+              })
+              .catch(retryErr => {
+                console.error('Failed to connect on retry:', retryErr);
+              });
+          }, 2000);
         });
       
       // Clean up on unmount

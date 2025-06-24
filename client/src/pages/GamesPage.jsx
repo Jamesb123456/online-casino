@@ -40,6 +40,13 @@ const GamesPage = () => {
       description: 'Beat the dealer by getting closer to 21 without going over.',
       bgColor: 'bg-gradient-to-br from-game-blackjack/30 to-bg-card',
       accentColor: 'border-game-blackjack'
+    },
+    {
+      id: 'landmines',
+      name: 'Landmines',
+      description: 'Find diamonds and avoid mines for increasing rewards. Cash out anytime!',
+      bgColor: 'bg-gradient-to-br from-blue-600/30 to-bg-card',
+      accentColor: 'border-blue-600'
     }
   ];
 

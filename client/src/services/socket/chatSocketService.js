@@ -36,7 +36,7 @@ class ChatSocketService {
         
         // Create socket connection with auth token
         // Socket.IO namespace should be direct to the server without /api
-        const socketUrl = 'http://localhost:5001'; // Hardcode to correct port
+        const socketUrl = 'http://localhost:5000'; // Use port 5000 to match server
         console.log('Connecting to chat server at:', socketUrl);
         
         this.socket = io(`${socketUrl}/chat`, {

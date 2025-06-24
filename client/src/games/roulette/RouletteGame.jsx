@@ -14,13 +14,15 @@ const RouletteGame = () => {
   const [balance, setBalance] = useState(1000);
   const [betAmount, setBetAmount] = useState(10);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [targetAngle, setTargetAngle] = useState(0);
+  const [spinPhase, setSpinPhase] = useState(null); // null, 'start', 'result', 'complete'
+  const [spinData, setSpinData] = useState(null);
+  const [showResult, setShowResult] = useState(false);
   const [gameResult, setGameResult] = useState(null);
   const [winningNumber, setWinningNumber] = useState(null);
   const [gameHistory, setGameHistory] = useState([]);
   const [currentBets, setCurrentBets] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [useMockData, setUseMockData] = useState(true); // Toggle for mock mode/socket mode
+  const [useMockData, setUseMockData] = useState(false); // Use real socket mode by default
   
   // Multiplayer state
   const [activePlayers, setActivePlayers] = useState([]);
@@ -77,9 +79,67 @@ const RouletteGame = () => {
             setMultiplayerBets(prev => [...prev, bet]);
           });
           
-          // Set up game event listeners
-          rouletteSocketService.onGameResult((data) => {
-            console.log('Received game result:', data);
+          // Set up spin event listeners
+          // IMPORTANT: Remove any existing listeners first to prevent duplicates
+          rouletteSocketService.socket.off('roulette:spin_started');
+          rouletteSocketService.socket.off('roulette:spin_result');
+          rouletteSocketService.socket.off('roulette:round_complete');
+          
+          console.log('Setting up new spin event listeners');
+          
+          // Re-register event listeners
+          rouletteSocketService.onSpinStarted((data) => {
+            console.log('Spin started event received:', data);
+            setIsSpinning(true);
+            setSpinPhase('start');
+            setSpinData(data.spinData);
+            setShowResult(false); // Hide result during spinning
+          });
+          
+          rouletteSocketService.onSpinResult((data) => {
+            console.log('Spin result event received:', data);
+            setSpinPhase('result');
+            setWinningNumber(data.winningNumber);
+            
+            // Update balance with winnings/losses
+            setBalance(prevBalance => {
+              const newBalance = prevBalance + data.totalProfit;
+              console.log(`Balance updated: ${prevBalance} + ${data.totalProfit} = ${newBalance}`);
+              return newBalance;
+            });
+            
+            // Create game result object
+            const gameResultObj = {
+              id: data.gameId,
+              winningNumber: data.winningNumber,
+              winningColor: data.winningColor,
+              bets: data.bets,
+              totalBetAmount: data.bets ? data.bets.reduce((sum, bet) => sum + bet.amount, 0) : 0,
+              totalWinnings: data.totalWinnings,
+              totalProfit: data.totalProfit,
+              timestamp: new Date()
+            };
+            
+            // Set current game result
+            setGameResult(gameResultObj);
+            
+            // Add to game history
+            setGameHistory(prevHistory => {
+              const newHistory = [gameResultObj, ...prevHistory];
+              console.log('Updated game history:', newHistory);
+              return newHistory;
+            });
+            
+            // Show result after a brief delay to allow the ball to settle
+            setTimeout(() => {
+              console.log('Showing result now');
+              setShowResult(true);
+            }, 1000);
+          });
+          
+          rouletteSocketService.onRoundComplete(() => {
+            console.log('Round complete event received');
+            setIsSpinning(false);
           });
           
         } catch (error) {
@@ -153,38 +213,128 @@ const RouletteGame = () => {
   }, [isSpinning, betAmount, balance, useMockData]);
 
   // Handle spin
-  const handleSpin = useCallback(() => {
-    if (isSpinning || currentBets.length === 0) return;
-    
-    setIsSpinning(true);
-    setGameResult(null);
-    
-    if (useMockData) {
-      // Generate a mock random result
-      const mockIndex = Math.floor(Math.random() * 37); // 0-36 for roulette
-      const mockAngle = 6 * 360 - (mockIndex * (360 / 37)); // 6 full rotations minus position
-      setTargetAngle(mockAngle);
-      setWinningNumber(mockIndex);
+  const handleSpin = async () => {
+    try {
+      // Check if already spinning
+      if (isSpinning) {
+        console.log('Already spinning, ignoring spin request');
+        return;
+      }
       
-    } else {
-      // Socket mode - send to server
-      rouletteSocketService.spinWheel()
-        .then(response => {
-          if (response.success) {
-            setTargetAngle(response.targetAngle);
-            setWinningNumber(response.winningNumber);
-          } else {
-            console.error('Error spinning wheel:', response.error);
-            alert(response.error || 'Failed to spin wheel');
-            setIsSpinning(false);
+      // Check if there are active bets
+      if (currentBets.length === 0) {
+        alert('Place at least one bet before spinning');
+        return;
+      }
+      
+      // Temporarily disable the useMockData flag to ensure real socket events
+      const actuallyUseMockData = false; // Force real mode for debugging
+      let response;
+      
+      if (!actuallyUseMockData) {
+        // Debug socket connection before spin
+        console.log('Socket connection status before spin:', rouletteSocketService.isConnected);
+        console.log('Socket object exists:', !!rouletteSocketService.socket);
+        
+        // Try to ensure connection is established
+        try {
+          console.log('Attempting to ensure socket connection...');
+          await rouletteSocketService.ensureConnected();
+          console.log('Socket connection ensured successfully');
+        } catch (connError) {
+          console.error('Failed to connect socket:', connError);
+          alert('Cannot connect to game server. Please refresh the page.');
+          return;
+        }
+        
+        // Use the real server
+        console.log('Initiating real spin via socket');
+        response = await rouletteSocketService.spin(currentBets);
+        
+        // The first response from the server just contains spin parameters
+        // The actual spin result will come later via socket events
+        if (response.success) {
+          console.log('Real spin initiated successfully:', response);
+          // Server will emit the events: onSpinStarted, onSpinResult, onRoundComplete
+        } else {
+          console.error('Error initiating spin:', response);
+          alert('Error spinning the wheel. Please try again.');
+          return;
+        }
+      } else {
+        // Mockup data for testing
+        setIsSpinning(true);
+        setSpinPhase('start');
+        
+        // Create mock spin data
+        const mockSpinData = {
+          phase1Angle: 3600, // 10 rotations
+          phase2Angle: 2160, // 6 rotations
+          phase3Angle: 720,  // 2 rotations
+          durations: {
+            phase1: 3000,
+            phase2: 4000,
+            phase3: 3000,
+            total: 10000
           }
-        })
-        .catch(error => {
-          console.error('Error spinning wheel:', error);
+        };
+        
+        setSpinData(mockSpinData);
+        
+        // Simulate server delay and phases
+        // Phase 1: Start spinning
+        console.log('Mock: Starting spin animation');
+        
+        // Phase 2: Reveal result (after 9 seconds)
+        setTimeout(() => {
+          // Process bet results using mock function
+          const result = mockRouletteSpin(currentBets);
+          console.log('Mock spin result:', result);
+          
+          setSpinPhase('result');
+          setWinningNumber(result.winningNumber);
+          
+          // Update balance with winnings/losses
+          setBalance(prev => prev + result.totalProfit);
+          
+          // Create game result object with timestamp
+          const gameResult = {
+            id: Date.now().toString(),
+            timestamp: new Date(),
+            winningNumber: result.winningNumber,
+            winningColor: result.winningColor,
+            bets: result.bets,
+            totalBetAmount: currentBets.reduce((sum, bet) => sum + bet.amount, 0),
+            totalWinnings: result.totalWinnings,
+            totalProfit: result.totalProfit
+          };
+          
+          // Display the result
+          setGameResult(gameResult);
+          
+          // Add to history
+          setGameHistory(prev => [gameResult, ...prev]);
+          
+          // Show result after a short delay
+          setTimeout(() => {
+            setShowResult(true);
+          }, 1000);
+          
+        }, mockSpinData.durations.total - 1000);
+        
+        // Phase 3: Complete round (after 13 seconds)
+        setTimeout(() => {
+          setSpinPhase('complete');
+          setCurrentBets([]);
           setIsSpinning(false);
-        });
-    }
-  }, [isSpinning, currentBets, useMockData]);
+        }, mockSpinData.durations.total + 3000);
+      }
+    } catch (error) {
+      console.error('Error spinning wheel:', error);
+      alert(error.message);
+      setIsSpinning(false);
+    }      
+  };
 
   // Handle spin completion
   // Listen for socket game results
@@ -200,121 +350,6 @@ const RouletteGame = () => {
       };
     }
   }, [useMockData, isConnected]);
-
-  const handleSpinComplete = useCallback(() => {
-    if (!winningNumber && winningNumber !== 0) return;
-    
-    if (useMockData) {
-      // Mock mode - calculate results locally
-      
-      // Determine winning bets
-      const results = currentBets.map(bet => {
-        let isWinner = false;
-        
-        // Check if bet is a winner based on type and winning number
-        switch (bet.type) {
-          case 'STRAIGHT':
-            isWinner = parseInt(bet.value) === winningNumber;
-            break;
-          case 'RED':
-            isWinner = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(winningNumber);
-            break;
-          case 'BLACK':
-            isWinner = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35].includes(winningNumber);
-            break;
-          case 'ODD':
-            isWinner = winningNumber > 0 && winningNumber % 2 === 1;
-            break;
-          case 'EVEN':
-            isWinner = winningNumber > 0 && winningNumber % 2 === 0;
-            break;
-          case 'LOW':
-            isWinner = winningNumber >= 1 && winningNumber <= 18;
-            break;
-          case 'HIGH':
-            isWinner = winningNumber >= 19 && winningNumber <= 36;
-            break;
-          case 'DOZEN':
-            const dozen = parseInt(bet.value);
-            isWinner = 
-              (dozen === 1 && winningNumber >= 1 && winningNumber <= 12) ||
-              (dozen === 2 && winningNumber >= 13 && winningNumber <= 24) ||
-              (dozen === 3 && winningNumber >= 25 && winningNumber <= 36);
-            break;
-          case 'COLUMN':
-            const column = parseInt(bet.value);
-            isWinner = winningNumber > 0 && winningNumber % 3 === (column === 1 ? 1 : column === 2 ? 2 : 0);
-            break;
-          default:
-            isWinner = false;
-        }
-        
-        // Calculate winnings
-        const winAmount = isWinner ? bet.amount * (bet.payout + 1) : 0;
-        const profit = isWinner ? bet.amount * bet.payout : -bet.amount;
-        
-        return {
-          ...bet,
-          isWinner,
-          winAmount,
-          profit
-        };
-      });
-      
-      // Calculate totals
-      const totalWinnings = results.reduce((sum, bet) => sum + (bet.winAmount || 0), 0);
-      const totalProfit = results.reduce((sum, bet) => sum + bet.profit, 0);
-      
-      // Create game result
-      const result = {
-        id: Date.now(),
-        timestamp: new Date(),
-        winningNumber,
-        bets: results,
-        totalBetAmount: results.reduce((sum, bet) => sum + bet.amount, 0),
-        totalWinnings,
-        totalProfit
-      };
-      
-      // Update game state
-      setGameHistory(prev => [result, ...prev.slice(0, 9)]);
-      setGameResult(result);
-      setBalance(prev => prev + totalWinnings);
-      
-      // Reset game state
-      setCurrentBets([]);
-      setIsSpinning(false);
-    } else {
-      // For socket mode, receive the results from the server
-      // The spin function already handles the server call and response
-      // Here we just update the UI with the results when animation completes
-      
-      // Get the latest result from server (already available since the spin call)
-      rouletteSocketService.getGameHistory(1)
-        .then(response => {
-          if (response.success && response.userHistory && response.userHistory.length > 0) {
-            const latestResult = response.userHistory[0];
-            
-            // Update game state with server data
-            setGameResult(latestResult);
-            setGameHistory(prev => [latestResult, ...prev.slice(0, 9)]);
-            setBalance(prevBalance => {
-              // Balance might have already been updated by the spin response
-              // This is to ensure we have the most up-to-date value
-              return response.balance || prevBalance;
-            });
-          }
-          
-          // Reset game state
-          setCurrentBets([]);
-          setIsSpinning(false);
-        })
-        .catch(error => {
-          console.error('Error getting game history:', error);
-          setIsSpinning(false);
-        });
-    }
-  }, [winningNumber, currentBets, useMockData, isConnected]);
 
   // Format timestamp for display
   const formatTime = (timestamp) => {
@@ -338,12 +373,16 @@ const RouletteGame = () => {
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="lg:w-8/12 space-y-4">
         {/* Roulette wheel */}
-        <div className="relative bg-gray-800 rounded-lg p-6">
+        <div className="relative">
           <RouletteWheel
             spinning={isSpinning}
-            targetAngle={targetAngle}
-            onSpinComplete={handleSpinComplete}
+            spinData={spinData}
             winningNumber={winningNumber}
+            showResult={showResult}
+            onSpinComplete={() => {
+              // This callback is triggered when the local animation completes
+              // We don't set isSpinning=false here because we follow the server states
+            }}
           />
           
           {/* Spin button */}
@@ -420,39 +459,39 @@ const RouletteGame = () => {
         </Card>
         
         {/* Last result details */}
-        {gameResult && (
+        {gameResult && !isSpinning && (
           <Card title="Last Spin Results" className="bg-gray-800">
             <div>
               <div className="flex justify-between mb-2">
                 <span className="text-gray-400">Winning Number:</span>
-                <span className="font-bold">{getNumberColorBadge(gameResult.winningNumber)}</span>
+                <div className="flex items-center">
+                  {getNumberColorBadge(gameResult.winningNumber)}
+                  <span className="font-bold ml-2">{gameResult.winningNumber}</span>
+                </div>
               </div>
               
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-400 mb-1">Bets</h4>
                 <div className="space-y-2">
                   {gameResult.bets.map((bet, index) => (
-                    <div key={index} className="flex justify-between bg-gray-700 rounded px-3 py-2">
+                    <div key={index} className="flex justify-between items-center text-sm">
                       <div>
-                        <span className="font-medium">{BET_TYPES[bet.type].name}</span>
-                        {bet.value && <span className="text-gray-300"> - {bet.value}</span>}
-                        <span className="text-sm text-gray-400 ml-2">({bet.amount})</span>
+                        <span className="text-gray-300">{bet.type}</span>
+                        {bet.value && <span className="text-gray-400"> - {bet.value}</span>}
+                        <span className="text-gray-400"> (${bet.amount.toFixed(2)})</span>
                       </div>
                       <div className={bet.isWinner ? 'text-green-500 font-bold' : 'text-red-500'}>
-                        {bet.isWinner ? `+${bet.profit.toFixed(2)}` : bet.profit.toFixed(2)}
+                        {bet.isWinner ? `+${bet.profit.toFixed(2)}` : `-${bet.amount.toFixed(2)}`}
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-              
-              <div className="flex justify-between pt-2 border-t border-gray-700">
-                <span className="font-medium">Total Profit:</span>
-                <span className={`font-bold ${
-                  gameResult.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'
-                }`}>
-                  {gameResult.totalProfit >= 0 ? '+' : ''}{gameResult.totalProfit.toFixed(2)}
-                </span>
+                <div className="mt-3 pt-2 border-t border-gray-700 flex justify-between">
+                  <div className="text-gray-300">Total</div>
+                  <div className={`font-bold ${gameResult.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    {gameResult.totalProfit >= 0 ? '+' : ''}{gameResult.totalProfit.toFixed(2)}
+                  </div>
+                </div>
               </div>
             </div>
           </Card>

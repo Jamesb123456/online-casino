@@ -59,7 +59,76 @@ app.get('/', (req, res) => {
   res.send('Platinum Casino API is running');
 });
 
-// Socket.io connection
+// Define all namespaces outside the main connection handler
+// Crash game namespace
+const crashNamespace = io.of('/crash');
+crashNamespace.on('connection', (socket) => {
+  console.log('Client connected to crash namespace:', socket.id);
+  
+  // Get user from socket (simplified - in real app would use authentication)
+  const user = { _id: socket.id, balance: 1000 };
+  
+  // Initialize crash handlers
+  require('./src/socket/crashHandler')(crashNamespace);
+  
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('Client disconnected from crash namespace:', socket.id);
+  });
+});
+
+// Roulette game namespace
+const rouletteNamespace = io.of('/roulette');
+rouletteNamespace.on('connection', (socket) => {
+  console.log('Client connected to roulette namespace:', socket.id);
+  
+  // Get user from socket (simplified - in real app would use authentication)
+  const user = { _id: socket.id, balance: 1000 };
+  
+  // Initialize roulette handlers
+  require('./src/socket/rouletteHandler').initRouletteHandlers(io, socket, user);
+  
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('Client disconnected from roulette namespace:', socket.id);
+  });
+});
+
+// Landmines game namespace
+const landminesNamespace = io.of('/landmines');
+landminesNamespace.on('connection', (socket) => {
+  console.log('Client connected to landmines namespace:', socket.id);
+  
+  // Get user from socket (simplified - in real app would use authentication)
+  const user = { _id: socket.id, balance: 1000 };
+  
+  // Initialize landmines handlers
+  require('./src/socket/landminesHandler').initLandminesHandlers(io, socket, user);
+  
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('Client disconnected from landmines namespace:', socket.id);
+  });
+});
+
+// Blackjack game namespace
+const blackjackNamespace = io.of('/blackjack');
+blackjackNamespace.on('connection', (socket) => {
+  console.log('Client connected to blackjack namespace:', socket.id);
+  
+  // Get user from socket (simplified - in real app would use authentication)
+  const user = { _id: socket.id, balance: 1000 };
+  
+  // Initialize blackjack handlers
+  require('./src/socket/blackjackHandler')(blackjackNamespace, socket);
+  
+  // Handle disconnection
+  socket.on('disconnect', () => {
+    console.log('Client disconnected from blackjack namespace:', socket.id);
+  });
+});
+
+// Socket.io main namespace connection
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
   
@@ -67,60 +136,6 @@ io.on('connection', (socket) => {
   socket.on('joinGame', (gameType) => {
     socket.join(gameType);
     console.log(`User ${socket.id} joined ${gameType}`);
-  });
-  
-  // Crash game namespace
-  const crashNamespace = io.of('/crash');
-  
-  crashNamespace.on('connection', (socket) => {
-    console.log('Client connected to crash namespace:', socket.id);
-    
-    // Get user from socket (simplified - in real app would use authentication)
-    const user = { _id: socket.id, balance: 1000 };
-    
-    // Initialize crash handlers
-    require('./src/socket/crashHandler')(crashNamespace);
-    
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('Client disconnected from crash namespace:', socket.id);
-    });
-  });
-  
-  // Roulette game namespace
-  const rouletteNamespace = io.of('/roulette');
-  
-  rouletteNamespace.on('connection', (socket) => {
-    console.log('Client connected to roulette namespace:', socket.id);
-    
-    // Get user from socket (simplified - in real app would use authentication)
-    const user = { _id: socket.id, balance: 1000 };
-    
-    // Initialize roulette handlers
-    require('./src/socket/rouletteHandler').initRouletteHandlers(io, socket, user);
-    
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('Client disconnected from roulette namespace:', socket.id);
-    });
-  });
-  
-  // Blackjack game namespace
-  const blackjackNamespace = io.of('/blackjack');
-  
-  blackjackNamespace.on('connection', (socket) => {
-    console.log('Client connected to blackjack namespace:', socket.id);
-    
-    // Get user from socket (simplified - in real app would use authentication)
-    const user = { _id: socket.id, balance: 1000 };
-    
-    // Initialize blackjack handlers
-    require('./src/socket/blackjackHandler')(blackjackNamespace, socket);
-    
-    // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log('Client disconnected from blackjack namespace:', socket.id);
-    });
   });
   
   // Handle disconnection from main namespace
@@ -136,7 +151,7 @@ initChatHandlers(io);
 initLiveGamesHandlers(io);
 
 // Start server
-const PORT = process.env.PORT || 5001; // Changed default port to 5001
+const PORT = process.env.PORT || 5000; // Default port 5000
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   connectDB();

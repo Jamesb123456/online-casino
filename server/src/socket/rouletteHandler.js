@@ -200,9 +200,9 @@ const generateSpinResult = (serverSeed = '') => {
 /**
  * Calculate the rotation angle for the roulette wheel
  * @param {Number} index - Index of the winning pocket in ROULETTE_NUMBERS array
- * @returns {Number} - Rotation angle in degrees
+ * @returns {Object} - Rotation angles for different phases of the spin
  */
-const calculateRotationAngle = (index) => {
+const calculateRotationAngles = (index) => {
   // Base rotation 
   const baseRotation = 0;
   
@@ -215,10 +215,29 @@ const calculateRotationAngle = (index) => {
   // Add random offset within the pocket (to make it look more natural)
   const randomOffset = Math.random() * (pocketAngle * 0.6) - (pocketAngle * 0.3);
   
-  // Add multiple full rotations to make the wheel spin
-  const fullRotations = 6 * 360; // 6 full rotations
+  // Calculate different spin phases (multiple full rotations with decreasing speed)
+  const phase1Rotations = 10 * 360; // Initial very fast spin (10 rotations)
+  const phase2Rotations = 6 * 360;  // Medium speed spin (6 rotations)
+  const phase3Rotations = 2 * 360;  // Final slow spin (2 rotations)
   
-  return fullRotations - (targetAngle + randomOffset);
+  // Duration of each phase in milliseconds
+  const phaseDurations = {
+    phase1: 3000,  // 3 seconds of fast spinning
+    phase2: 4000,  // 4 seconds of medium spinning
+    phase3: 3000,  // 3 seconds of slow spinning
+    total: 10000   // 10 seconds total
+  };
+  
+  // Calculate angles for each phase
+  const finalAngle = targetAngle + randomOffset;
+  
+  return {
+    phase1Angle: phase1Rotations,
+    phase2Angle: phase2Rotations,
+    phase3Angle: phase3Rotations,
+    finalAngle: finalAngle,
+    durations: phaseDurations
+  };
 };
 
 /**
@@ -403,14 +422,17 @@ function initRouletteHandlers(io, socket, user) {
       // Set spinning state
       session.isSpinning = true;
       
-      // Generate spin result
+      // Generate spin result but don't reveal it to the client yet
       const serverSeed = Math.random().toString(36).substring(2, 15);
       const result = generateSpinResult(serverSeed);
       
-      // Calculate angle for animation
-      const angle = calculateRotationAngle(result.index);
+      // Store result in session for later use
+      session.pendingResult = result;
       
-      // Process all bets
+      // Calculate angles for progressive animation
+      const spinAngles = calculateRotationAngles(result.index);
+      
+      // Process all bets (but don't tell the client the results yet)
       const processedBets = session.currentBets.map(bet => {
         const isWinner = isBetWinner(bet.type, bet.value, result.number);
         const winAmount = calculateWinnings(bet.type, bet.amount, isWinner);
@@ -424,93 +446,175 @@ function initRouletteHandlers(io, socket, user) {
         };
       });
       
+      // Store processed bets in session for later use
+      session.processedBets = processedBets;
+      
       // Calculate total winnings and profit
       const totalWinnings = processedBets.reduce((sum, bet) => sum + (bet.winAmount || 0), 0);
       const totalProfit = processedBets.reduce((sum, bet) => sum + bet.profit, 0);
       
-      // Add winnings to balance
-      session.balance += totalWinnings;
+      // Store these in session too
+      session.pendingWinnings = totalWinnings;
+      session.pendingProfit = totalProfit;
       
-      // Use balanceService to record win transaction if there are any winnings
-      if (totalWinnings > 0) {
-        await balanceService.recordWin(userId, 
-          processedBets.reduce((sum, bet) => sum + bet.amount, 0), // total bet amount
-          totalWinnings, 
-          'roulette',
-          {
-            winningNumber: result.number,
-            winningColor: result.color,
-            bets: processedBets.map(bet => ({
-              type: bet.type,
-              value: bet.value,
-              amount: bet.amount,
-              isWinner: bet.isWinner
-            }))
-          }
-        );
-      }
+      // Create game result ID now
+      const gameId = Date.now().toString();
+      session.pendingGameId = gameId;
       
-      // Create game result
-      const gameResult = {
-        id: Date.now().toString(),
-        userId,
-        timestamp: new Date(),
-        winningNumber: result.number,
-        winningColor: result.color,
-        bets: processedBets,
-        totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
-        totalWinnings,
-        totalProfit
-      };
-      
-      // Log game end and results
-      loggingService.logGameEnd('roulette', gameResult.id, {
-        winningNumber: result.number,
-        winningColor: result.color
-      }, {
-        totalBets: processedBets.length,
-        totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
-        totalWinnings,
-        profit: totalProfit
-      });
-      
-      // Add to history
-      gameHistory.push(gameResult);
-      session.history.push(gameResult);
-      
-      // Clear current bets
-      session.currentBets = [];
-      
-      // Return result to client
-      const response = {
+      // First, send back just the initial spin data without the result
+      // This lets the client start animating the wheel
+      const initialResponse = {
         success: true,
-        gameId: gameResult.id,
-        winningNumber: result.number,
-        winningColor: result.color,
-        targetAngle: angle,
-        bets: processedBets,
-        totalWinnings,
-        totalProfit,
-        balance: session.balance
+        phase: 'start',
+        gameId: gameId,
+        spinData: {
+          phase1Angle: spinAngles.phase1Angle,
+          phase2Angle: spinAngles.phase2Angle,  
+          phase3Angle: spinAngles.phase3Angle,
+          durations: spinAngles.durations
+        },
+        // Don't include winning number yet!
+        message: 'Wheel is spinning...'
       };
       
-      if (callback) callback(response);
+      // Return initial response to the client
+      if (callback) callback(initialResponse);
       
-      // Broadcast to room that a new game happened (for real-time updates)
-      socket.to('roulette').emit('roulette:game_result', {
+      // Emit to all players that the wheel is spinning
+      console.log(`[Roulette] Emitting spin_started event for user ${userId}, gameId ${gameId}`);
+      io.to('roulette').emit('roulette:spin_started', {
         userId,
-        winningNumber: result.number,
-        winningColor: result.color,
-        timestamp: new Date()
+        gameId,
+        timestamp: new Date(),
+        spinData: initialResponse.spinData
       });
       
-      // Reset spinning state after a delay (simulating animation time)
+      // After initial spin phase, reveal the result
+      const resultTimeoutMs = spinAngles.durations.total - 1000; // Reveal result 1 second before animation ends
+      console.log(`[Roulette] Setting timeout for spin_result event: ${resultTimeoutMs}ms`);
+      
       setTimeout(() => {
-        if (activeSessions.has(userId)) {
-          const updatedSession = activeSessions.get(userId);
-          updatedSession.isSpinning = false;
+        console.log(`[Roulette] Result timeout triggered for user ${userId}`);
+        
+        // Only proceed if session still exists
+        if (!activeSessions.has(userId)) {
+          console.error(`[Roulette] Session for user ${userId} no longer exists, cannot send result`);
+          return;
         }
-      }, 10000); // 10 seconds for wheel animation
+        
+        const session = activeSessions.get(userId);
+        const result = session.pendingResult;
+        const processedBets = session.processedBets;
+        const totalWinnings = session.pendingWinnings;
+        const totalProfit = session.pendingProfit;
+        const gameId = session.pendingGameId;
+        
+        console.log(`[Roulette] Retrieved spin data for user ${userId}:`, { 
+          winningNumber: result?.number,
+          totalWinnings,
+          totalProfit,
+          betsCount: processedBets?.length
+        });
+        
+        // Add winnings to balance now that the result is revealed
+        session.balance += totalWinnings;
+        
+        // Use balanceService to record win transaction if there are any winnings
+        if (totalWinnings > 0) {
+          balanceService.recordWin(userId, 
+            processedBets.reduce((sum, bet) => sum + bet.amount, 0), // total bet amount
+            totalWinnings, 
+            'roulette',
+            {
+              winningNumber: result.number,
+              winningColor: result.color,
+              bets: processedBets.map(bet => ({
+                type: bet.type,
+                value: bet.value,
+                amount: bet.amount,
+                isWinner: bet.isWinner
+              }))
+            }
+          ).catch(err => console.error('Error recording win:', err));
+        }
+        
+        // Create game result
+        const gameResult = {
+          id: gameId,
+          userId,
+          timestamp: new Date(),
+          winningNumber: result.number,
+          winningColor: result.color,
+          bets: processedBets,
+          totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
+          totalWinnings,
+          totalProfit
+        };
+        
+        // Log game end and results
+        loggingService.logGameEnd('roulette', gameResult.id, {
+          winningNumber: result.number,
+          winningColor: result.color
+        }, {
+          totalBets: processedBets.length,
+          totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
+          totalWinnings,
+          profit: totalProfit
+        });
+        
+        // Add to history
+        gameHistory.push(gameResult);
+        session.history.push(gameResult);
+        
+        // Clear current bets and the pending result data
+        session.currentBets = [];
+        session.pendingResult = null;
+        session.processedBets = null;
+        session.pendingWinnings = null;
+        session.pendingProfit = null;
+        session.pendingGameId = null;
+        
+        // Emit the final result to all clients
+        const resultData = {
+          phase: 'result',
+          gameId: gameId,
+          winningNumber: result.number,
+          winningColor: result.color,
+          bets: processedBets,
+          totalWinnings,
+          totalProfit,
+          timestamp: new Date()
+        };
+        
+        console.log(`[Roulette] Emitting spin_result event for gameId ${gameId}:`, { 
+          winningNumber: result.number,
+          winningColor: result.color,
+          totalWinnings,
+          totalProfit
+        });
+        
+        io.to('roulette').emit('roulette:spin_result', resultData);
+        
+        // After all animations are complete, reset spinning state
+        setTimeout(() => {
+          console.log(`[Roulette] Round completion timeout triggered for user ${userId}`);
+          
+          if (activeSessions.has(userId)) {
+            const updatedSession = activeSessions.get(userId);
+            updatedSession.isSpinning = false;
+            
+            // Notify clients that a new round can begin
+            console.log(`[Roulette] Emitting round_complete event for user ${userId}`);
+            io.to('roulette').emit('roulette:round_complete', {
+              message: 'Ready for new bets',
+              timestamp: new Date()
+            });
+          } else {
+            console.error(`[Roulette] Session for user ${userId} no longer exists for round completion`);
+          }
+        }, 3000); // 3 more seconds after result is shown
+        
+      }, resultTimeoutMs);
       
     } catch (error) {
       console.error('Error spinning wheel:', error);

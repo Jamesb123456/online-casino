@@ -5,7 +5,7 @@ class RouletteSocketService {
     this.socket = null;
     this.isConnected = false;
     this.namespace = '/roulette';
-    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
     this.user = null;
   }
   
@@ -20,9 +20,22 @@ class RouletteSocketService {
   /**
    * Initialize socket connection to roulette namespace
    * @param {Object} userInfo - Optional user info to override this.user
+   * @returns {Promise} Promise that resolves when connection is established
    */
   connect(userInfo = null) {
-    if (!this.socket) {
+    return new Promise((resolve, reject) => {
+      // If already connected, resolve immediately
+      if (this.socket && this.isConnected) {
+        console.log('Already connected to roulette socket server');
+        return resolve();
+      }
+      
+      // If socket exists but not connected, disconnect and reconnect
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+      
       console.log(`Connecting to roulette socket at ${this.apiUrl}${this.namespace}`);
       
       // Use provided userInfo or fallback to this.user
@@ -41,10 +54,20 @@ class RouletteSocketService {
         }
       });
 
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (!this.isConnected) {
+          console.error('Connection timeout to roulette socket server');
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000); // 5 second timeout
+
       // Socket connection event listeners
       this.socket.on('connect', () => {
         console.log('Connected to roulette socket server');
         this.isConnected = true;
+        clearTimeout(connectionTimeout);
+        resolve();
       });
 
       this.socket.on('disconnect', () => {
@@ -52,10 +75,15 @@ class RouletteSocketService {
         this.isConnected = false;
       });
 
+      this.socket.on('connect_error', (error) => {
+        console.error('Roulette socket connection error:', error);
+        reject(error);
+      });
+
       this.socket.on('error', (error) => {
         console.error('Roulette socket error:', error);
       });
-    }
+    });
   }
 
   /**
@@ -89,6 +117,113 @@ class RouletteSocketService {
   }
 
   /**
+   * Join the roulette game room and get initial game data
+   * @returns {Promise} Promise that resolves with game data
+   */
+  joinGame() {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.isConnected) {
+        return reject(new Error('Socket not connected'));
+      }
+      
+      this.socket.emit('roulette:join', {}, (response) => {
+        if (response && response.success) {
+          resolve(response);
+        } else {
+          reject(new Error('Failed to join game' + (response?.message ? ': ' + response.message : '')));
+        }
+      });
+    });
+  }
+
+  /**
+   * Check and ensure socket connection is active
+   * @returns {Promise} Promise that resolves when connection is established
+   */
+  async ensureConnected() {
+    console.log('[Socket] Checking connection status, isConnected:', this.isConnected);
+    if (this.socket && this.isConnected) {
+      console.log('[Socket] Already connected.');
+      return Promise.resolve();
+    }
+    
+    console.log('[Socket] Not connected, attempting to reconnect...');
+    try {
+      await this.connect();
+      console.log('[Socket] Reconnection successful, isConnected:', this.isConnected);
+      return Promise.resolve();
+    } catch (error) {
+      console.error('[Socket] Reconnection failed:', error);
+      return Promise.reject(error);
+    }
+  }
+  
+  /**
+   * Debug method to check socket connection status
+   * @returns {Object} Connection status details
+   */
+  debugConnection() {
+    const status = {
+      socketExists: !!this.socket,
+      isConnected: this.isConnected,
+      socketId: this.socket?.id || null,
+      namespace: this.namespace,
+      apiUrl: this.apiUrl
+    };
+    
+    console.log('[Socket Debug] Connection status:', status);
+    return status;
+  }
+
+  /**
+   * Spin the roulette wheel with specified bet amount
+   * @param {Object} bets - Array of bet objects with type, value, amount
+   * @returns {Promise} Promise that resolves when wheel starts spinning
+   */
+  async spin(bets) {
+    try {
+      console.log('[Socket] Spin requested, checking connection first...');
+      // Ensure we have a connection before spinning
+      await this.ensureConnected();
+      
+      return new Promise((resolve, reject) => {
+        if (!this.socket || !this.isConnected) {
+          console.error('[Socket] Still not connected after ensureConnected()!');
+          return reject(new Error('Socket not connected'));
+        }
+        
+        // Convert any numbers to strings
+        const formattedBets = bets.map(bet => ({
+          ...bet,
+          value: String(bet.value)
+        }));
+        
+        console.log('[Socket] Emitting roulette:spin event with bets:', formattedBets);
+        
+        // Set a timeout in case the server never responds
+        const timeout = setTimeout(() => {
+          console.error('[Socket] Spin request timed out after 10s');
+          reject(new Error('Spin request timed out'));
+        }, 10000);
+        
+        this.socket.emit('roulette:spin', { bets: formattedBets }, (response) => {
+          clearTimeout(timeout);
+          if (response && response.success) {
+            console.log('[Socket] Spin successful:', response);
+            resolve(response);
+          } else {
+            console.error('[Socket] Spin error:', response?.error || 'Unknown error');
+            reject(new Error(response?.error || 'Error spinning wheel'));
+          }
+        });
+      });
+    } catch (error) {
+      console.error('[Socket] Spin error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Listen for countdown event
    * @param {Function} callback 
    */
@@ -116,21 +251,48 @@ class RouletteSocketService {
   }
 
   /**
-   * Listen for wheel spinning event
-   * @param {Function} callback 
+   * Listen for spin started event
+   * @param {Function} callback - Callback function to handle the event
    */
-  onWheelSpin(callback) {
-    if (!this.socket) return;
-    this.socket.on('wheelSpin', callback);
+  onSpinStarted(callback) {
+    console.log('[Socket] Setting up roulette:spin_started listener');
+    this.socket.on('roulette:spin_started', (data) => {
+      console.log('[Socket] Received roulette:spin_started event:', data);
+      callback(data);
+    });
   }
 
   /**
-   * Listen for game result event
+   * Listen for spin result event (final phase with winning number)
+   * @param {Function} callback 
+   */
+  onSpinResult(callback) {
+    console.log('[Socket] Setting up roulette:spin_result listener');
+    this.socket.on('roulette:spin_result', (data) => {
+      console.log('[Socket] Received roulette:spin_result event:', data);
+      callback(data);
+    });
+  }
+
+  /**
+   * Listen for round complete event
+   * @param {Function} callback - Callback function to handle the event
+   */
+  onRoundComplete(callback) {
+    console.log('[Socket] Setting up roulette:round_complete listener');
+    this.socket.on('roulette:round_complete', (data) => {
+      console.log('[Socket] Received roulette:round_complete event:', data);
+      callback(data);
+    });
+  }
+
+  /**
+   * Listen for game results (legacy event)
    * @param {Function} callback 
    */
   onGameResult(callback) {
     if (!this.socket) return;
-    this.socket.on('gameResult', callback);
+    this.socket.on('roulette:game_result', callback);
   }
 
   /**

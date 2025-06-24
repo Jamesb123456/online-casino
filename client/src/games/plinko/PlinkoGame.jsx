@@ -54,43 +54,71 @@ const PlinkoGame = () => {
     }
   }, []);
   
+  // Debug logger for state changes
+  useEffect(() => {
+    console.log('Animation state changed:', { isAnimating, hasPath: animationPath !== null });
+  }, [isAnimating, animationPath]);
+  
   // Handle dropping the ball (placing a bet)
   const handlePlaceBet = () => {
-    if (isAnimating || betAmount <= 0) return;
+    // Enhanced logging and safety checks
+    console.log('Attempting to place bet. Current state:', { 
+      isAnimating, 
+      betAmount,
+      'animationPath exists': animationPath !== null 
+    });
     
-    if (USE_MOCK_SOCKET) {
-      // Mock implementation for development
-      setIsAnimating(true);
-      setGameResult(null);
-      
-      // Generate new path for the ball
-      const newPath = generatePlinkoPath();
-      setAnimationPath(newPath);
-      
-      console.log('Mock game with bet:', betAmount, 'risk:', risk);
-    } else {
-      // Real socket implementation
-      setGameResult(null);
-      
-      // Send drop ball request to server
-      dropBall({
-        betAmount,
-        risk
-      }, (response) => {
-        if (response.success) {
-          console.log('Ball dropped successfully, waiting for result');
-          // The animation path will come from the server via the onGameResult event
-          // The actual animation and result processing happens there
-        } else {
-          console.error('Error dropping ball:', response.error);
-          // TODO: Show error notification
-        }
-      });
+    if (isAnimating || betAmount <= 0) {
+      console.log('Cannot place bet: ' + (isAnimating ? 'Animation in progress' : 'Invalid bet amount'));
+      return;
     }
+    
+    // Force reset animation state before starting a new one
+    setAnimationPath(null);
+    
+    // Small delay to ensure previous state is cleared
+    setTimeout(() => {
+      if (USE_MOCK_SOCKET) {
+        // Mock implementation for development
+        console.log('Starting new mock game');
+        setIsAnimating(true);
+        setGameResult(null);
+        
+        // Generate new path for the ball
+        const newPath = generatePlinkoPath();
+        console.log('Setting new animation path');
+        setAnimationPath(newPath);
+        
+        console.log('Mock game with bet:', betAmount, 'risk:', risk);
+      } else {
+        // Real socket implementation
+        setGameResult(null);
+        setIsAnimating(true); // Important: set this before making the request
+        
+        // Send drop ball request to server
+        dropBall({
+          betAmount,
+          risk
+        }, (response) => {
+          if (response.success) {
+            console.log('Ball dropped successfully, waiting for result');
+            // The animation path will come from the server via the onGameResult event
+            // The actual animation and result processing happens there
+          } else {
+            console.error('Error dropping ball:', response.error);
+            // Reset animation state on error
+            setIsAnimating(false);
+            // TODO: Show error notification
+          }
+        });
+      }
+    }, 50); // Small delay to ensure clean state transition
   };
   
   // Handle when animation completes
   const handleAnimationComplete = (bucketIndex) => {
+    console.log('Animation complete, ball landed in bucket:', bucketIndex);
+    
     // Calculate winnings based on the bucket the ball landed in
     const winMultiplier = multipliers[bucketIndex];
     const winnings = betAmount * winMultiplier;
@@ -114,8 +142,14 @@ const PlinkoGame = () => {
     // Set game result to display
     setGameResult(result);
     
-    // Reset animation state
-    setIsAnimating(false);
+    // Critical: Reset animation state and path to allow a new ball to be dropped
+    // Use setTimeout to ensure state updates don't conflict
+    console.log('Resetting animation state...');
+    setTimeout(() => {
+      setIsAnimating(false);
+      setAnimationPath(null); // Reset the path so a new one can be set
+      console.log('Animation state reset complete, ready for next ball');
+    }, 100);
   };
   
   // Format timestamp for display

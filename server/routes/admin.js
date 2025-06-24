@@ -44,7 +44,7 @@ router.post('/users', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const { username, email, password, role = 'user' } = req.body;
+    const { username, password, role = 'user' } = req.body;
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({ username });
@@ -58,7 +58,6 @@ router.post('/users', auth, async (req, res) => {
     // Create new user
     const newUser = await UserModel.create({
       username,
-      email,
       passwordHash,
       role,
       isActive: true,
@@ -86,7 +85,6 @@ router.post('/users', auth, async (req, res) => {
       user: {
         id: newUser.id,
         username: newUser.username,
-        email: newUser.email,
         role: newUser.role,
         isActive: newUser.isActive,
         createdAt: newUser.createdAt
@@ -106,7 +104,7 @@ router.put('/users/:id', auth, async (req, res) => {
     }
 
     const { id } = req.params;
-    const { username, email, role, isActive, password } = req.body;
+    const { username, role, isActive, password } = req.body;
 
     // Check if user exists
     const existingUser = await UserModel.findById(id);
@@ -117,7 +115,6 @@ router.put('/users/:id', auth, async (req, res) => {
     // Prepare update data
     const updateData = {
       username,
-      email,
       role,
       isActive,
       updatedAt: new Date()
@@ -140,7 +137,6 @@ router.put('/users/:id', auth, async (req, res) => {
       user: {
         id: updatedUser.id,
         username: updatedUser.username,
-        email: updatedUser.email,
         role: updatedUser.role,
         isActive: updatedUser.isActive,
         updatedAt: updatedUser.updatedAt

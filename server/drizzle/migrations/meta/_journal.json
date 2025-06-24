@@ -15,6 +15,13 @@
       "when": 1750786532169,
       "tag": "0001_dapper_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1750800298267,
+      "tag": "0002_bent_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

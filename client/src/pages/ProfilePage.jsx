@@ -49,12 +49,6 @@ const ProfilePage = () => {
                       <p className="text-gray-400 text-sm">Username</p>
                       <p className="text-white font-medium">{user.username}</p>
                     </div>
-                    {user.email && (
-                      <div>
-                        <p className="text-gray-400 text-sm">Email</p>
-                        <p className="text-white font-medium">{user.email || 'Not provided'}</p>
-                      </div>
-                    )}
                     <div>
                       <p className="text-gray-400 text-sm">Account Type</p>
                       <p className="text-white font-medium capitalize">{user.role}</p>

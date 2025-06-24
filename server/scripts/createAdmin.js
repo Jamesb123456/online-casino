@@ -22,68 +22,39 @@ function askQuestion(question) {
 
 async function createAdmin() {
   try {
-    console.log('=== Admin User Creation ===\n');
-
-    // Check if admin already exists
-    const existingAdmin = await UserModel.findOne({ role: 'admin' });
+    console.log('Creating new admin user...\n');
     
-    if (existingAdmin) {
-      console.log('An admin user already exists.');
-      const overwrite = await askQuestion('Do you want to create another admin? (y/N): ');
-      
-      if (overwrite.toLowerCase() !== 'y') {
-        console.log('Admin creation cancelled.');
-        return;
-      }
-    }
-
-    // Get admin details
     const username = await askQuestion('Enter admin username: ');
-    const email = await askQuestion('Enter admin email: ');
     const password = await askQuestion('Enter admin password: ');
-
-    if (!username || !email || !password) {
-      console.log('All fields are required.');
-      return;
+    
+    if (!username || !password) {
+      console.log('Username and password are required!');
+      process.exit(1);
     }
 
-    // Check if username already exists
+    // Check if user already exists
     const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
-      console.log('Username already exists. Please choose a different username.');
-      return;
+      console.log(`User with username '${username}' already exists!`);
+      process.exit(1);
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     // Create admin user
-    const adminUser = await UserModel.create({
+    const newAdmin = await UserModel.create({
       username,
-      email,
-      passwordHash,
+      passwordHash: hashedPassword,
       role: 'admin',
+      balance: '100000', // Starting balance
       isActive: true,
       createdAt: new Date()
     });
 
-    // Create initial balance
-    await Balance.create({
-      userId: adminUser.id,
-      amount: 100000, // Admin starts with 100k
-      prevAmount: 0,
-      changeAmount: 100000,
-      changeType: 'credit',
-      reason: 'initial_balance',
-      description: 'Admin account creation',
-      createdAt: new Date()
-    });
-
     console.log('\n✅ Admin user created successfully!');
+    console.log('Admin Details:');
     console.log(`Username: ${username}`);
-    console.log(`Email: ${email}`);
-    console.log(`ID: ${adminUser.id}`);
-    console.log(`Initial Balance: 100,000`);
 
   } catch (error) {
     console.error('❌ Error creating admin user:', error.message);

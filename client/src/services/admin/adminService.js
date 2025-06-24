@@ -83,7 +83,7 @@ class AdminService {
 
   /**
    * Create a new player
-   * @param {Object} playerData - Player data including username, email, etc.
+   * @param {Object} playerData - Player data including username, password, etc.
    * @returns {Promise} Promise object with created player data
    */
   async createPlayer(playerData) {

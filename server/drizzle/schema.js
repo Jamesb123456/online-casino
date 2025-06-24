@@ -16,7 +16,6 @@ export const users = mysqlTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: userRoleEnum.default('user').notNull(),
   balance: decimal('balance', { precision: 15, scale: 2 }).default('0').notNull(),
-  email: varchar('email', { length: 255 }),
   avatar: text('avatar').default(''),
   isActive: boolean('is_active').default(true).notNull(),
   lastLogin: timestamp('last_login').defaultNow(),

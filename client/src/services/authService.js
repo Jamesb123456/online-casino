@@ -27,7 +27,7 @@ export const register = async (userData) => {
 
 /**
  * Log in an existing user
- * @param {Object} credentials - User credentials (email, password)
+ * @param {Object} credentials - User credentials (username, password)
  * @returns {Promise} - API response with user data
  */
 export const login = async (credentials) => {

@@ -23,7 +23,6 @@ router.get('/me', auth, async (req, res) => {
     res.json({
       id: user.id,
       username: user.username,
-      email: user.email,
       role: user.role,
       balance: currentBalance,
       isActive: user.isActive,
@@ -51,7 +50,6 @@ router.get('/profile', auth, async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         role: user.role,
         balance: currentBalance ? currentBalance.amount : 0,
         createdAt: user.createdAt,
@@ -67,7 +65,7 @@ router.get('/profile', auth, async (req, res) => {
 // Update user profile
 router.put('/profile', auth, async (req, res) => {
   try {
-    const { email, currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
     
     const user = await UserModel.findById(req.user.userId);
     if (!user) {
@@ -75,11 +73,6 @@ router.put('/profile', auth, async (req, res) => {
     }
 
     const updateData = {};
-
-    // Update email if provided
-    if (email && email !== user.email) {
-      updateData.email = email;
-    }
 
     // Update password if provided
     if (newPassword && currentPassword) {

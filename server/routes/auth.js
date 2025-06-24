@@ -19,7 +19,7 @@ const authLimiter = rateLimit({
 // Register
 router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, password } = req.body;
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({ username });
@@ -33,7 +33,6 @@ router.post('/register', authLimiter, async (req, res) => {
     // Create new user
     const newUser = await UserModel.create({
       username,
-      email,
       passwordHash: hashedPassword,
       role: 'user',
       balance: '1000', // Starting balance as string for decimal field
@@ -76,7 +75,6 @@ router.post('/register', authLimiter, async (req, res) => {
       user: {
         id: newUser.id,
         username: newUser.username,
-        email: newUser.email,
         role: newUser.role,
         balance: 1000
       }
@@ -139,7 +137,6 @@ router.post('/login', authLimiter, async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         role: user.role,
         balance: currentBalance
       }
@@ -186,7 +183,6 @@ router.get('/verify', async (req, res) => {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         role: user.role,
         balance: currentBalance
       }

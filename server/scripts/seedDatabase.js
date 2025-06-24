@@ -24,7 +24,6 @@ async function seedDatabase() {
       // Create admin user (ID will auto-increment)
       await db.insert(users).values({
         username: 'admin',
-        email: 'admin@casino.com',
         passwordHash: hashedPassword,
         role: 'admin',
         balance: '100000', // Admin starts with 100k
@@ -56,9 +55,9 @@ async function seedDatabase() {
 
     // Create some test player accounts
     const testPlayers = [
-      { username: 'player1', email: 'player1@test.com' },
-      { username: 'player2', email: 'player2@test.com' },
-      { username: 'player3', email: 'player3@test.com' }
+      { username: 'player1' },
+      { username: 'player2' },
+      { username: 'player3' }
     ];
 
     for (const playerData of testPlayers) {
@@ -73,7 +72,6 @@ async function seedDatabase() {
         // Create player user (ID will auto-increment)
         await db.insert(users).values({
           username: playerData.username,
-          email: playerData.email,
           passwordHash: hashedPassword,
           role: 'user',
           balance: '1000', // Players start with 1k

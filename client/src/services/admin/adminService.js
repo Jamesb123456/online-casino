@@ -11,7 +11,7 @@ class AdminService {
    */
   async getDashboardStats() {
     try {
-      const response = await api.get('/admin/stats/dashboard');
+      const response = await api.get('/admin/stats');
       return response.data;
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
@@ -58,7 +58,7 @@ class AdminService {
    */
   async getPlayers(params = {}) {
     try {
-      const response = await api.get('/admin/players', { params });
+      const response = await api.get('/admin/users', { params });
       return response.data;
     } catch (error) {
       console.error('Error fetching players:', error);
@@ -73,7 +73,7 @@ class AdminService {
    */
   async getPlayerById(playerId) {
     try {
-      const response = await api.get(`/admin/players/${playerId}`);
+      const response = await api.get(`/admin/users/${playerId}`);
       return response.data;
     } catch (error) {
       console.error(`Error fetching player ${playerId}:`, error);
@@ -88,7 +88,7 @@ class AdminService {
    */
   async createPlayer(playerData) {
     try {
-      const response = await api.post('/admin/players', playerData);
+      const response = await api.post('/admin/users', playerData);
       return response.data;
     } catch (error) {
       console.error('Error creating player:', error);
@@ -104,7 +104,7 @@ class AdminService {
    */
   async updatePlayer(playerId, playerData) {
     try {
-      const response = await api.put(`/admin/players/${playerId}`, playerData);
+      const response = await api.put(`/admin/users/${playerId}`, playerData);
       return response.data;
     } catch (error) {
       console.error(`Error updating player ${playerId}:`, error);
@@ -119,7 +119,7 @@ class AdminService {
    */
   async deletePlayer(playerId) {
     try {
-      const response = await api.delete(`/admin/players/${playerId}`);
+      const response = await api.delete(`/admin/users/${playerId}`);
       return response.data;
     } catch (error) {
       console.error(`Error deleting player ${playerId}:`, error);

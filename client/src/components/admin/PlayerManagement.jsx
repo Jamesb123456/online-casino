@@ -25,7 +25,6 @@ const PlayerManagement = () => {
   // Form state
   const [formData, setFormData] = useState({
     username: '',
-    email: '',
     balance: 0,
     role: 'player',
     isActive: true
@@ -44,11 +43,11 @@ const PlayerManagement = () => {
         } else {
           // Fallback to mock data if API not available during development
           const mockPlayers = [
-            { id: 1, username: 'player123', email: 'player123@example.com', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
-            { id: 2, username: 'gambler456', email: 'gambler456@example.com', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
-            { id: 3, username: 'luckywin789', email: 'lucky789@example.com', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
-            { id: 4, username: 'highroller22', email: 'highroller@example.com', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
-            { id: 5, username: 'inactive_user', email: 'inactive@example.com', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
+            { id: 1, username: 'player123', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
+            { id: 2, username: 'gambler456', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
+            { id: 3, username: 'luckywin789', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
+            { id: 4, username: 'highroller22', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
+            { id: 5, username: 'inactive_user', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
           ];
           
           setPlayers(mockPlayers);
@@ -59,11 +58,11 @@ const PlayerManagement = () => {
         console.error('Error fetching players:', error);
         // Fallback to mock data if API not available
         const mockPlayers = [
-          { id: 1, username: 'player123', email: 'player123@example.com', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
-          { id: 2, username: 'gambler456', email: 'gambler456@example.com', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
-          { id: 3, username: 'luckywin789', email: 'lucky789@example.com', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
-          { id: 4, username: 'highroller22', email: 'highroller@example.com', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
-          { id: 5, username: 'inactive_user', email: 'inactive@example.com', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
+          { id: 1, username: 'player123', balance: 1500.25, gamesPlayed: 45, role: 'player', isActive: true },
+          { id: 2, username: 'gambler456', balance: 750.50, gamesPlayed: 23, role: 'player', isActive: true },
+          { id: 3, username: 'luckywin789', balance: 2300.75, gamesPlayed: 78, role: 'vip', isActive: true },
+          { id: 4, username: 'highroller22', balance: 5000.00, gamesPlayed: 132, role: 'vip', isActive: true },
+          { id: 5, username: 'inactive_user', balance: 0.00, gamesPlayed: 5, role: 'player', isActive: false },
         ];
         
         setPlayers(mockPlayers);
@@ -84,8 +83,7 @@ const PlayerManagement = () => {
     }
     
     const filtered = players.filter(player => 
-      player.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      player.email.toLowerCase().includes(searchTerm.toLowerCase())
+      player.username.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredPlayers(filtered);
   }, [searchTerm, players]);
@@ -336,7 +334,6 @@ const PlayerManagement = () => {
               <thead>
                 <tr className="border-b border-gray-700">
                   <th className="py-3 px-4">Username</th>
-                  <th className="py-3 px-4">Email</th>
                   <th className="py-3 px-4">Balance</th>
                   <th className="py-3 px-4">Games</th>
                   <th className="py-3 px-4">Role</th>
@@ -348,7 +345,6 @@ const PlayerManagement = () => {
                 {filteredPlayers.map((player) => (
                   <tr key={player.id} className="border-b border-gray-700 hover:bg-gray-700">
                     <td className="py-3 px-4">{player.username}</td>
-                    <td className="py-3 px-4">{player.email}</td>
                     <td className="py-3 px-4">{formatCurrency(player.balance)}</td>
                     <td className="py-3 px-4">{player.gamesPlayed}</td>
                     <td className="py-3 px-4">
@@ -423,16 +419,7 @@ const PlayerManagement = () => {
             />
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
-            <input
-              type="email"
-              name="email"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.email}
-              onChange={handleInputChange}
-            />
-          </div>
+
           
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Initial Balance</label>
@@ -455,6 +442,7 @@ const PlayerManagement = () => {
             >
               <option value="player">Player</option>
               <option value="vip">VIP</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
           
@@ -527,6 +515,7 @@ const PlayerManagement = () => {
             >
               <option value="player">Player</option>
               <option value="vip">VIP</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
           

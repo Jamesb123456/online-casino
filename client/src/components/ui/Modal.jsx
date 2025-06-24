@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Button from './Button';
 
@@ -17,44 +17,45 @@ const Modal = ({
 }) => {
   const [isShowing, setIsShowing] = useState(false);
 
-  // Animation effect
+  // Handle modal close with animation - defined with useCallback to maintain reference
+  const handleClose = useCallback(() => {
+    setIsShowing(false);
+    setTimeout(() => {
+      onClose();
+    }, 300);
+  }, [onClose]);
+
+  // Animation effect - always defined regardless of isOpen
   useEffect(() => {
     if (isOpen) {
       setIsShowing(true);
     }
   }, [isOpen]);
 
-  // Handle modal close with animation
-  const handleClose = () => {
-    setIsShowing(false);
-    setTimeout(() => {
-      onClose();
-    }, 300);
-  };
-
-  // Don't render if not open
-  if (!isOpen) return null;
-
-  // Handle ESC key press
+  // Handle ESC key press - always defined regardless of isOpen
   useEffect(() => {
+    // Only add listeners if modal is open
+    if (!isOpen) return;
+    
     const handleEscKey = (e) => {
       if (closeOnEsc && e.key === 'Escape') {
         handleClose();
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscKey);
-      // Prevent scrolling when modal is open
-      document.body.style.overflow = 'hidden';
-    }
-
+    document.addEventListener('keydown', handleEscKey);
+    // Prevent scrolling when modal is open
+    document.body.style.overflow = 'hidden';
+    
     return () => {
       document.removeEventListener('keydown', handleEscKey);
       // Re-enable scrolling when modal is closed
       document.body.style.overflow = 'auto';
     };
-  }, [isOpen, closeOnEsc, onClose]);
+  }, [isOpen, closeOnEsc, handleClose]);
+  
+  // Don't render if not open - moved after all hooks
+  if (!isOpen) return null;
 
   // Determine modal width based on size
   const sizeClasses = {

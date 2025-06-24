@@ -12,9 +12,45 @@ router.use(authenticate, isAdmin);
 router.get('/users', async (req, res) => {
   try {
     const users = await User.find().select('-passwordHash');
-    res.status(200).json(users);
+    res.status(200).json({ players: users });
   } catch (error) {
     console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Create a new user (admin only)
+router.post('/users', async (req, res) => {
+  try {
+    const { username, password, role, balance, isActive } = req.body;
+    
+    // Check if username already exists
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Username already exists' });
+    }
+    
+    // Create new user
+    const newUser = new User({
+      username,
+      passwordHash: password, // Will be hashed by pre-save hook
+      role: role || 'player',
+      balance: balance || 0,
+      isActive: isActive !== undefined ? isActive : true
+    });
+    
+    await newUser.save();
+    
+    // Return user without password
+    const userResponse = newUser.toObject();
+    delete userResponse.passwordHash;
+    
+    res.status(201).json({ 
+      message: 'User created successfully',
+      player: userResponse
+    });
+  } catch (error) {
+    console.error('Error creating user:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -31,6 +67,48 @@ router.get('/users/:userId', async (req, res) => {
     res.status(200).json(user);
   } catch (error) {
     console.error('Error fetching user details:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update a user (admin only)
+router.put('/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { username, password, role, isActive } = req.body;
+    
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Check if username is being changed and already exists
+    if (username && username !== user.username) {
+      const existingUser = await User.findOne({ username });
+      if (existingUser) {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
+      user.username = username;
+    }
+    
+    // Update fields if provided
+    if (password) user.passwordHash = password; // Will be hashed by pre-save hook
+    if (role) user.role = role;
+    if (isActive !== undefined) user.isActive = isActive;
+    
+    await user.save();
+    
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.passwordHash;
+    
+    res.status(200).json({ 
+      message: 'User updated successfully',
+      player: userResponse
+    });
+  } catch (error) {
+    console.error('Error updating user:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

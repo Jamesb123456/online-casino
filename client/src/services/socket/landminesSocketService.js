@@ -73,10 +73,21 @@ const mockStartGame = (gameData, callback) => {
   sessionStorage.setItem('landmines_mines_count', mines);
   sessionStorage.setItem('landmines_bet_amount', betAmount);
   
+  // Clear any existing grid to ensure a new one is generated for this game
+  sessionStorage.removeItem('landmines_mock_grid');
+  sessionStorage.removeItem('landmines_mock_revealed');
+  
+  // Generate a fresh game ID
+  const gameId = Date.now().toString();
+  sessionStorage.setItem('landmines_game_id', gameId);
+  
+  // Store difficulty-specific keys
+  sessionStorage.setItem('landmines_last_difficulty', mines);
+  
   setTimeout(() => {
     callback({
       success: true,
-      gameId: Date.now().toString(),
+      gameId,
       mines,
       gridSize: 5,
       balance: 1000 - betAmount
@@ -91,23 +102,31 @@ const mockPickCell = (pickData, callback) => {
   const minesCount = parseInt(sessionStorage.getItem('landmines_mines_count')) || 5;
   const betAmount = parseInt(sessionStorage.getItem('landmines_bet_amount')) || 10;
   
-  // Generate a semi-consistent grid based on row+col
+  // Generate a random grid for this game
   try {
-    // Check if grid exists first
-    if (!sessionStorage.getItem('landmines_mock_grid')) {
+    // Get the game ID and last difficulty
+    const gameId = sessionStorage.getItem('landmines_game_id') || Date.now().toString();
+    const lastDifficulty = parseInt(sessionStorage.getItem('landmines_last_difficulty')) || 0;
+    
+    // Store grid with a game-specific and difficulty-specific key
+    const gridKey = `landmines_mock_grid_${gameId}_${minesCount}`;
+    const revealedKey = `landmines_mock_revealed_${gameId}_${minesCount}`;
+    
+    // Always create a fresh grid for each cell pick (first pick in a game)
+    // or if the difficulty has changed
+    if (!sessionStorage.getItem(gridKey) || lastDifficulty !== minesCount) {
     // Create a grid with exactly the specified number of mines
     const gridSize = 5;
     const totalCells = gridSize * gridSize;
     const flatGrid = Array(totalCells).fill(false);
     
-    // Place mines randomly but deterministically
+    // Place mines randomly using true randomness
     // Create an array of indices and shuffle them to avoid infinite loops
     let indices = Array.from({length: totalCells}, (_, i) => i);
     
-    // Fisher-Yates shuffle algorithm
+    // Fisher-Yates shuffle algorithm with Math.random() for true randomness
     for (let i = indices.length - 1; i > 0; i--) {
-      // Use a deterministic but more reliable approach
-      const j = Math.floor((Math.sin((i + 1) * 9999) * 0.5 + 0.5) * (i + 1));
+      const j = Math.floor(Math.random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];
     }
     
@@ -126,7 +145,11 @@ const mockPickCell = (pickData, callback) => {
       grid.push(row);
     }
     
-    // Store the grid
+    // Store the grid for this game session with game-specific and difficulty-specific keys
+    sessionStorage.setItem(gridKey, JSON.stringify(grid));
+    sessionStorage.setItem(revealedKey, JSON.stringify([]));
+    
+    // Also update the general keys for backward compatibility
     sessionStorage.setItem('landmines_mock_grid', JSON.stringify(grid));
     sessionStorage.setItem('landmines_mock_revealed', JSON.stringify([]));
     }
@@ -250,23 +273,30 @@ const mockPickCell = (pickData, callback) => {
 };
 
 const mockCashOut = (callback) => {
-  // Get the stored data with safety checks
+  // Get the stored data with safety checks for the specific game and difficulty
   let grid, revealedCells, minesCount, betAmount;
-  
+
   try {
-    const gridData = sessionStorage.getItem('landmines_mock_grid');
+    // Get the game ID for game-specific storage keys
+    const gameId = sessionStorage.getItem('landmines_game_id') || Date.now().toString();
+    minesCount = parseInt(sessionStorage.getItem('landmines_mines_count')) || 5;
+    betAmount = parseInt(sessionStorage.getItem('landmines_bet_amount')) || 10;
+
+    // Try to get grid using game-specific and difficulty-specific key first
+    const gridKey = `landmines_mock_grid_${gameId}_${minesCount}`;
+    const revealedKey = `landmines_mock_revealed_${gameId}_${minesCount}`;
+
+    // First try game-specific storage, fall back to general storage
+    let gridData = sessionStorage.getItem(gridKey) || sessionStorage.getItem('landmines_mock_grid');
     grid = gridData ? JSON.parse(gridData) : null;
-    
+
     // Create fallback grid if needed
     if (!grid || !Array.isArray(grid)) {
       grid = Array(5).fill().map(() => Array(5).fill(false));
     }
-    
-    const revealedData = sessionStorage.getItem('landmines_mock_revealed');
+
+    const revealedData = sessionStorage.getItem(revealedKey) || sessionStorage.getItem('landmines_mock_revealed');
     revealedCells = revealedData ? JSON.parse(revealedData) : [];
-    
-    minesCount = parseInt(sessionStorage.getItem('landmines_mines_count')) || 5;
-    betAmount = parseInt(sessionStorage.getItem('landmines_bet_amount')) || 10;
   } catch (error) {
     console.error('Error in mockCashOut:', error);
     // Default values for error case

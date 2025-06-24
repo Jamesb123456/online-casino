@@ -2,29 +2,23 @@
  * Base API service for handling HTTP requests
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 /**
  * Helper for making authenticated API requests
  */
 export const apiRequest = async (endpoint, options = {}) => {
-  // Get token from localStorage
-  const token = localStorage.getItem('token');
-  
-  // Set up headers with authentication if token exists
+  // Set up headers
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   try {
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
+      credentials: 'include', // Include cookies in requests
     });
 
     // For non-204 responses, try to parse JSON
@@ -34,7 +28,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
     // If response is not ok, throw error with message from API
     if (!response.ok) {
-      throw new Error(data.message || 'An error occurred');
+      const errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
     }
     
     return data;

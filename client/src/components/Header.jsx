@@ -40,7 +40,7 @@ const Header = () => {
   };
   
   // Get user balance from auth context
-  const userBalance = user ? user.balance.toLocaleString() : "0";
+  const userBalance = user?.balance?.toLocaleString() || "0";
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${

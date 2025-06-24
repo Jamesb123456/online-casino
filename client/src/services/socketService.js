@@ -2,7 +2,6 @@
  * Socket service for real-time communication with server
  */
 import { io } from 'socket.io-client';
-import { getToken } from './authService';
 
 // Socket.IO instance 
 let socket = null;
@@ -21,12 +20,9 @@ export const initializeSocket = () => {
     socket.close();
   }
   
-  // Get auth token
-  const token = getToken();
-  
-  // Create new socket instance with auth token in handshake
+  // Create new socket instance with cookie-based auth
   socket = io(SOCKET_URL, {
-    auth: token ? { token } : undefined,
+    withCredentials: true, // Send cookies with socket requests
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,

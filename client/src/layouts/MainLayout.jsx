@@ -13,9 +13,6 @@ const MainLayout = ({ children }) => {
         <div className="absolute -bottom-32 left-1/4 w-96 h-96 bg-green-500 opacity-10 rounded-full blur-3xl"></div>
       </div>
       
-      {/* Background pattern overlay */}
-      <div className="absolute inset-0 opacity-5 bg-[url('/pattern.png')] bg-repeat z-0"></div>
-      
       <Header />
       {/* Added pt-24 to create space for fixed header */}
       <main className="flex-grow container mx-auto px-4 pt-24 pb-12 relative z-10">

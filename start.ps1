@@ -28,41 +28,7 @@ try {
     exit 1
 }
 
-# Check MongoDB installation and start it directly
-Write-Host "Checking MongoDB..." -ForegroundColor Yellow
-$mongoPath = "C:\Program Files\MongoDB\Server\8.0\bin\mongod.exe"
-if (Test-Path $mongoPath) {
-    Write-Host "MongoDB found at $mongoPath" -ForegroundColor Green
-    
-    # Create data directory if it doesn't exist
-    $dataDir = "C:\data\db"
-    if (!(Test-Path $dataDir)) {
-        Write-Host "Creating MongoDB data directory at $dataDir..." -ForegroundColor Yellow
-        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
-        Write-Host "Data directory created!" -ForegroundColor Green
-    }
-    
-    # Start MongoDB directly (no service required)
-    Write-Host "Starting MongoDB server..." -ForegroundColor Yellow
-    try {
-        # Start mongod in a new window
-        Start-Process $mongoPath -ArgumentList "--dbpath `"$dataDir`"" -WindowStyle Minimized
-        Write-Host "MongoDB server started successfully!" -ForegroundColor Green
-        # Give MongoDB time to initialize
-        Write-Host "Waiting for MongoDB to initialize..." -ForegroundColor Yellow
-        Start-Sleep -Seconds 5
-    } catch {
-        Write-Host "Failed to start MongoDB server: $_" -ForegroundColor Red
-        Read-Host "Press Enter to exit"
-        exit 1
-    }
-} else {
-    Write-Host "MongoDB not found at expected location: $mongoPath" -ForegroundColor Red
-    Write-Host "Please make sure MongoDB is installed at the correct location." -ForegroundColor Red
-    Write-Host "If MongoDB is installed elsewhere, please update this script with the correct path." -ForegroundColor Yellow
-    Read-Host "Press Enter to exit"
-    exit 1
-}
+Write-Host "Using remote MySQL database - no local database setup required." -ForegroundColor Green
 
 # Install dependencies
 $scriptDir = $PSScriptRoot
@@ -87,9 +53,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "Client dependencies installed." -ForegroundColor Green
 
-# Check and seed database if needed
-Write-Host "Checking database..." -ForegroundColor Yellow
+# Run database migrations
+Write-Host "Running database migrations..." -ForegroundColor Yellow
 Set-Location -Path "$scriptDir\server"
+npm run db:migrate
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Warning: Database migrations may have encountered issues." -ForegroundColor Yellow
+    Write-Host "This is not critical if the database schema is already up to date." -ForegroundColor Yellow
+}
+Write-Host "Database migrations completed." -ForegroundColor Green
+
+# Check and seed database if needed
+Write-Host "Seeding database with initial data..." -ForegroundColor Yellow
 npm run seed
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Warning: Database seeding may have encountered issues." -ForegroundColor Yellow

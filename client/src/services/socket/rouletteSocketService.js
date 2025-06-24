@@ -5,7 +5,7 @@ class RouletteSocketService {
     this.socket = null;
     this.isConnected = false;
     this.namespace = '/roulette';
-    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     this.user = null;
   }
   

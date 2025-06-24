@@ -19,15 +19,8 @@ const ChatBox = () => {
   // Connect to chat socket when component mounts
   useEffect(() => {
     if (user) {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        console.error('No authentication token available for chat');
-        return;
-      }
-      
       console.log('Attempting to connect to chat service...');
-      chatSocketService.connect(token)
+      chatSocketService.connect()
         .then(() => {
           setIsConnected(true);
           console.log('Connected to chat service');
@@ -37,7 +30,7 @@ const ChatBox = () => {
           // Try one more time after a short delay
           setTimeout(() => {
             console.log('Retrying chat connection...');
-            chatSocketService.connect(token)
+            chatSocketService.connect()
               .then(() => {
                 setIsConnected(true);
                 console.log('Connected to chat service on retry');
@@ -220,13 +213,13 @@ const ChatBox = () => {
               <div className="space-y-3">
                 {messages.map((message) => (
                   <div 
-                    key={message._id}
+                    key={message.id || message._id || `msg-${Date.now()}-${Math.random()}`}
                     className={`flex ${message.system ? 'justify-center' : 'items-start'}`}
                   >
                     {!message.system && (
                       <div className="mr-2 flex-shrink-0">
                         <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white uppercase">
-                          {message.user?.username?.[0] || '?'}
+                          {message.username?.[0] || '?'}
                         </div>
                       </div>
                     )}
@@ -235,7 +228,7 @@ const ChatBox = () => {
                       {!message.system && (
                         <div className="flex justify-between items-center mb-1">
                           <span className="font-medium text-amber-400">
-                            {message.user?.username}
+                            {message.username || 'Unknown User'}
                           </span>
                           <span className="text-xs text-gray-500 ml-2">
                             {formatTime(message.createdAt)}

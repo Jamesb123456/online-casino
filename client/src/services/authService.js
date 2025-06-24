@@ -6,23 +6,18 @@ import { api } from './api';
 const AUTH_ENDPOINTS = {
   REGISTER: '/auth/register',
   LOGIN: '/auth/login',
-  PROFILE: '/users/profile',
+  LOGOUT: '/auth/logout',
+  PROFILE: '/users/me',
 };
 
 /**
  * Register a new user
  * @param {Object} userData - User registration data
- * @returns {Promise} - API response with user data and token
+ * @returns {Promise} - API response with user data
  */
 export const register = async (userData) => {
   try {
     const response = await api.post(AUTH_ENDPOINTS.REGISTER, userData);
-    
-    // Store token in localStorage if available
-    if (response.token) {
-      localStorage.setItem('token', response.token);
-    }
-    
     return response;
   } catch (error) {
     console.error('Registration error:', error);
@@ -33,17 +28,11 @@ export const register = async (userData) => {
 /**
  * Log in an existing user
  * @param {Object} credentials - User credentials (email, password)
- * @returns {Promise} - API response with user data and token
+ * @returns {Promise} - API response with user data
  */
 export const login = async (credentials) => {
   try {
     const response = await api.post(AUTH_ENDPOINTS.LOGIN, credentials);
-    
-    // Store token in localStorage
-    if (response.token) {
-      localStorage.setItem('token', response.token);
-    }
-    
     return response;
   } catch (error) {
     console.error('Login error:', error);
@@ -54,9 +43,13 @@ export const login = async (credentials) => {
 /**
  * Log out the current user
  */
-export const logout = () => {
-  // Remove token from localStorage
-  localStorage.removeItem('token');
+export const logout = async () => {
+  try {
+    await api.post(AUTH_ENDPOINTS.LOGOUT);
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Don't throw error for logout - we want to clear local state regardless
+  }
 };
 
 /**
@@ -65,8 +58,9 @@ export const logout = () => {
  */
 export const getCurrentUser = async () => {
   try {
+    console.log('Getting current user from cookie...');
     const userData = await api.get(AUTH_ENDPOINTS.PROFILE);
-    console.log('User profile data:', userData); // Log the returned user data
+    console.log('User profile data:', userData);
     return userData;
   } catch (error) {
     console.error('Get user profile error:', error);
@@ -75,19 +69,16 @@ export const getCurrentUser = async () => {
 };
 
 /**
- * Check if a user is currently logged in
- * @returns {Boolean} - True if user is logged in
+ * Check if a user is currently logged in by trying to get current user
+ * @returns {Promise<Boolean>} - True if user is logged in
  */
-export const isLoggedIn = () => {
-  return !!localStorage.getItem('token');
-};
-
-/**
- * Get authentication token
- * @returns {String|null} - JWT token or null if not logged in
- */
-export const getToken = () => {
-  return localStorage.getItem('token');
+export const isLoggedIn = async () => {
+  try {
+    await getCurrentUser();
+    return true;
+  } catch (error) {
+    return false;
+  }
 };
 
 export default {
@@ -96,5 +87,4 @@ export default {
   logout,
   getCurrentUser,
   isLoggedIn,
-  getToken,
 };

@@ -21,26 +21,21 @@ class ChatSocketService {
 
   /**
    * Connect to the chat socket namespace
-   * @param {string} token - JWT auth token
    * @returns {Promise} - Promise that resolves when connection is established
    */
-  connect(token) {
+  connect() {
     return new Promise((resolve, reject) => {
       try {
-        if (!token) {
-          return reject(new Error('Authentication token is required for chat'));
-        }
-        
         // Close existing connection if any
         this.disconnect();
         
-        // Create socket connection with auth token
+        // Create socket connection with credentials (cookies)
         // Socket.IO namespace should be direct to the server without /api
         const socketUrl = 'http://localhost:5000'; // Use port 5000 to match server
         console.log('Connecting to chat server at:', socketUrl);
         
         this.socket = io(`${socketUrl}/chat`, {
-          auth: { token },
+          withCredentials: true, // Include cookies for authentication
           transports: ['polling'], // Use only polling since WebSocket is failing
           reconnection: true,
           reconnectionAttempts: 5,
@@ -71,7 +66,7 @@ class ChatSocketService {
             // The server has forcefully disconnected the socket
             // We need to manually reconnect
             setTimeout(() => {
-              if (token) this.connect(token);
+              this.connect();
             }, 3000);
           }
         });
@@ -83,15 +78,15 @@ class ChatSocketService {
         });
 
         // Set up message handlers
-        this.socket.on('newMessage', (message) => {
+        this.socket.on('new_message', (message) => {
           this.handlers.newMessage.forEach(handler => handler(message));
         });
 
-        this.socket.on('previousMessages', (messages) => {
+        this.socket.on('message_history', (messages) => {
           this.handlers.previousMessages.forEach(handler => handler(messages));
         });
 
-        this.socket.on('userJoined', (data) => {
+        this.socket.on('user_joined', (data) => {
           this.handlers.userJoined.forEach(handler => handler(data));
         });
 
@@ -107,7 +102,7 @@ class ChatSocketService {
           this.handlers.userStoppedTyping.forEach(handler => handler(data));
         });
 
-        this.socket.on('error', (error) => {
+        this.socket.on('chat_error', (error) => {
           console.error('Chat socket error:', error);
           this.handlers.error.forEach(handler => handler(error));
         });
@@ -128,9 +123,9 @@ class ChatSocketService {
       this.socket.off('disconnect');
       this.socket.off('connect_error');
       this.socket.off('error');
-      this.socket.off('newMessage');
-      this.socket.off('previousMessages');
-      this.socket.off('userJoined');
+      this.socket.off('new_message');
+      this.socket.off('message_history');
+      this.socket.off('user_joined');
       this.socket.off('userLeft');
       this.socket.off('userTyping');
       this.socket.off('userStoppedTyping');
@@ -152,7 +147,7 @@ class ChatSocketService {
       return;
     }
 
-    this.socket.emit('sendMessage', { content });
+    this.socket.emit('send_message', { content });
   }
 
   /**

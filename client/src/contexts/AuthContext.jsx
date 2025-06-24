@@ -13,20 +13,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Initialize auth state from localStorage on component mount
+  // Initialize auth state by checking for valid session on component mount
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const userData = await authService.getCurrentUser();
-          setUser(userData);
-        }
+        console.log('Checking for existing auth session...');
+        const userData = await authService.getCurrentUser();
+        console.log('User data retrieved successfully:', userData);
+        setUser(userData);
+        setError(null);
       } catch (err) {
-        console.error('Failed to initialize authentication:', err);
-        localStorage.removeItem('token');
+        console.log('No valid session found:', err.message);
+        // User is not authenticated, which is normal - don't set this as an error
+        setUser(null);
+        setError(null);
       } finally {
         setLoading(false);
+        console.log('Auth initialization complete');
       }
     };
 
@@ -37,33 +40,52 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       setError(null);
-      const { user, token } = await authService.login(credentials);
-      localStorage.setItem('token', token);
+      setLoading(true);
+      const response = await authService.login(credentials);
+      // The server will set the HTTP-only cookie
+      // Get the user data from the response or fetch it again
+      const user = response.user || await authService.getCurrentUser();
       setUser(user);
       return user;
     } catch (err) {
       setError(err.message || 'Login failed');
       throw err;
+    } finally {
+      setLoading(false);
     }
   };
 
   // Logout function
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
+  const logout = async () => {
+    try {
+      setLoading(true);
+      await authService.logout();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      // Clear user state regardless of API call success
+      setUser(null);
+      setError(null);
+      setLoading(false);
+    }
   };
 
   // Register function
   const register = async (userData) => {
     try {
       setError(null);
-      const { user, token } = await authService.register(userData);
-      localStorage.setItem('token', token);
+      setLoading(true);
+      const response = await authService.register(userData);
+      // The server will set the HTTP-only cookie
+      // Get the user data from the response or fetch it again
+      const user = response.user || await authService.getCurrentUser();
       setUser(user);
       return user;
     } catch (err) {
       setError(err.message || 'Registration failed');
       throw err;
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -8,28 +8,13 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import crashSocketService from '../../services/socket/crashSocketService';
 
-// Destructure the methods from the service
-const {
-  joinCrashGame,
-  leaveCrashGame,
-  onGameStateChange,
-  onMultiplierUpdate,
-  onGameStarting,
-  onGameStarted,
-  onGameCrashed,
-  onPlayerBet,
-  onPlayerCashout,
-  onActivePlayers,
-  onPlayerJoined,
-  onPlayerLeft,
-  onCurrentBets,
-  placeBet,
-  cashOut
-} = crashSocketService;
+// Don't destructure socket methods as they will lose their 'this' context
+// Access methods directly through the service object instead
+const crashSocket = crashSocketService;
 
 // For development, toggle between mock and real socket
 // In production, this would be determined by environment variables
-const USE_MOCK_SOCKET = true;
+const USE_MOCK_SOCKET = false; // Changed to false to use real server implementation
 
 // Mock socket implementation for development
 const useMockSocket = () => {
@@ -232,10 +217,10 @@ const useRealSocket = () => {
     crashSocketService.connect(userInfo);
     
     // Join crash game room
-    joinCrashGame();
+    crashSocket.joinCrashGame();
 
     // Subscribe to game state updates
-    const unsubGameState = onGameStateChange((state) => {
+    const unsubGameState = crashSocket.onGameStateChange((state) => {
       console.log('Game state update:', state);
       setGameState(state);
       
@@ -246,7 +231,7 @@ const useRealSocket = () => {
     });
 
     // Subscribe to multiplier updates
-    const unsubMultiplier = onMultiplierUpdate((data) => {
+    const unsubMultiplier = crashSocket.onMultiplierUpdate((data) => {
       setGameState(prev => ({
         ...prev,
         currentMultiplier: data.multiplier
@@ -254,7 +239,7 @@ const useRealSocket = () => {
     });
 
     // Subscribe to game starting event
-    const unsubGameStarting = onGameStarting((data) => {
+    const unsubGameStarting = crashSocket.onGameStarting((data) => {
       setGameState(prev => ({
         ...prev,
         status: 'waiting',
@@ -266,7 +251,7 @@ const useRealSocket = () => {
     });
 
     // Subscribe to game started event
-    const unsubGameStarted = onGameStarted((data) => {
+    const unsubGameStarted = crashSocket.onGameStarted((data) => {
       setGameState(prev => ({
         ...prev,
         status: 'running',
@@ -275,7 +260,7 @@ const useRealSocket = () => {
     });
 
     // Subscribe to game crashed event
-    const unsubGameCrashed = onGameCrashed((data) => {
+    const unsubGameCrashed = crashSocket.onGameCrashed((data) => {
       setGameState(prev => ({
         ...prev,
         status: 'crashed',
@@ -297,31 +282,31 @@ const useRealSocket = () => {
     });
     
     // Subscribe to active players updates
-    const unsubActivePlayers = onActivePlayers((players) => {
+    const unsubActivePlayers = crashSocket.onActivePlayers((players) => {
       console.log('Active players update:', players);
       setActivePlayers(players);
     });
     
     // Subscribe to player joined events
-    const unsubPlayerJoined = onPlayerJoined((player) => {
+    const unsubPlayerJoined = crashSocket.onPlayerJoined((player) => {
       console.log('Player joined:', player);
       setActivePlayers(prev => [...prev, player]);
     });
     
     // Subscribe to player left events
-    const unsubPlayerLeft = onPlayerLeft((player) => {
+    const unsubPlayerLeft = crashSocket.onPlayerLeft((player) => {
       console.log('Player left:', player);
       setActivePlayers(prev => prev.filter(p => p.id !== player.id));
     });
     
     // Subscribe to current bets updates
-    const unsubCurrentBets = onCurrentBets((bets) => {
+    const unsubCurrentBets = crashSocket.onCurrentBets((bets) => {
       console.log('Current bets update:', bets);
       setActiveBets(bets);
     });
     
     // Subscribe to player bet events
-    const unsubPlayerBet = onPlayerBet((bet) => {
+    const unsubPlayerBet = crashSocket.onPlayerBet((bet) => {
       console.log('Player bet:', bet);
       setActiveBets(prev => {
         // Check if this player already has a bet
@@ -339,7 +324,7 @@ const useRealSocket = () => {
     });
     
     // Subscribe to player cashout events
-    const unsubPlayerCashout = onPlayerCashout((cashout) => {
+    const unsubPlayerCashout = crashSocket.onPlayerCashout((cashout) => {
       console.log('Player cashout:', cashout);
       setActiveBets(prev => {
         return prev.map(bet => {
@@ -359,7 +344,7 @@ const useRealSocket = () => {
     // Cleanup function
     return () => {
       // Leave crash game room
-      leaveCrashGame();
+      crashSocket.leaveCrashGame();
       
       // Unsubscribe from all events
       unsubGameState();
@@ -379,7 +364,7 @@ const useRealSocket = () => {
   // Handle place bet with socket
   const realPlaceBet = useCallback((betData) => {
     return new Promise((resolve, reject) => {
-      socketPlaceBet(betData, (response) => {
+      crashSocket.placeBet(betData, (response) => {
         if (response.success) {
           resolve(response);
         } else {
@@ -392,7 +377,7 @@ const useRealSocket = () => {
   // Handle cash out with socket
   const realCashOut = useCallback((data) => {
     return new Promise((resolve, reject) => {
-      socketCashOut(data, (response) => {
+      crashSocket.cashOut(data, (response) => {
         if (response.success) {
           resolve(response);
         } else {
@@ -414,14 +399,29 @@ const useRealSocket = () => {
 
 const CrashGame = () => {
   // Use either mock or real socket based on flag
-  const { 
-    gameState, 
-    history, 
-    activePlayers = [], 
-    activeBets = [], 
-    placeBet: socketPlaceBet, 
-    cashOut: socketCashOut 
-  } = USE_MOCK_SOCKET ? useMockSocket() : useRealSocket();
+  let gameState, history, activePlayers = [], activeBets = [], socketPlaceBet, socketCashOut;
+  
+  if (USE_MOCK_SOCKET) {
+    // Use mock implementation
+    const mockSocketData = useMockSocket();
+    gameState = mockSocketData.gameState;
+    history = mockSocketData.history;
+    activePlayers = mockSocketData.activePlayers || [];
+    activeBets = mockSocketData.activeBets || [];
+    socketPlaceBet = mockSocketData.placeBet;
+    socketCashOut = mockSocketData.cashOut;
+  } else {
+    // Use real implementation with direct references to crashSocket methods
+    const realSocketData = useRealSocket();
+    gameState = realSocketData.gameState;
+    history = realSocketData.history;
+    activePlayers = realSocketData.activePlayers || [];
+    activeBets = realSocketData.activeBets || [];
+    
+    // Use the newly implemented socket methods directly - no need to bind
+    socketPlaceBet = (data, callback) => crashSocket.placeBet(data, callback);
+    socketCashOut = (data, callback) => crashSocket.cashOut(data, callback);
+  }
   
   const [bet, setBet] = useState({
     amount: 10,

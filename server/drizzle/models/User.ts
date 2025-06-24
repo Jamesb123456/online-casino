@@ -1,11 +1,11 @@
 import { eq, desc } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { db } from '../db.js';
-import { users } from '../schema.js';
+import { users, type User, type NewUser } from '../schema.js';
 
 class UserModel {
   // Create a new user
-  static async create(userData) {
+  static async create(userData: Partial<NewUser>): Promise<User> {
     try {
       // Hash password if provided
       if (userData.passwordHash) {
@@ -29,7 +29,7 @@ class UserModel {
   }
 
   // Find user by ID
-  static async findById(id) {
+  static async findById(id: number): Promise<User | null> {
     try {
       const [user] = await db.select().from(users).where(eq(users.id, id));
       return user || null;
@@ -39,7 +39,7 @@ class UserModel {
   }
 
   // Find user by criteria
-  static async findOne(filter) {
+  static async findOne(filter: { username?: string; role?: 'user' | 'admin' }): Promise<User | null> {
     try {
       const conditions = [];
       if (filter.username) conditions.push(eq(users.username, filter.username));
@@ -57,7 +57,7 @@ class UserModel {
   }
 
   // Update user by ID
-  static async updateById(id, updateData) {
+  static async updateById(id: number, updateData: Partial<NewUser>): Promise<User> {
     try {
       // Hash password if being updated
       if (updateData.passwordHash) {
@@ -79,17 +79,17 @@ class UserModel {
   }
 
   // Update user (alias for updateById)
-  static async update(id, updateData) {
+  static async update(id: number, updateData: Partial<NewUser>): Promise<User> {
     return this.updateById(id, updateData);
   }
 
   // Compare password (for login)
-  static async comparePassword(candidatePassword, hashedPassword) {
+  static async comparePassword(candidatePassword: string, hashedPassword: string): Promise<boolean> {
     return await bcrypt.compare(candidatePassword, hashedPassword);
   }
 
   // Get user without password
-  static async findByIdSecure(id) {
+  static async findByIdSecure(id: number): Promise<Omit<User, 'passwordHash'> | null> {
     try {
       const [user] = await db
         .select({
@@ -113,7 +113,7 @@ class UserModel {
   }
 
   // Update last login
-  static async updateLastLogin(id) {
+  static async updateLastLogin(id: number): Promise<User> {
     try {
       await db
         .update(users)
@@ -129,7 +129,7 @@ class UserModel {
   }
 
   // Delete user
-  static async delete(id) {
+  static async delete(id: number): Promise<User> {
     try {
       // Get user before deletion
       const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -143,7 +143,7 @@ class UserModel {
   }
 
   // Get all users (with pagination)
-  static async find(filter = {}, options = {}) {
+  static async find(filter: { role?: 'user' | 'admin' } = {}, options: { limit?: number; offset?: number } = {}): Promise<Omit<User, 'passwordHash'>[]> {
     try {
       let query = db
         .select({
@@ -183,7 +183,7 @@ class UserModel {
   }
 
   // Alias for find with no parameters
-  static async findAll(limit = 50, offset = 0) {
+  static async findAll(limit: number = 50, offset: number = 0): Promise<Omit<User, 'passwordHash'>[]> {
     return this.find({}, { limit, offset });
   }
 }

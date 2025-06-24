@@ -1,5 +1,5 @@
 import { mysqlTable, varchar, text, int, boolean, timestamp, json, decimal, index, mysqlEnum } from 'drizzle-orm/mysql-core';
-import { relations } from 'drizzle-orm';
+import { relations, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // Enums (MySQL uses ENUM differently than PostgreSQL)
 export const userRoleEnum = mysqlEnum('user_role', ['user', 'admin']);
@@ -225,4 +225,20 @@ export const messagesRelations = relations(messages, ({ one }) => ({
     fields: [messages.userId],
     references: [users.id],
   }),
-})); 
+}));
+
+// Export TypeScript types
+export type User = InferSelectModel<typeof users>;
+export type NewUser = InferInsertModel<typeof users>;
+export type Transaction = InferSelectModel<typeof transactions>;
+export type NewTransaction = InferInsertModel<typeof transactions>;
+export type GameSession = InferSelectModel<typeof gameSessions>;
+export type NewGameSession = InferInsertModel<typeof gameSessions>;
+export type GameLog = InferSelectModel<typeof gameLogs>;
+export type NewGameLog = InferInsertModel<typeof gameLogs>;
+export type Balance = InferSelectModel<typeof balances>;
+export type NewBalance = InferInsertModel<typeof balances>;
+export type GameStat = InferSelectModel<typeof gameStats>;
+export type NewGameStat = InferInsertModel<typeof gameStats>;
+export type Message = InferSelectModel<typeof messages>;
+export type NewMessage = InferInsertModel<typeof messages>; 

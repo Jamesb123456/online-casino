@@ -168,7 +168,7 @@ router.get('/verify', async (req, res) => {
       return res.status(401).json({ message: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     
     // Check if user still exists and is active
     const user = await UserModel.findById(decoded.userId);

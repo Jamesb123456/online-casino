@@ -1,4 +1,5 @@
 import { eq, desc, gte, lte, count, sum, and, or, like } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/mysql-core';
 import db from '../db.js';
 import { transactions, users } from '../schema.js';
 
@@ -293,6 +294,9 @@ class TransactionModel {
   }
 
   static async getTransactionsWithDetails() {
+    const createdByUser = alias(users, 'createdByUser');
+    const voidedByUser = alias(users, 'voidedByUser');
+    
     return await db
       .select({
         id: transactions.id,
@@ -305,12 +309,12 @@ class TransactionModel {
         gameData: transactions.gameData,
         createdAt: transactions.createdAt,
         processedAt: transactions.processedAt,
-        createdByUsername: users.username,
-        voidedByUsername: users.username
+        createdByUsername: createdByUser.username,
+        voidedByUsername: voidedByUser.username
       })
       .from(transactions)
-      .leftJoin(users, eq(transactions.createdBy, users.id))
-      .leftJoin(users, eq(transactions.voidedBy, users.id))
+      .leftJoin(createdByUser, eq(transactions.createdBy, createdByUser.id))
+      .leftJoin(voidedByUser, eq(transactions.voidedBy, voidedByUser.id))
       .orderBy(desc(transactions.createdAt));
   }
 
@@ -331,7 +335,56 @@ class TransactionModel {
   }
 
   static async find(conditions = {}, options = {}) {
-    let query = db.select().from(transactions);
+    const userAlias = alias(users, 'userInfo');
+    const createdByAlias = alias(users, 'createdByInfo');
+    
+    // Base select fields for transactions
+    let selectFields = {
+      id: transactions.id,
+      userId: transactions.userId,
+      type: transactions.type,
+      amount: transactions.amount,
+      status: transactions.status,
+      description: transactions.description,
+      gameType: transactions.gameType,
+      gameData: transactions.gameData,
+      createdAt: transactions.createdAt,
+      processedAt: transactions.processedAt,
+      reference: transactions.reference,
+      balanceBefore: transactions.balanceBefore,
+      balanceAfter: transactions.balanceAfter,
+      createdBy: transactions.createdBy,
+      voidedBy: transactions.voidedBy,
+      voidedReason: transactions.voidedReason,
+      voidedAt: transactions.voidedAt,
+      updatedAt: transactions.updatedAt,
+      notes: transactions.notes,
+      metadata: transactions.metadata,
+      gameSessionId: transactions.gameSessionId
+    };
+
+    // Add joined fields if populated
+    if (options.populate) {
+      if (options.populate.includes('userId')) {
+        selectFields.userUsername = userAlias.username;
+        selectFields.userEmail = userAlias.email;
+      }
+      if (options.populate.includes('createdBy')) {
+        selectFields.createdByUsername = createdByAlias.username;
+      }
+    }
+
+    let query = db.select(selectFields).from(transactions);
+    
+    // Handle populate joins
+    if (options.populate) {
+      if (options.populate.includes('userId')) {
+        query = query.leftJoin(userAlias, eq(transactions.userId, userAlias.id));
+      }
+      if (options.populate.includes('createdBy')) {
+        query = query.leftJoin(createdByAlias, eq(transactions.createdBy, createdByAlias.id));
+      }
+    }
     
     // Handle conditions
     if (Object.keys(conditions).length > 0) {
@@ -351,16 +404,6 @@ class TransactionModel {
       });
       
       query = query.where(and(...whereConditions));
-    }
-
-    // Handle populate
-    if (options.populate) {
-      if (options.populate.includes('userId')) {
-        query = query.leftJoin(users, eq(transactions.userId, users.id));
-      }
-      if (options.populate.includes('createdBy')) {
-        query = query.leftJoin(users, eq(transactions.createdBy, users.id));
-      }
     }
 
     // Handle sorting

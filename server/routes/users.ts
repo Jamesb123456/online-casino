@@ -1,6 +1,7 @@
-import express from 'express';
+import express, { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate as auth } from '../middleware/auth.js';
+import type { AuthenticatedRequest } from '../types/index.js';
 
 // Import Drizzle models
 import UserModel from '../drizzle/models/User.js';
@@ -10,7 +11,7 @@ import Transaction from '../drizzle/models/Transaction.js';
 const router = express.Router();
 
 // Get current user data
-router.get('/me', auth, async (req, res) => {
+router.get('/me', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await UserModel.findById(req.user.userId);
     if (!user) {
@@ -36,7 +37,7 @@ router.get('/me', auth, async (req, res) => {
 });
 
 // Get user profile
-router.get('/profile', auth, async (req, res) => {
+router.get('/profile', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await UserModel.findById(req.user.userId);
     if (!user) {
@@ -63,7 +64,7 @@ router.get('/profile', auth, async (req, res) => {
 });
 
 // Update user profile
-router.put('/profile', auth, async (req, res) => {
+router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
     
@@ -100,7 +101,7 @@ router.put('/profile', auth, async (req, res) => {
 });
 
 // Get user balance
-router.get('/balance', auth, async (req, res) => {
+router.get('/balance', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const currentBalance = await Balance.getLatestBalance(req.user.userId);
     res.json({ 
@@ -113,7 +114,7 @@ router.get('/balance', auth, async (req, res) => {
 });
 
 // Get user balance history
-router.get('/balance/history', auth, async (req, res) => {
+router.get('/balance/history', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const balanceHistory = await Balance.getBalanceHistory(req.user.userId);
     res.json(balanceHistory);
@@ -124,7 +125,7 @@ router.get('/balance/history', auth, async (req, res) => {
 });
 
 // Get user transactions
-router.get('/transactions', auth, async (req, res) => {
+router.get('/transactions', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { limit = 50, type, startDate, endDate } = req.query;
     

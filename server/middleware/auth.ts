@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken';
+import type { Request, Response, NextFunction } from 'express';
 import UserModel from '../drizzle/models/User.js';
+import type { AuthenticatedRequest } from '../types/index.js';
 
 // Middleware to verify JWT token from HTTP-only cookie
-export const authenticate = async (req, res, next) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void | Response> => {
   try {
     // Get token from HTTP-only cookie instead of Authorization header
     const token = req.cookies.authToken;
@@ -12,7 +14,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
     
     // Get user from database
     const user = await UserModel.findById(decoded.userId);
@@ -22,7 +24,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Add user to request
-    req.user = {
+    (req as AuthenticatedRequest).user = {
       userId: user.id,
       username: user.username,
       role: user.role
@@ -36,7 +38,7 @@ export const authenticate = async (req, res, next) => {
 };
 
 // Middleware to check if user is admin
-export const adminOnly = (req, res, next) => {
+export const adminOnly = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
   if (req.user && req.user.role === 'admin') {
     next();
   } else {
@@ -45,7 +47,7 @@ export const adminOnly = (req, res, next) => {
 };
 
 // User or admin middleware
-export const userOrAdmin = (req, res, next) => {
+export const userOrAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
   if (req.user && (req.user.role === 'user' || req.user.role === 'admin')) {
     next();
   } else {

@@ -12,7 +12,7 @@ const VALUES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'
  * @returns {Array} A full deck of 52 cards
  */
 function createDeck() {
-  const deck = [];
+  const deck: Array<{suit: string, value: string, image: string}> = [];
   
   for (const suit of SUITS) {
     for (const value of VALUES) {
@@ -185,7 +185,7 @@ function calculatePayout(bet, result) {
  * @param {String} gameType - Type of game
  * @returns {Number} House edge as a decimal (e.g., 0.05 = 5%)
  */
-function calculateHouseEdge(gameType) {
+function calculateHouseEdge(gameType: any) {
   switch (gameType) {
     case 'blackjack':
       return 0.005; // ~0.5% with perfect strategy
@@ -221,7 +221,7 @@ function generateGameStats(gameData) {
   };
 }
 
-module.exports = {
+export {
   SUITS,
   VALUES,
   createDeck,

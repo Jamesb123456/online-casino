@@ -1,503 +1,456 @@
-const User = require('../models/User');
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
-const { createDeck, shuffleArray, calculateHandValue, determineWinner, shouldDealerHit } = require('../utils/gameUtils');
+// Import Drizzle models
+import UserModel from '../../drizzle/models/User.js';
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
+import GameStat from '../../drizzle/models/GameStat.js';
 
-/**
- * Blackjack socket handler
- * Manages the blackjack game logic on the server
- */
-function handleBlackjackSocket(io, socket) {
-  console.log(`User connected to blackjack: ${socket.id}`);
-  
-  let userId = null;
-  let currentGame = null;
-  
-  /**
-   * Initialize the game state for a user
-   * @param {String} uid - User ID
-   */
-  async function initializeGame(uid) {
-    try {
-      userId = uid;
-      
-      // Get user from database
-      const user = await User.findById(userId);
-      
-      if (!user) {
-        socket.emit('error', { message: 'User not found' });
-        return;
-      }
-      
-      // Create a new game state
-      currentGame = {
-        userId,
-        balance: user.balance,
-        betAmount: 0,
-        deck: shuffleArray(createDeck()),
-        playerHands: [[]],
-        dealerHand: [],
-        currentHandIndex: 0,
-        gameState: 'betting',
-        result: null,
-        payout: 0
-      };
-      
-      // Log game initialization
-      loggingService.logGameStart('blackjack', `${userId}_${Date.now()}`, {
-        userId,
-        initialBalance: user.balance,
-        timestamp: new Date()
-      });
-      
-      // Send initial game state
-      emitGameState();
-    } catch (error) {
-      console.error('Error initializing blackjack game:', error);
-      socket.emit('error', { message: 'Failed to initialize game' });
-    }
+class BlackjackHandler {
+  constructor(io) {
+    this.io = io;
+    this.games = new Map(); // gameId -> game state
+    this.playerGames = new Map(); // userId -> gameId
   }
-  
-  /**
-   * Emit the current game state to the client
-   */
-  function emitGameState() {
-    if (currentGame) {
-      // Don't send the full deck to client
-      const { deck, ...gameState } = currentGame;
-      socket.emit('gameState', gameState);
-    }
-  }
-  
-  /**
-   * Update user balance using the balance service
-   * @param {Number} amount - Amount to add to balance (negative to subtract)
-   * @param {String} type - Transaction type ('bet', 'win', etc.)
-   * @param {Object} metadata - Additional transaction metadata
-   */
-  async function updateUserBalance(amount, type, metadata = {}) {
-    try {
-      if (!userId) return;
-      
-      await balanceService.updateBalance(
-        userId,
-        amount,
-        type,
-        'blackjack',
-        metadata
-      );
-    } catch (error) {
-      console.error('Error updating user balance:', error);
-    }
-  }
-  
-  /**
-   * Deal a card from the deck
-   * @returns {Object} Card object
-   */
-  function dealCard() {
-    if (!currentGame || currentGame.deck.length === 0) {
-      // Reshuffle if deck is empty
-      currentGame.deck = shuffleArray(createDeck());
-    }
-    
-    return currentGame.deck.pop();
-  }
-  
-  /**
-   * Place a bet and start a new round
-   * @param {Object} data - Bet data
-   * @param {Number} data.amount - Bet amount
-   */
-  async function placeBet(data) {
-    try {
-      if (!currentGame || !userId) {
-        socket.emit('error', { message: 'Game not initialized' });
-        return;
-      }
-      
-      if (currentGame.gameState !== 'betting') {
-        socket.emit('error', { message: 'Cannot place bet now' });
-        return;
-      }
-      
-      const betAmount = Number(data.amount);
-      
-      if (isNaN(betAmount) || betAmount <= 0) {
-        socket.emit('error', { message: 'Invalid bet amount' });
-        return;
-      }
-      
-      if (betAmount > currentGame.balance) {
-        socket.emit('error', { message: 'Not enough balance' });
-        return;
-      }
-      
-      // Update game state
-      currentGame.betAmount = betAmount;
-      currentGame.balance -= betAmount;
-      
-      // Generate a unique hand ID
-      const handId = socket.id + Date.now();
-      
-      // Save updated balance to database and record the bet transaction
-      await updateUserBalance(-betAmount, 'bet', { 
-        gameType: 'blackjack',
-        handId: handId  // Unique identifier for this hand
-      });
-      
-      // Log bet placed
-      loggingService.logBetPlaced('blackjack', handId, userId, betAmount, {
-        initialCards: {
-          player: [dealCard(), dealCard()],
-          dealer: [dealCard(), dealCard()]
-        },
-        timestamp: new Date()
-      });
-      
-      // Deal initial cards
-      currentGame.dealerHand = [dealCard(), dealCard()];
-      currentGame.playerHands = [[dealCard(), dealCard()]];
-      currentGame.currentHandIndex = 0;
-      currentGame.gameState = 'playing';
-      
-      // Check for blackjack
-      const playerHand = currentGame.playerHands[0];
-      if (calculateHandValue(playerHand) === 21 && playerHand.length === 2) {
-        // Player has blackjack, dealer's turn
-        dealerTurn();
-      } else {
-        // Player's turn
-        emitGameState();
-      }
-    } catch (error) {
-      console.error('Error placing bet:', error);
-      socket.emit('error', { message: 'Failed to place bet' });
-    }
-  }
-  
-  /**
-   * Hit - draw another card
-   */
-  function hit() {
-    try {
-      if (!currentGame || currentGame.gameState !== 'playing') {
-        socket.emit('error', { message: 'Cannot hit now' });
-        return;
-      }
-      
-      const currentHandIndex = currentGame.currentHandIndex;
-      const currentHand = currentGame.playerHands[currentHandIndex];
-      
-      // Deal a card to the current hand
-      currentHand.push(dealCard());
-      
-      // Check if busted
-      if (calculateHandValue(currentHand) > 21) {
-        if (currentHandIndex < currentGame.playerHands.length - 1) {
-          // Move to next hand
-          currentGame.currentHandIndex++;
-        } else {
-          // All hands complete, dealer's turn
-          dealerTurn();
+
+  handleConnection(socket) {
+    // Start new game
+    socket.on('blackjack_start', async (data) => {
+      try {
+        const { userId, betAmount } = data;
+        
+        if (!userId || !betAmount || betAmount <= 0) {
+          socket.emit('blackjack_error', { message: 'Invalid game parameters' });
           return;
         }
-      }
-      
-      emitGameState();
-    } catch (error) {
-      console.error('Error hitting:', error);
-      socket.emit('error', { message: 'Failed to hit' });
-    }
-  }
-  
-  /**
-   * Stand - end current hand
-   */
-  function stand() {
-    try {
-      if (!currentGame || currentGame.gameState !== 'playing') {
-        socket.emit('error', { message: 'Cannot stand now' });
-        return;
-      }
-      
-      if (currentGame.currentHandIndex < currentGame.playerHands.length - 1) {
-        // Move to next hand
-        currentGame.currentHandIndex++;
-        emitGameState();
-      } else {
-        // All hands complete, dealer's turn
-        dealerTurn();
-      }
-    } catch (error) {
-      console.error('Error standing:', error);
-      socket.emit('error', { message: 'Failed to stand' });
-    }
-  }
-  
-  /**
-   * Double down - double bet, get one card, then stand
-   */
-  async function doubleDown() {
-    try {
-      if (!currentGame || currentGame.gameState !== 'playing') {
-        socket.emit('error', { message: 'Cannot double down now' });
-        return;
-      }
-      
-      const currentHandIndex = currentGame.currentHandIndex;
-      const currentHand = currentGame.playerHands[currentHandIndex];
-      
-      // Check if hand has exactly 2 cards
-      if (currentHand.length !== 2) {
-        socket.emit('error', { message: 'Can only double down on initial two cards' });
-        return;
-      }
-      
-      // Check if player has enough balance
-      if (currentGame.balance < currentGame.betAmount) {
-        socket.emit('error', { message: 'Not enough balance to double down' });
-        return;
-      }
-      
-      // Double bet
-      currentGame.balance -= currentGame.betAmount;
-      const additionalBet = currentGame.betAmount;
-      currentGame.betAmount *= 2;
-      
-      // Save updated balance to database using balance service
-      await updateUserBalance(-additionalBet, 'bet', { 
-        gameType: 'blackjack',
-        betType: 'double-down',
-        handId: socket.id + Date.now()
-      });
-      
-      // Deal one more card
-      currentHand.push(dealCard());
-      
-      // Move to dealer's turn
-      dealerTurn();
-    } catch (error) {
-      console.error('Error doubling down:', error);
-      socket.emit('error', { message: 'Failed to double down' });
-    }
-  }
-  
-  /**
-   * Split - split a pair into two hands
-   */
-  async function split() {
-    try {
-      if (!currentGame || currentGame.gameState !== 'playing') {
-        socket.emit('error', { message: 'Cannot split now' });
-        return;
-      }
-      
-      const currentHandIndex = currentGame.currentHandIndex;
-      const currentHand = currentGame.playerHands[currentHandIndex];
-      
-      // Check if hand has exactly 2 cards
-      if (currentHand.length !== 2) {
-        socket.emit('error', { message: 'Can only split initial two cards' });
-        return;
-      }
-      
-      // Check if cards have the same value
-      const card1Value = currentHand[0].value;
-      const card2Value = currentHand[1].value;
-      const isSameValue = 
-        card1Value === card2Value ||
-        (card1Value === 'J' && card2Value === 'Q') ||
-        (card1Value === 'J' && card2Value === 'K') ||
-        (card1Value === 'Q' && card2Value === 'J') ||
-        (card1Value === 'Q' && card2Value === 'K') ||
-        (card1Value === 'K' && card2Value === 'J') ||
-        (card1Value === 'K' && card2Value === 'Q');
-      
-      if (!isSameValue) {
-        socket.emit('error', { message: 'Can only split cards of same value' });
-        return;
-      }
-      
-      // Check if player has enough balance
-      if (currentGame.balance < currentGame.betAmount) {
-        socket.emit('error', { message: 'Not enough balance to split' });
-        return;
-      }
-      
-      // Update balance
-      currentGame.balance -= currentGame.betAmount;
-      
-      // Save updated balance to database
-      await updateUserBalance(-currentGame.betAmount);
-      
-      // Create two new hands
-      const newHand1 = [currentHand[0], dealCard()];
-      const newHand2 = [currentHand[1], dealCard()];
-      
-      // Update player hands
-      currentGame.playerHands.splice(currentHandIndex, 1, newHand1, newHand2);
-      
-      emitGameState();
-    } catch (error) {
-      console.error('Error splitting:', error);
-      socket.emit('error', { message: 'Failed to split' });
-    }
-  }
-  
-  /**
-   * Dealer's turn - dealer draws cards until reaching at least 17
-   */
-  async function dealerTurn() {
-    try {
-      if (!currentGame) return;
-      
-      currentGame.gameState = 'dealerTurn';
-      emitGameState();
-      
-      // Wait 1 second to show dealer's turn state
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Dealer draws cards until reaching at least 17
-      while (shouldDealerHit(currentGame.dealerHand)) {
-        currentGame.dealerHand.push(dealCard());
-        emitGameState();
-        
-        // Add a small delay between dealer cards
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-      
-      // Calculate results
-      let totalPayout = 0;
-      
-      for (const playerHand of currentGame.playerHands) {
-        const result = determineWinner(playerHand, currentGame.dealerHand);
-        currentGame.result = result;
-        
-        let payout = 0;
-        switch (result) {
-          case 'blackjack':
-            payout = currentGame.betAmount * 1.5;
-            break;
-          case 'player':
-            payout = currentGame.betAmount;
-            break;
-          case 'push':
-            payout = 0;
-            break;
-          case 'dealer':
-            payout = -currentGame.betAmount;
-            break;
+
+        // Check if user exists
+        const user = await UserModel.findById(userId);
+        if (!user) {
+          socket.emit('blackjack_error', { message: 'User not found' });
+          return;
         }
+
+        // Check if user has sufficient balance
+        const hasSufficientBalance = await BalanceService.hasSufficientBalance(userId, betAmount);
+        if (!hasSufficientBalance) {
+          socket.emit('blackjack_error', { message: 'Insufficient balance' });
+          return;
+        }
+
+        // Check if user already has an active game
+        if (this.playerGames.has(userId)) {
+          const existingGameId = this.playerGames.get(userId);
+          const existingGame = this.games.get(existingGameId);
+          if (existingGame && existingGame.status === 'active') {
+            socket.emit('blackjack_error', { message: 'You already have an active game' });
+            return;
+          }
+        }
+
+        // Create new game
+        const gameId = this.generateGameId();
+        const game = this.createNewGame(userId, betAmount);
         
-        totalPayout += payout;
-      }
-      
-      // Update game state
-      currentGame.payout = totalPayout;
-      currentGame.balance += currentGame.betAmount + totalPayout;
-      currentGame.gameState = 'gameOver';
-      
-      // Save updated balance to database using balance service
-      if (totalPayout >= 0) {
-        // Win or push
-        await updateUserBalance(currentGame.betAmount + totalPayout, 'win', {
-          gameType: 'blackjack',
-          betAmount: currentGame.betAmount,
-          result: currentGame.result,
-          dealerCards: currentGame.dealerHand.map(card => `${card.value} of ${card.suit}`),
-          playerCards: currentGame.playerHands.map(hand => hand.map(card => `${card.value} of ${card.suit}`))
+        // Store game
+        this.games.set(gameId, game);
+        this.playerGames.set(userId, gameId);
+        
+        // Join game room
+        socket.join(`blackjack_${gameId}`);
+        
+        // Deal initial cards
+        this.dealInitialCards(game);
+        
+        // Send game state
+        socket.emit('blackjack_game_state', {
+          gameId,
+          playerHand: game.playerHand,
+          dealerHand: [game.dealerHand[0]], // Only show first dealer card
+          playerScore: this.calculateScore(game.playerHand),
+          betAmount: game.betAmount,
+          status: game.status,
+          canDouble: game.playerHand.length === 2,
+          canSplit: this.canSplit(game.playerHand)
         });
-        
-        // Log win or push results
-        loggingService.logBetResult(
-          'blackjack',
-          `${userId}_${Date.now()}`,
-          userId,
-          currentGame.betAmount,
-          currentGame.betAmount + totalPayout,
-          totalPayout > 0, // true if win, false if push
-          {
-            result: currentGame.result,
-            dealerHand: currentGame.dealerHand.map(card => `${card.value} of ${card.suit}`),
-            playerHands: currentGame.playerHands.map(hand => hand.map(card => `${card.value} of ${card.suit}`)),
-            timestamp: new Date()
+
+        // Log game start
+        await LoggingService.logGameAction(
+          userId, 
+          'blackjack', 
+          'game_started', 
+          { 
+            gameId, 
+            betAmount,
+            playerHand: game.playerHand,
+            dealerUpCard: game.dealerHand[0]
           }
         );
-      } else {
-        // Log loss
-        loggingService.logBetResult(
-          'blackjack',
-          `${userId}_${Date.now()}`,
-          userId,
-          currentGame.betAmount,
-          0,
-          false,
-          {
-            result: currentGame.result,
-            dealerHand: currentGame.dealerHand.map(card => `${card.value} of ${card.suit}`),
-            playerHands: currentGame.playerHands.map(hand => hand.map(card => `${card.value} of ${card.suit}`)),
-            timestamp: new Date()
-          }
-        );
+
+        console.log(`Blackjack game ${gameId} started for user ${userId} with bet ${betAmount}`);
+      } catch (error) {
+        console.error('Error starting blackjack game:', error);
+        socket.emit('blackjack_error', { message: 'Failed to start game' });
       }
-      
-      emitGameState();
-    } catch (error) {
-      console.error('Error in dealer turn:', error);
-      socket.emit('error', { message: 'Error in dealer turn' });
+    });
+
+    // Player hits
+    socket.on('blackjack_hit', async (data) => {
+      try {
+        const { userId } = data;
+        const gameId = this.playerGames.get(userId);
+        const game = this.games.get(gameId);
+
+        if (!game || game.status !== 'active') {
+          socket.emit('blackjack_error', { message: 'No active game found' });
+          return;
+        }
+
+        // Deal card to player
+        const card = this.dealCard(game.deck);
+        game.playerHand.push(card);
+
+        const playerScore = this.calculateScore(game.playerHand);
+
+        // Check for bust
+        if (playerScore > 21) {
+          await this.endGame(gameId, 'player_bust');
+        }
+
+        // Send updated game state
+        this.io.to(`blackjack_${gameId}`).emit('blackjack_game_state', {
+          gameId,
+          playerHand: game.playerHand,
+          dealerHand: game.status === 'completed' ? game.dealerHand : [game.dealerHand[0]],
+          playerScore,
+          dealerScore: game.status === 'completed' ? this.calculateScore(game.dealerHand) : null,
+          betAmount: game.betAmount,
+          status: game.status,
+          result: game.result,
+          winAmount: game.winAmount
+        });
+
+        // Log action
+        await LoggingService.logGameAction(
+          userId, 
+          'blackjack', 
+          'hit', 
+          { 
+            gameId, 
+            card,
+            playerHand: game.playerHand,
+            playerScore
+          }
+        );
+      } catch (error) {
+        console.error('Error handling blackjack hit:', error);
+        socket.emit('blackjack_error', { message: 'Failed to process hit' });
+      }
+    });
+
+    // Player stands
+    socket.on('blackjack_stand', async (data) => {
+      try {
+        const { userId } = data;
+        const gameId = this.playerGames.get(userId);
+        const game = this.games.get(gameId);
+
+        if (!game || game.status !== 'active') {
+          socket.emit('blackjack_error', { message: 'No active game found' });
+          return;
+        }
+
+        // Dealer plays
+        await this.playDealer(game);
+        
+        // Determine winner
+        await this.endGame(gameId, 'completed');
+
+        // Send final game state
+        this.io.to(`blackjack_${gameId}`).emit('blackjack_game_state', {
+          gameId,
+          playerHand: game.playerHand,
+          dealerHand: game.dealerHand,
+          playerScore: this.calculateScore(game.playerHand),
+          dealerScore: this.calculateScore(game.dealerHand),
+          betAmount: game.betAmount,
+          status: game.status,
+          result: game.result,
+          winAmount: game.winAmount
+        });
+
+        // Log action
+        await LoggingService.logGameAction(
+          userId, 
+          'blackjack', 
+          'stand', 
+          { 
+            gameId, 
+            playerScore: this.calculateScore(game.playerHand),
+            dealerScore: this.calculateScore(game.dealerHand),
+            result: game.result,
+            winAmount: game.winAmount
+          }
+        );
+      } catch (error) {
+        console.error('Error handling blackjack stand:', error);
+        socket.emit('blackjack_error', { message: 'Failed to process stand' });
+      }
+    });
+
+    // Player doubles down
+    socket.on('blackjack_double', async (data) => {
+      try {
+        const { userId } = data;
+        const gameId = this.playerGames.get(userId);
+        const game = this.games.get(gameId);
+
+        if (!game || game.status !== 'active' || game.playerHand.length !== 2) {
+          socket.emit('blackjack_error', { message: 'Cannot double down' });
+          return;
+        }
+
+        // Check balance for double
+        const hasSufficientBalance = await BalanceService.hasSufficientBalance(userId, game.betAmount);
+        if (!hasSufficientBalance) {
+          socket.emit('blackjack_error', { message: 'Insufficient balance to double' });
+          return;
+        }
+
+        // Double the bet
+        game.betAmount *= 2;
+        game.doubled = true;
+
+        // Deal one card
+        const card = this.dealCard(game.deck);
+        game.playerHand.push(card);
+
+        const playerScore = this.calculateScore(game.playerHand);
+
+        // Check for bust
+        if (playerScore > 21) {
+          await this.endGame(gameId, 'player_bust');
+        } else {
+          // Dealer plays
+          await this.playDealer(game);
+          await this.endGame(gameId, 'completed');
+        }
+
+        // Send final game state
+        this.io.to(`blackjack_${gameId}`).emit('blackjack_game_state', {
+          gameId,
+          playerHand: game.playerHand,
+          dealerHand: game.dealerHand,
+          playerScore,
+          dealerScore: this.calculateScore(game.dealerHand),
+          betAmount: game.betAmount,
+          status: game.status,
+          result: game.result,
+          winAmount: game.winAmount
+        });
+
+        // Log action
+        await LoggingService.logGameAction(
+          userId, 
+          'blackjack', 
+          'double_down', 
+          { 
+            gameId, 
+            finalBetAmount: game.betAmount,
+            result: game.result,
+            winAmount: game.winAmount
+          }
+        );
+      } catch (error) {
+        console.error('Error handling blackjack double:', error);
+        socket.emit('blackjack_error', { message: 'Failed to process double down' });
+      }
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+      // Clean up any games for this socket
+      // This could be enhanced to pause games instead of ending them
+    });
+  }
+
+  createNewGame(userId, betAmount) {
+    return {
+      userId,
+      betAmount,
+      deck: this.createDeck(),
+      playerHand: [],
+      dealerHand: [],
+      status: 'active',
+      result: null,
+      winAmount: 0,
+      doubled: false,
+      createdAt: new Date()
+    };
+  }
+
+  createDeck() {
+    const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+    const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const deck = [];
+
+    for (const suit of suits) {
+      for (const rank of ranks) {
+        deck.push({ suit, rank, value: this.getCardValue(rank) });
+      }
+    }
+
+    // Shuffle deck
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+
+    return deck;
+  }
+
+  getCardValue(rank) {
+    if (rank === 'A') return 11;
+    if (['J', 'Q', 'K'].includes(rank)) return 10;
+    return parseInt(rank);
+  }
+
+  dealCard(deck) {
+    return deck.pop();
+  }
+
+  dealInitialCards(game) {
+    // Deal 2 cards to player and dealer
+    game.playerHand.push(this.dealCard(game.deck));
+    game.dealerHand.push(this.dealCard(game.deck));
+    game.playerHand.push(this.dealCard(game.deck));
+    game.dealerHand.push(this.dealCard(game.deck));
+  }
+
+  calculateScore(hand) {
+    let score = 0;
+    let aces = 0;
+
+    for (const card of hand) {
+      if (card.rank === 'A') {
+        aces++;
+        score += 11;
+      } else {
+        score += card.value;
+      }
+    }
+
+    // Adjust for aces
+    while (score > 21 && aces > 0) {
+      score -= 10;
+      aces--;
+    }
+
+    return score;
+  }
+
+  async playDealer(game) {
+    while (this.calculateScore(game.dealerHand) < 17) {
+      game.dealerHand.push(this.dealCard(game.deck));
     }
   }
-  
-  /**
-   * Request a card from the server
-   */
-  function requestCard() {
+
+  async endGame(gameId, reason) {
+    const game = this.games.get(gameId);
+    if (!game) return;
+
+    game.status = 'completed';
+
+    const playerScore = this.calculateScore(game.playerHand);
+    const dealerScore = this.calculateScore(game.dealerHand);
+
+    // Determine result
+    if (reason === 'player_bust') {
+      game.result = 'dealer_win';
+      game.winAmount = 0;
+    } else if (dealerScore > 21) {
+      game.result = 'player_win';
+      game.winAmount = game.betAmount * 2;
+    } else if (playerScore > dealerScore) {
+      game.result = 'player_win';
+      game.winAmount = game.betAmount * 2;
+    } else if (dealerScore > playerScore) {
+      game.result = 'dealer_win';
+      game.winAmount = 0;
+    } else {
+      game.result = 'push';
+      game.winAmount = game.betAmount; // Return bet
+    }
+
+    // Check for blackjack
+    if (playerScore === 21 && game.playerHand.length === 2 && dealerScore !== 21) {
+      game.result = 'blackjack';
+      game.winAmount = Math.floor(game.betAmount * 2.5);
+    }
+
     try {
-      const card = dealCard();
-      socket.emit('card', card);
+      // Update user balance
+      await BalanceService.updateGameBalance(
+        game.userId,
+        game.betAmount,
+        game.winAmount,
+        'blackjack',
+        {
+          gameId,
+          playerScore,
+          dealerScore,
+          result: game.result,
+          playerHand: game.playerHand,
+          dealerHand: game.dealerHand
+        }
+      );
+
+      // Update game statistics
+      await GameStat.updateStats('blackjack', game.betAmount, game.winAmount);
+
+      // Log game end
+      await LoggingService.logGameAction(
+        game.userId, 
+        'blackjack', 
+        'game_ended', 
+        { 
+          gameId, 
+          result: game.result,
+          playerScore,
+          dealerScore,
+          betAmount: game.betAmount,
+          winAmount: game.winAmount
+        }
+      );
+
+      // Clean up
+      this.playerGames.delete(game.userId);
+      // Keep game for a short time in case client needs to query it
+      setTimeout(() => {
+        this.games.delete(gameId);
+      }, 60000); // 1 minute
+
     } catch (error) {
-      console.error('Error requesting card:', error);
-      socket.emit('error', { message: 'Failed to request card' });
+      console.error('Error ending blackjack game:', error);
     }
   }
-  
-  /**
-   * Start a new game
-   */
-  function newGame() {
-    try {
-      if (!currentGame) return;
-      
-      currentGame.playerHands = [[]];
-      currentGame.dealerHand = [];
-      currentGame.currentHandIndex = 0;
-      currentGame.gameState = 'betting';
-      currentGame.result = null;
-      currentGame.payout = 0;
-      currentGame.betAmount = 0;
-      
-      emitGameState();
-    } catch (error) {
-      console.error('Error starting new game:', error);
-      socket.emit('error', { message: 'Failed to start new game' });
-    }
+
+  canSplit(hand) {
+    return hand.length === 2 && hand[0].value === hand[1].value;
   }
-  
-  // Register event handlers
-  socket.on('initialize', initializeGame);
-  socket.on('placeBet', placeBet);
-  socket.on('hit', hit);
-  socket.on('stand', stand);
-  socket.on('double', doubleDown);
-  socket.on('split', split);
-  socket.on('requestCard', requestCard);
-  socket.on('newGame', newGame);
-  
-  // Handle disconnection
-  socket.on('disconnect', () => {
-    console.log(`User disconnected from blackjack: ${socket.id}`);
-  });
+
+  generateGameId() {
+    return `bj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  // Get active games count
+  getActiveGamesCount() {
+    return Array.from(this.games.values()).filter(game => game.status === 'active').length;
+  }
+
+  // Get game by user ID
+  getGameByUserId(userId) {
+    const gameId = this.playerGames.get(userId);
+    return gameId ? this.games.get(gameId) : null;
+  }
 }
 
-module.exports = handleBlackjackSocket;
+export default BlackjackHandler;

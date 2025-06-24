@@ -3,9 +3,9 @@
  * Manages real-time communication for the global chat feature
  */
 
-// Import models and dependencies
-import Message from '../models/Message.js';
-import User from '../../models/User.js';
+// Import Drizzle models
+import Message from '../../drizzle/models/Message.js';
+import UserModel from '../../drizzle/models/User.js';
 import jwt from 'jsonwebtoken';
 
 /**
@@ -16,18 +16,36 @@ const initChatHandlers = (io) => {
   // Create a namespace for chat
   const chatNamespace = io.of('/chat');
   
-  // Middleware to authenticate connections
+  // Middleware to authenticate connections using cookies
   chatNamespace.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth.token;
+      // Get cookies from the socket handshake
+      const cookies = socket.handshake.headers.cookie;
       
-      if (!token) {
-        console.log('No token provided for chat connection');
+      if (!cookies) {
+        console.log('No cookies provided for chat connection');
+        return next(new Error('Authentication token required'));
+      }
+      
+      // Parse the authToken cookie
+      const cookieArray = cookies.split(';');
+      let authToken = null;
+      
+      for (const cookie of cookieArray) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'authToken') {
+          authToken = value;
+          break;
+        }
+      }
+      
+      if (!authToken) {
+        console.log('No authToken cookie found for chat connection');
         return next(new Error('Authentication token required'));
       }
       
       // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret');
+      const decoded = jwt.verify(authToken, process.env.JWT_SECRET || 'default_jwt_secret');
       
       if (!decoded || !decoded.userId) {
         console.log('Invalid token for chat connection');
@@ -58,7 +76,7 @@ const initChatHandlers = (io) => {
       }
       
       // Find the user in the database
-      const user = await User.findById(userId).select('username _id avatar');
+      const user = await UserModel.findById(userId);
       
       if (!user) {
         console.log('User not found for chat');
@@ -68,73 +86,103 @@ const initChatHandlers = (io) => {
       
       // Add user info to socket
       socket.user = {
-        id: user._id,
+        id: user.id,
         username: user.username,
-        avatar: user.avatar || '/default-avatar.png'
+        avatar: user.avatar
       };
       
       // Join the global chat room
-      socket.join('global');
+      socket.join('global_chat');
       
       // Emit connected event with user info
-      chatNamespace.to('global').emit('userJoined', {
+      chatNamespace.to('global_chat').emit('user_joined', {
         user: socket.user,
         timestamp: new Date(),
         message: `${socket.user.username} has joined the chat`
       });
       
       // Load previous messages (most recent 50)
-      const previousMessages = await Message.find()
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .populate('user', 'username avatar')
-        .lean();
+      const previousMessages = await Message.getRecentMessages(50);
+      
+      // Transform messages to have consistent structure
+      const transformedMessages = previousMessages.map(msg => ({
+        id: msg.id,
+        _id: msg.id, // Add _id for React compatibility
+        content: msg.content,
+        createdAt: msg.createdAt,
+        userId: msg.userId,
+        isSystem: msg.isSystem || false,
+        username: msg.username,
+        avatar: msg.avatar
+      }));
         
-      socket.emit('previousMessages', previousMessages.reverse());
+      socket.emit('message_history', transformedMessages);
       
       // Listen for new messages
-      socket.on('sendMessage', async (data) => {
+      socket.on('send_message', async (data) => {
         try {
-          // Create and save message to database
-          const newMessage = new Message({
-            content: data.content,
-            user: socket.user.id,
+          const { content } = data;
+          
+          if (!content || content.trim().length === 0) {
+            socket.emit('chat_error', { message: 'Message cannot be empty' });
+            return;
+          }
+
+          if (content.length > 500) {
+            socket.emit('chat_error', { message: 'Message too long (max 500 characters)' });
+            return;
+          }
+
+          // Create message
+          const messageData = {
+            content: content.trim(),
+            userId: userId,
+            isSystem: false,
             createdAt: new Date()
-          });
-          
-          await newMessage.save();
-          
-          // Populate user info for the response
-          const populatedMessage = await Message.findById(newMessage._id)
-            .populate('user', 'username avatar')
-            .lean();
-          
-          // Broadcast the message to all connected clients in the global room
-          chatNamespace.to('global').emit('newMessage', populatedMessage);
-          
+          };
+
+          // Save to database
+          const newMessage = await Message.create(messageData);
+
+          // Format message for broadcast (simulate populate)
+          const formattedMessage = {
+            id: newMessage.id,
+            _id: newMessage.id,
+            content: newMessage.content,
+            createdAt: newMessage.createdAt,
+            userId: newMessage.userId,
+            isSystem: newMessage.isSystem,
+            username: user.username,
+            avatar: user.avatar
+          };
+
+          // Broadcast message to all users in chat
+          chatNamespace.to('global_chat').emit('new_message', formattedMessage);
+
+          console.log(`Message from ${user.username}: ${content}`);
         } catch (error) {
           console.error('Error sending message:', error);
-          socket.emit('error', { message: 'Failed to send message' });
+          socket.emit('chat_error', { message: 'Failed to send message' });
         }
       });
       
       // Handle typing indicator
       socket.on('typing', () => {
-        socket.to('global').emit('userTyping', {
+        socket.to('global_chat').emit('userTyping', {
           username: socket.user.username
         });
       });
       
       socket.on('stopTyping', () => {
-        socket.to('global').emit('userStoppedTyping', {
+        socket.to('global_chat').emit('userStoppedTyping', {
           username: socket.user.username
         });
       });
       
       // Handle disconnection
-      socket.on('disconnect', () => {
+      socket.on('leave_chat', () => {
         console.log('Client disconnected from chat namespace:', socket.id);
-        chatNamespace.to('global').emit('userLeft', {
+        chatNamespace.to('global_chat').emit('userLeft', {
           user: socket.user,
           timestamp: new Date(),
           message: `${socket.user?.username || 'A user'} has left the chat`

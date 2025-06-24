@@ -1,52 +1,55 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import UserModel from '../drizzle/models/User.js';
 
-// Middleware to verify JWT token
+// Middleware to verify JWT token from HTTP-only cookie
 export const authenticate = async (req, res, next) => {
   try {
-    // Get token from header
-    const authHeader = req.headers.authorization;
+    // Get token from HTTP-only cookie instead of Authorization header
+    const token = req.cookies.authToken;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
       return res.status(401).json({ message: 'No token, authorization denied' });
     }
-    
-    // Extract token
-    const token = authHeader.split(' ')[1];
-    
+
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Add user from payload to request object
-    const user = await User.findById(decoded.userId).select('-passwordHash');
+    // Get user from database
+    const user = await UserModel.findById(decoded.userId);
     
-    if (!user) {
-      return res.status(401).json({ message: 'User not found' });
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: 'Token is not valid' });
     }
+
+    // Add user to request
+    req.user = {
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role
+    };
     
-    // Attach user to request object
-    req.user = user;
     next();
   } catch (error) {
-    console.error('Authentication error:', error.message);
-    
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Invalid token' });
-    }
-    
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token expired' });
-    }
-    
-    res.status(500).json({ message: 'Server error during authentication' });
+    console.error('Auth middleware error:', error);
+    res.status(401).json({ message: 'Token is not valid' });
   }
 };
 
 // Middleware to check if user is admin
-export const isAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Access denied: Admin privileges required' });
+export const adminOnly = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Admin only.' });
   }
-  
-  next();
+};
+
+// User or admin middleware
+export const userOrAdmin = (req, res, next) => {
+  if (req.user && (req.user.role === 'user' || req.user.role === 'admin')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied.' });
+  }
 };

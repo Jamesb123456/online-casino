@@ -6,303 +6,206 @@
  * Provides consistent structured logs across all games
  */
 
-const mongoose = require('mongoose');
-const GameLog = require('../models/GameLog');
+// Import Drizzle models
+import GameLog from '../../drizzle/models/GameLog.js';
 
+/**
+ * Enhanced logging service for game activities and system events
+ */
 class LoggingService {
   /**
-   * Log a game event
-   * @param {String} gameType - Type of game (crash, plinko, wheel, etc.)
-   * @param {String} eventType - Type of event (started, ended, bet_placed, etc.)
-   * @param {Object} data - Event data (game state, bet details, etc.)
-   * @param {String} userId - User ID (if applicable)
-   * @returns {Promise<Object>} Created log entry
+   * Log a game action
+   * @param {string} userId - User performing the action
+   * @param {string} gameType - Type of game (crash, plinko, etc.)
+   * @param {string} action - Action being performed
+   * @param {Object} gameData - Game-specific data
+   * @param {string} sessionId - Optional game session ID
    */
-  async logGameEvent(gameType, eventType, data = {}, userId = null) {
+  static async logGameAction(userId, gameType, action, gameData = {}, sessionId = null) {
     try {
-      const log = new GameLog({
-        gameType,
-        eventType,
+      await GameLog.create({
         userId,
-        data,
+        gameType,
+        action,
+        gameData: JSON.stringify(gameData),
+        sessionId,
         timestamp: new Date()
       });
-      
-      await log.save();
-      return log;
     } catch (error) {
-      console.error(`Error logging game event: ${error.message}`);
-      // Still return the log data even if saving failed
-      return { gameType, eventType, userId, data, timestamp: new Date(), error: error.message };
+      console.error('Error logging game action:', error);
+      // Don't throw error to avoid breaking game flow
     }
   }
-  
+
   /**
-   * Log a game start event
-   * @param {String} gameType - Type of game
-   * @param {String} gameId - Unique game ID
-   * @param {Object} initialState - Initial game state
-   * @returns {Promise<Object>} Created log entry
+   * Log user authentication events
+   * @param {string} userId - User ID
+   * @param {string} action - Authentication action (login, logout, failed_login)
+   * @param {Object} metadata - Additional metadata (IP, user agent, etc.)
    */
-  async logGameStart(gameType, gameId, initialState = {}) {
-    return this.logGameEvent(gameType, 'game_started', {
-      gameId,
-      initialState,
-      startTime: new Date()
-    });
-  }
-  
-  /**
-   * Log a game end event
-   * @param {String} gameType - Type of game
-   * @param {String} gameId - Unique game ID
-   * @param {Object} finalState - Final game state
-   * @param {Object} outcome - Game outcome details
-   * @returns {Promise<Object>} Created log entry
-   */
-  async logGameEnd(gameType, gameId, finalState = {}, outcome = {}) {
-    return this.logGameEvent(gameType, 'game_ended', {
-      gameId,
-      finalState,
-      outcome,
-      endTime: new Date()
-    });
-  }
-  
-  /**
-   * Log a bet placed event
-   * @param {String} gameType - Type of game
-   * @param {String} gameId - Unique game ID
-   * @param {String} userId - User ID
-   * @param {Number} amount - Bet amount
-   * @param {Object} betDetails - Additional bet details
-   * @returns {Promise<Object>} Created log entry
-   */
-  async logBetPlaced(gameType, gameId, userId, amount, betDetails = {}) {
-    return this.logGameEvent(gameType, 'bet_placed', {
-      gameId,
-      amount,
-      betDetails
-    }, userId);
-  }
-  
-  /**
-   * Log a bet result event
-   * @param {String} gameType - Type of game
-   * @param {String} gameId - Unique game ID
-   * @param {String} userId - User ID
-   * @param {Number} betAmount - Original bet amount
-   * @param {Number} winAmount - Amount won (0 for losses)
-   * @param {Boolean} isWin - Whether the bet was won
-   * @param {Object} resultDetails - Additional result details
-   * @returns {Promise<Object>} Created log entry
-   */
-  async logBetResult(gameType, gameId, userId, betAmount, winAmount, isWin, resultDetails = {}) {
-    return this.logGameEvent(gameType, isWin ? 'bet_won' : 'bet_lost', {
-      gameId,
-      betAmount,
-      winAmount,
-      profit: winAmount - betAmount,
-      resultDetails
-    }, userId);
-  }
-  
-  /**
-   * Log a player action event
-   * @param {String} gameType - Type of game
-   * @param {String} gameId - Unique game ID
-   * @param {String} userId - User ID
-   * @param {String} action - Action taken
-   * @param {Object} actionDetails - Additional action details
-   * @returns {Promise<Object>} Created log entry
-   */
-  async logPlayerAction(gameType, gameId, userId, action, actionDetails = {}) {
-    return this.logGameEvent(gameType, 'player_action', {
-      gameId,
-      action,
-      actionDetails
-    }, userId);
-  }
-  
-  /**
-   * Get game logs for a specific game type
-   * @param {String} gameType - Type of game
-   * @param {Object} options - Query options
-   * @param {Number} options.limit - Maximum number of logs
-   * @param {Number} options.skip - Number of logs to skip
-   * @param {String} options.sortBy - Field to sort by
-   * @param {Number} options.sortDir - Sort direction (1 for ascending, -1 for descending)
-   * @param {String} options.eventType - Filter by event type
-   * @param {String} options.userId - Filter by user ID
-   * @returns {Promise<Array>} Game logs
-   */
-  async getGameLogs(gameType, options = {}) {
-    const {
-      limit = 50,
-      skip = 0,
-      sortBy = 'timestamp',
-      sortDir = -1,
-      eventType = null,
-      userId = null,
-      gameId = null,
-      startDate = null,
-      endDate = null
-    } = options;
-    
-    const query = { gameType };
-    
-    if (eventType) {
-      query.eventType = eventType;
+  static async logAuthAction(userId, action, metadata = {}) {
+    try {
+      await GameLog.create({
+        userId,
+        gameType: 'system',
+        action: `auth_${action}`,
+        gameData: JSON.stringify(metadata),
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Error logging auth action:', error);
     }
-    
-    if (userId) {
-      query.userId = userId;
+  }
+
+  /**
+   * Log admin actions
+   * @param {string} adminId - Admin user ID
+   * @param {string} action - Admin action
+   * @param {Object} targetData - Data about what was affected
+   */
+  static async logAdminAction(adminId, action, targetData = {}) {
+    try {
+      await GameLog.create({
+        userId: adminId,
+        gameType: 'admin',
+        action,
+        gameData: JSON.stringify(targetData),
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Error logging admin action:', error);
     }
-    
-    if (gameId) {
-      query['data.gameId'] = gameId;
+  }
+
+  /**
+   * Log system events
+   * @param {string} event - System event name
+   * @param {Object} data - Event data
+   * @param {string} level - Log level (info, warning, error)
+   */
+  static async logSystemEvent(event, data = {}, level = 'info') {
+    try {
+      await GameLog.create({
+        userId: null, // System events don't have a user
+        gameType: 'system',
+        action: `${level}_${event}`,
+        gameData: JSON.stringify(data),
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Error logging system event:', error);
     }
-    
-    if (startDate || endDate) {
-      query.timestamp = {};
+  }
+
+  /**
+   * Get logs with filters
+   * @param {Object} filters - Filter options
+   * @returns {Promise<Array>} Filtered logs
+   */
+  static async getLogs(filters = {}) {
+    try {
+      const {
+        userId,
+        gameType,
+        action,
+        startDate,
+        endDate,
+        limit = 100
+      } = filters;
+
+      const queryFilters = {};
+
+      if (userId) queryFilters.userId = userId;
+      if (gameType) queryFilters.gameType = gameType;
+      if (action) {
+        if (typeof action === 'string') {
+          queryFilters.action = action;
+        } else {
+          queryFilters.action = { $regex: action };
+        }
+      }
+
+      if (startDate || endDate) {
+        queryFilters.timestamp = {};
+        if (startDate) queryFilters.timestamp.$gte = new Date(startDate);
+        if (endDate) queryFilters.timestamp.$lte = new Date(endDate);
+      }
+
+      const logs = await GameLog.getLogsWithFilters(queryFilters);
       
-      if (startDate) {
-        query.timestamp.$gte = new Date(startDate);
-      }
-      
-      if (endDate) {
-        query.timestamp.$lte = new Date(endDate);
-      }
+      // Parse gameData back to objects
+      return logs.map(log => ({
+        ...log,
+        gameData: log.gameData ? JSON.parse(log.gameData) : {}
+      }));
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+      return [];
     }
-    
-    const sort = {};
-    sort[sortBy] = sortDir;
-    
-    const logs = await GameLog.find(query)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit);
-      
-    const total = await GameLog.countDocuments(query);
-    
-    return {
-      logs,
-      total,
-      page: Math.floor(skip / limit) + 1,
-      totalPages: Math.ceil(total / limit)
-    };
   }
-  
+
   /**
-   * Get game statistics
-   * @param {String} gameType - Type of game (optional, for all games if not specified)
-   * @param {String} startDate - Start date (ISO string)
-   * @param {String} endDate - End date (ISO string)
-   * @returns {Promise<Object>} Game statistics
+   * Get user activity logs
+   * @param {string} userId - User ID
+   * @param {number} limit - Maximum number of logs to return
+   * @returns {Promise<Array>} User activity logs
    */
-  async getGameStats(gameType = null, startDate = null, endDate = null) {
-    const query = {};
-    
-    if (gameType) {
-      query.gameType = gameType;
-    }
-    
-    if (startDate || endDate) {
-      query.timestamp = {};
+  static async getUserLogs(userId, limit = 50) {
+    try {
+      const logs = await GameLog.getUserLogs(userId);
       
-      if (startDate) {
-        query.timestamp.$gte = new Date(startDate);
-      }
+      // Parse gameData and limit results
+      return logs.slice(0, limit).map(log => ({
+        ...log,
+        gameData: log.gameData ? JSON.parse(log.gameData) : {}
+      }));
+    } catch (error) {
+      console.error('Error fetching user logs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get game type specific logs
+   * @param {string} gameType - Game type
+   * @param {number} limit - Maximum number of logs to return
+   * @returns {Promise<Array>} Game type logs
+   */
+  static async getGameTypeLogs(gameType, limit = 100) {
+    try {
+      const logs = await GameLog.getGameTypeLogs(gameType);
       
-      if (endDate) {
-        query.timestamp.$lte = new Date(endDate);
-      }
+      // Parse gameData and limit results
+      return logs.slice(0, limit).map(log => ({
+        ...log,
+        gameData: log.gameData ? JSON.parse(log.gameData) : {}
+      }));
+    } catch (error) {
+      console.error('Error fetching game type logs:', error);
+      return [];
     }
-    
-    // Overall statistics
-    const totalGames = await GameLog.countDocuments({
-      ...query,
-      eventType: 'game_ended'
-    });
-    
-    const totalBets = await GameLog.countDocuments({
-      ...query,
-      eventType: 'bet_placed'
-    });
-    
-    // Group events by type
-    const eventCounts = await GameLog.aggregate([
-      { $match: query },
-      { $group: { _id: '$eventType', count: { $sum: 1 } } }
-    ]);
-    
-    // Group by game type if no specific game type is provided
-    let gameTypeCounts = [];
-    if (!gameType) {
-      gameTypeCounts = await GameLog.aggregate([
-        { $match: query },
-        { $group: { _id: '$gameType', count: { $sum: 1 } } }
-      ]);
+  }
+
+  /**
+   * Clean up old logs (older than specified days)
+   * @param {number} daysToKeep - Number of days to keep logs
+   * @returns {Promise<number>} Number of logs deleted
+   */
+  static async cleanupOldLogs(daysToKeep = 30) {
+    try {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+
+      // Note: This would need to be implemented with appropriate Drizzle delete query
+      // For now, we'll log the intention
+      console.log(`Would clean up logs older than ${cutoffDate.toISOString()}`);
+      
+      return 0; // Return 0 for now
+    } catch (error) {
+      console.error('Error cleaning up old logs:', error);
+      return 0;
     }
-    
-    // Get win/loss statistics
-    const winLossStats = await GameLog.aggregate([
-      { 
-        $match: { 
-          ...query, 
-          eventType: { $in: ['bet_won', 'bet_lost'] } 
-        } 
-      },
-      { 
-        $group: { 
-          _id: '$eventType',
-          count: { $sum: 1 },
-          totalAmount: { $sum: '$data.betAmount' }
-        } 
-      }
-    ]);
-    
-    // Format the statistics
-    const eventStats = {};
-    eventCounts.forEach(item => {
-      eventStats[item._id] = item.count;
-    });
-    
-    const gameTypeStats = {};
-    gameTypeCounts.forEach(item => {
-      gameTypeStats[item._id] = item.count;
-    });
-    
-    const winLoss = {
-      wins: 0,
-      losses: 0,
-      winAmount: 0,
-      lossAmount: 0
-    };
-    
-    winLossStats.forEach(item => {
-      if (item._id === 'bet_won') {
-        winLoss.wins = item.count;
-        winLoss.winAmount = item.totalAmount;
-      } else if (item._id === 'bet_lost') {
-        winLoss.losses = item.count;
-        winLoss.lossAmount = item.totalAmount;
-      }
-    });
-    
-    return {
-      totalEvents: await GameLog.countDocuments(query),
-      totalGames,
-      totalBets,
-      eventStats,
-      gameTypeStats: gameType ? null : gameTypeStats,
-      winLossStats: winLoss,
-      timeRange: {
-        start: startDate ? new Date(startDate) : null,
-        end: endDate ? new Date(endDate) : null
-      }
-    };
   }
 }
 
-module.exports = new LoggingService();
+export default LoggingService;

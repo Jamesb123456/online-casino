@@ -2,12 +2,15 @@ import express from 'express';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
-import mongoose from 'mongoose';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import initChatHandlers from './src/socket/chatHandler.js';
 import initLiveGamesHandlers from './src/socket/liveGamesHandler.js';
+
+// Drizzle Database Connection
+import { connectDB, closeDB } from './drizzle/db.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -24,29 +27,20 @@ const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 // Middleware
 app.use(express.json());
+app.use(cookieParser());
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true
 }));
 app.use(helmet());
 app.use(morgan('dev'));
-
-// MongoDB Connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/casino');
-    console.log('MongoDB connected');
-  } catch (error) {
-    console.error('MongoDB connection error:', error.message);
-    process.exit(1);
-  }
-};
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -150,11 +144,24 @@ initChatHandlers(io);
 // Initialize live games handlers
 initLiveGamesHandlers(io);
 
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  await closeDB();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  await closeDB();
+  process.exit(0);
+});
+
 // Start server
 const PORT = process.env.PORT || 5000; // Default port 5000
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  connectDB();
+  await connectDB();
 });
 
 export { io };

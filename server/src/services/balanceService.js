@@ -1,6 +1,6 @@
-const User = require('../models/User');
-const Transaction = require('../models/Transaction');
-const mongoose = require('mongoose');
+import UserModel from '../../drizzle/models/User.js';
+import TransactionModel from '../../drizzle/models/Transaction.js';
+import BalanceModel from '../../drizzle/models/Balance.js';
 
 /**
  * Balance Service
@@ -17,48 +17,54 @@ class BalanceService {
    * @returns {Promise<Object>} Updated user and transaction
    */
   async updateBalance(userId, amount, type, gameType = null, metadata = {}) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
     try {
-      // Find user and update balance
-      const user = await User.findById(userId).session(session);
+      // Find user and check balance
+      const user = await UserModel.findById(userId);
       
       if (!user) {
         throw new Error('User not found');
       }
       
+      const currentBalance = parseFloat(user.balance);
+      
       // Check if user has enough balance for deductions
-      if (amount < 0 && user.balance + amount < 0) {
+      if (amount < 0 && currentBalance + amount < 0) {
         throw new Error('Insufficient balance');
       }
       
-      // Update user balance
-      user.balance += amount;
-      await user.save({ session });
+      const newBalance = currentBalance + amount;
       
-      // Create transaction record
-      const transaction = new Transaction({
+      // Create transaction record first
+      const transaction = await TransactionModel.create({
         userId,
-        amount,
+        amount: amount.toString(),
         type,
         gameType,
-        balanceAfter: user.balance,
+        balanceBefore: currentBalance.toString(),
+        balanceAfter: newBalance.toString(),
         status: 'completed',
         metadata
       });
       
-      await transaction.save({ session });
+      // Update user balance
+      const updatedUser = await UserModel.update(userId, { 
+        balance: newBalance.toString() 
+      });
       
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
+      // Create balance history record
+      await BalanceModel.create({
+        userId,
+        amount: newBalance.toString(),
+        previousBalance: currentBalance.toString(),
+        changeAmount: amount.toString(),
+        type: this._mapTransactionTypeToBalanceType(type),
+        gameType,
+        transactionId: transaction.id
+      });
       
-      return { user, transaction };
+      return { user: updatedUser, transaction };
     } catch (error) {
-      // Abort transaction on error
-      await session.abortTransaction();
-      session.endSession();
+      console.error('Error updating balance:', error);
       throw error;
     }
   }
@@ -75,7 +81,7 @@ class BalanceService {
     return this.updateBalance(
       userId,
       -Math.abs(betAmount),
-      'bet',
+      'game_loss',
       gameType,
       metadata
     );
@@ -94,7 +100,7 @@ class BalanceService {
     return this.updateBalance(
       userId,
       winAmount,
-      'win',
+      'game_win',
       gameType,
       { ...metadata, betAmount }
     );
@@ -112,7 +118,7 @@ class BalanceService {
     return this.updateBalance(
       userId,
       amount,
-      'adjustment',
+      'admin_adjustment',
       null,
       { reason, adminId }
     );
@@ -124,13 +130,13 @@ class BalanceService {
    * @returns {Promise<Number>} User balance
    */
   async getBalance(userId) {
-    const user = await User.findById(userId);
+    const user = await UserModel.findById(userId);
     
     if (!user) {
       throw new Error('User not found');
     }
     
-    return user.balance;
+    return parseFloat(user.balance);
   }
   
   /**
@@ -146,28 +152,58 @@ class BalanceService {
   async getTransactionHistory(userId, options = {}) {
     const { limit = 20, skip = 0, type, gameType } = options;
     
-    const query = { userId };
+    const filter = { userId };
+    if (type) filter.type = type;
+    if (gameType) filter.gameType = gameType;
     
-    if (type) {
-      query.type = type;
-    }
+    const transactions = await TransactionModel.findMany(filter, limit, skip);
     
-    if (gameType) {
-      query.gameType = gameType;
-    }
-    
-    const transactions = await Transaction.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-      
-    const count = await Transaction.countDocuments(query);
+    // Get total count for pagination (simplified)
+    const allTransactions = await TransactionModel.findMany(filter);
+    const count = allTransactions.length;
     
     return {
       transactions,
       total: count
     };
   }
+
+  /**
+   * Helper method to map transaction types to balance types
+   * @param {String} transactionType 
+   * @returns {String} Balance type
+   */
+  _mapTransactionTypeToBalanceType(transactionType) {
+    const mapping = {
+      'deposit': 'deposit',
+      'withdrawal': 'withdrawal',
+      'game_win': 'win',
+      'game_loss': 'loss',
+      'admin_adjustment': 'admin_adjustment',
+      'bonus': 'win'
+    };
+    
+    return mapping[transactionType] || 'admin_adjustment';
+  }
+
+  /**
+   * Get balance history for a user
+   * @param {String} userId - User ID
+   * @param {Number} limit - Number of records to return
+   * @returns {Promise<Array>} Balance history
+   */
+  async getBalanceHistory(userId, limit = 50) {
+    return await BalanceModel.getBalanceHistory(userId, limit);
+  }
+
+  /**
+   * Get current balance from balance history
+   * @param {String} userId - User ID
+   * @returns {Promise<Number>} Current balance
+   */
+  async getCurrentBalanceFromHistory(userId) {
+    return await BalanceModel.getCurrentBalance(userId);
+  }
 }
 
-module.exports = new BalanceService();
+export default new BalanceService();

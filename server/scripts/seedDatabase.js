@@ -1,85 +1,153 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { eq } from 'drizzle-orm';
 
-// Models
-import User from '../models/User.js';
-import Transaction from '../models/Transaction.js';
-import GameSession from '../models/GameSession.js';
-import GameLog from '../models/GameLog.js';
-import Balance from '../models/Balance.js';
+// Import Drizzle database and schema
+import { db, closeDB } from '../drizzle/db.js';
+import { users, balances, gameStats } from '../drizzle/schema.js';
 
-// Config
-dotenv.config({ path: '../.env' });
+dotenv.config();
 
-// Define MongoDB connection string
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/casino';
-
-/**
- * Seed database with initial data
- */
-const seedDatabase = async () => {
+async function seedDatabase() {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(MONGO_URI);
-    console.log('MongoDB connected for seeding...');
+    console.log('Starting database seeding...');
+
+    // Check if admin user already exists
+    const existingAdmin = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
     
-    // Clear existing data (optional - uncomment if you want to start fresh)
-    // await User.deleteMany({});
-    // await Transaction.deleteMany({});
-    // await GameSession.deleteMany({});
-    // await GameLog.deleteMany({});
-    // await Balance.deleteMany({});
-    
-    // Check if admin exists already
-    const adminExists = await User.findOne({ role: 'admin' });
-    
-    if (!adminExists) {
+    if (existingAdmin.length === 0) {
       console.log('Creating admin user...');
       
-      // Create admin user
-      const adminPassword = 'admin123'; // Change this in production!
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(adminPassword, salt);
+      // Hash the password
+      const hashedPassword = await bcrypt.hash('admin123', 12);
       
-      const admin = await User.create({
+      // Create admin user (ID will auto-increment)
+      await db.insert(users).values({
         username: 'admin',
         email: 'admin@casino.com',
         passwordHash: hashedPassword,
         role: 'admin',
-        balance: 100000, // $100,000 initial admin balance
-        isActive: true
+        balance: '100000', // Admin starts with 100k
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
-      
-      console.log(`Admin user created with ID: ${admin._id}`);
-      
-      // Create initial balance record for admin
-      await Balance.create({
-        userId: admin._id,
-        amount: 100000,
-        previousBalance: 0,
-        changeAmount: 100000,
-        type: 'admin_adjustment',
-        note: 'Initial admin balance',
-        adminId: admin._id
+
+      // Get the created admin user
+      const createdAdmin = await db.select().from(users).where(eq(users.username, 'admin')).limit(1);
+      const adminId = createdAdmin[0].id;
+
+      // Create admin balance record
+      await db.insert(balances).values({
+        userId: adminId,
+        amount: '100000',
+        previousBalance: '0',
+        changeAmount: '100000',
+        type: 'deposit',
+        note: 'Admin account creation - initial balance',
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
+
+      console.log('Admin user created successfully');
+    } else {
+      console.log('Admin user already exists');
     }
+
+    // Create some test player accounts
+    const testPlayers = [
+      { username: 'player1', email: 'player1@test.com' },
+      { username: 'player2', email: 'player2@test.com' },
+      { username: 'player3', email: 'player3@test.com' }
+    ];
+
+    for (const playerData of testPlayers) {
+      const existingPlayer = await db.select().from(users).where(eq(users.username, playerData.username)).limit(1);
+      
+      if (existingPlayer.length === 0) {
+        console.log(`Creating test player: ${playerData.username}...`);
+        
+        // Hash the password
+        const hashedPassword = await bcrypt.hash('password123', 12);
+        
+        // Create player user (ID will auto-increment)
+        await db.insert(users).values({
+          username: playerData.username,
+          email: playerData.email,
+          passwordHash: hashedPassword,
+          role: 'user',
+          balance: '1000', // Players start with 1k
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+
+        // Get the created player user
+        const createdPlayer = await db.select().from(users).where(eq(users.username, playerData.username)).limit(1);
+        const playerId = createdPlayer[0].id;
+
+        // Create player balance record
+        await db.insert(balances).values({
+          userId: playerId,
+          amount: '1000',
+          previousBalance: '0',
+          changeAmount: '1000',
+          type: 'deposit',
+          note: 'Player account creation - initial balance',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+
+        console.log(`Test player ${playerData.username} created successfully`);
+      } else {
+        console.log(`Test player ${playerData.username} already exists`);
+      }
+    }
+
+    // Initialize game statistics
+    console.log('Initializing game statistics...');
     
-    // Admin user creation complete
-    const adminUser = adminExists || await User.findOne({ role: 'admin' });
-    
+    const gameTypes = [
+      { type: 'roulette', name: 'Roulette' },
+      { type: 'blackjack', name: 'Blackjack' },
+      { type: 'crash', name: 'Crash' },
+      { type: 'plinko', name: 'Plinko' },
+      { type: 'wheel', name: 'Wheel' }
+    ];
+
+    for (const game of gameTypes) {
+      const existingStat = await db.select().from(gameStats).where(eq(gameStats.gameType, game.type)).limit(1);
+      
+      if (existingStat.length === 0) {
+        await db.insert(gameStats).values({
+          gameType: game.type,
+          name: game.name,
+          totalGamesPlayed: 0,
+          totalBetsAmount: '0',
+          totalWinningsAmount: '0',
+          houseProfit: '0',
+          dailyStats: JSON.stringify([]),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        console.log(`Created game stats for ${game.name}`);
+      } else {
+        console.log(`Game stats for ${game.name} already exist`);
+      }
+    }
+
     console.log('Database seeding completed successfully!');
+    
   } catch (error) {
     console.error('Error seeding database:', error);
+    process.exit(1);
   } finally {
-    // Close MongoDB connection
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed');
+    // Close database connection
+    await closeDB();
     process.exit(0);
   }
-};
+}
 
-// Execute the seeding function
+// Run the seeding
 seedDatabase();

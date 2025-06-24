@@ -1,130 +1,199 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
-import { authenticate } from '../middleware/auth.js';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
+
+// Import Drizzle models
+import UserModel from '../drizzle/models/User.js';
+import Balance from '../drizzle/models/Balance.js';
 
 const router = express.Router();
 
-// Register a new user
-router.post('/register', async (req, res) => {
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: 'Too many authentication attempts, please try again later'
+});
+
+// Register
+router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
-    const email = req.body.email || ''; // Make email optional
-    
-    // Check if user already exists (by username only)
-    const existingUser = await User.findOne({ username });
-    
+    const { username, email, password } = req.body;
+
+    // Check if user already exists
+    const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
-      return res.status(400).json({ 
-        message: 'User with this username already exists' 
-      });
+      return res.status(400).json({ message: 'Username already exists' });
     }
-    
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     // Create new user
-    const newUser = new User({
+    const newUser = await UserModel.create({
       username,
       email,
-      passwordHash: password, // Will be hashed by the pre-save hook
-      balance: 1000 // Starting balance for new users
+      passwordHash: hashedPassword,
+      role: 'user',
+      balance: '1000', // Starting balance as string for decimal field
+      isActive: true,
+      createdAt: new Date()
     });
-    
-    // Save user to database
-    await newUser.save();
-    
+
+    // Create initial balance record
+    await Balance.create({
+      userId: newUser.id,
+      amount: '1000', // Starting balance
+      previousBalance: '0',
+      changeAmount: '1000',
+      type: 'deposit',
+      note: 'Welcome bonus - account creation',
+      createdAt: new Date()
+    });
+
     // Generate JWT token
     const token = jwt.sign(
-      { userId: newUser._id, role: newUser.role },
-      process.env.JWT_SECRET || 'your_jwt_secret',
+      { 
+        userId: newUser.id, 
+        username: newUser.username, 
+        role: newUser.role 
+      },
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
+
+    // Set HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
     res.status(201).json({
       message: 'User registered successfully',
-      token,
       user: {
-        id: newUser._id,
+        id: newUser.id,
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
-        balance: newUser.balance
+        balance: 1000
       }
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    res.status(500).json({ message: 'Error creating user' });
   }
 });
 
-// Login user
-router.post('/login', async (req, res) => {
+// Login
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
-    
-    // Find user by username
-    const user = await User.findOne({ username });
-    
-    // Check if user exists
+
+    // Find user
+    const user = await UserModel.findOne({ username });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    
-    // Check password
-    const isMatch = await user.comparePassword(password);
-    
-    if (!isMatch) {
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(401).json({ message: 'Account is disabled' });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isPasswordValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
-    
-    // Update last login
-    user.lastLogin = Date.now();
-    await user.save();
-    
+
+    // Update last login using the correct method
+    await UserModel.updateById(user.id, { lastLogin: new Date() });
+
+    // Get current balance from the user record itself (since balance is stored in users table)
+    const currentBalance = parseFloat(user.balance || 0);
+
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET || 'your_jwt_secret',
+      { 
+        userId: user.id, 
+        username: user.username, 
+        role: user.role 
+      },
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
-    res.status(200).json({
+
+    // Set HTTP-only cookie
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    });
+
+    res.json({
       message: 'Login successful',
-      token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         role: user.role,
-        balance: user.balance
+        balance: currentBalance
       }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({ message: 'Error during login' });
   }
 });
 
-// Verify admin status
-router.get('/verify-admin', authenticate, async (req, res) => {
+// Logout
+router.post('/logout', (req, res) => {
+  // Clear the HTTP-only cookie
+  res.clearCookie('authToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  
+  res.json({ message: 'Logged out successfully' });
+});
+
+// Verify token
+router.get('/verify', async (req, res) => {
   try {
-    const user = req.user;
+    const token = req.cookies.authToken;
     
-    // Check if user has admin role
-    const isAdmin = user.role === 'admin';
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    res.status(200).json({
-      isAdmin,
+    // Check if user still exists and is active
+    const user = await UserModel.findById(decoded.userId);
+    if (!user || !user.isActive) {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+
+    // Get current balance from the user record
+    const currentBalance = parseFloat(user.balance || 0);
+
+    res.json({
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         role: user.role,
-        balance: user.balance
+        balance: currentBalance
       }
     });
   } catch (error) {
-    console.error('Admin verification error:', error);
-    res.status(500).json({ message: 'Server error during admin verification' });
+    console.error('Token verification error:', error);
+    res.status(401).json({ message: 'Invalid token' });
   }
 });
 

@@ -4,8 +4,8 @@
  * Provides real-time information about active game sessions
  */
 
-import GameSession from '../../models/GameSession.js';
-import User from '../../models/User.js';
+import GameSession from '../../drizzle/models/GameSession.js';
+import User from '../../drizzle/models/User.js';
 
 /**
  * Initialize live games socket handlers

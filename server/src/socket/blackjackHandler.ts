@@ -4,8 +4,30 @@ import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import GameStat from '../../drizzle/models/GameStat.js';
 
+interface Card {
+  suit: string;
+  rank: string;
+  value: number;
+}
+
+interface Game {
+  userId: number;
+  betAmount: number;
+  playerHand: Card[];
+  dealerHand: Card[];
+  deck: Card[];
+  status: 'active' | 'completed';
+  result?: string;
+  winAmount?: number;
+  startTime: number;
+}
+
 class BlackjackHandler {
-  constructor(io) {
+  public io: any;
+  public games: Map<string, Game>;
+  public playerGames: Map<number, string>;
+
+  constructor(io: any) {
     this.io = io;
     this.games = new Map(); // gameId -> game state
     this.playerGames = new Map(); // userId -> gameId

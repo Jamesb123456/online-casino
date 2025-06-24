@@ -9,9 +9,26 @@
  * - Active player tracking and presence management
  */
 
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
+// Use ES6 imports to avoid variable conflicts
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
 const { calculateHouseEdge } = require('../utils/gameUtils');
+
+// Namespace crash-specific variables to avoid conflicts
+const crashGame = {
+  activeSessions: new Map(),
+  gameHistory: [],
+  gameState: {
+    status: 'waiting', // 'waiting', 'countdown', 'flying', 'crashed'
+    players: new Map(), // Map of playerId -> player data
+    bets: new Map(), // Map of playerId -> bet data  
+    currentMultiplier: 1,
+    gameId: null,
+    crashPoint: null,
+    startTime: null,
+    tickInterval: null
+  }
+};
 
 /**
  * Initialize Crash game socket handlers
@@ -128,7 +145,7 @@ module.exports = function(namespace) {
         // Check user balance
         try {
           // In production, get the real user balance from database
-          const userBalance = await balanceService.getBalance(userId);
+          const userBalance = await BalanceService.getBalance(userId);
           
           if (amount > userBalance) {
             return callback({ success: false, error: 'Insufficient balance' });
@@ -140,7 +157,7 @@ module.exports = function(namespace) {
         
         // Use balanceService to record the bet transaction
         try {
-          await balanceService.placeBet(userId, amount, 'crash', {
+          await BalanceService.placeBet(userId, amount, 'crash', {
             autoCashoutAt,
             gameId: gameState.gameId || `game_${Date.now()}`
           });
@@ -160,7 +177,7 @@ module.exports = function(namespace) {
         });
         
         // Log bet placed
-        loggingService.logBetPlaced('crash', gameState.gameId, userId, amount, {
+        LoggingService.logBetPlaced('crash', gameState.gameId, userId, amount, {
           autoCashoutAt,
           timestamp: new Date()
         });
@@ -219,7 +236,7 @@ module.exports = function(namespace) {
         
         // Use balanceService to record the win
         try {
-          await balanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
+          await BalanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
             multiplier: cashoutMultiplier,
             profit,
             gameId: gameState.gameId
@@ -230,7 +247,7 @@ module.exports = function(namespace) {
         }
         
         // Log cash out win
-        loggingService.logBetResult('crash', gameState.gameId, userId, bet.amount, winAmount, true, {
+        LoggingService.logBetResult('crash', gameState.gameId, userId, bet.amount, winAmount, true, {
           multiplier: cashoutMultiplier,
           method: 'manual_cashout'
         });
@@ -304,7 +321,7 @@ module.exports = function(namespace) {
     console.log(`Starting new crash game with crash point: ${gameState.crashPoint}x`);
     
     // Log game starting
-    loggingService.logGameStart('crash', gameState.gameId, {
+    LoggingService.logGameStart('crash', gameState.gameId, {
       crashPoint: gameState.crashPoint,
       houseEdge,
       startTime: new Date()
@@ -389,7 +406,7 @@ module.exports = function(namespace) {
         
         // Use balanceService to record the win
         try {
-          await balanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
+          await BalanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
             multiplier: cashoutMultiplier,
             profit,
             gameId: gameState.gameId,
@@ -451,7 +468,7 @@ module.exports = function(namespace) {
     }
     
     // Log game ended
-    loggingService.logGameEnd('crash', gameState.gameId, {
+    LoggingService.logGameEnd('crash', gameState.gameId, {
       finalMultiplier: gameState.currentMultiplier,
       gameLength: (Date.now() - gameState.startTime) / 1000
     }, {
@@ -481,7 +498,7 @@ module.exports = function(namespace) {
     for (const [userId, bet] of activeBets.entries()) {
       if (!bet.cashedOut) {
         // Log the lost bet
-        loggingService.logBetResult('crash', gameState.gameId, userId, bet.amount, 0, false, {
+        LoggingService.logBetResult('crash', gameState.gameId, userId, bet.amount, 0, false, {
           crashPoint: gameState.crashPoint,
           timestamp: new Date()
         });
@@ -529,7 +546,7 @@ module.exports = function(namespace) {
   }
   
   // Log service initialization
-  loggingService.logGameEvent('crash', 'service_initialized', {
+  LoggingService.logGameEvent('crash', 'service_initialized', {
     timestamp: new Date()
   });
   

@@ -149,10 +149,10 @@ class BalanceService {
    * @param {String} options.gameType - Filter by game type
    * @returns {Promise<Array>} Transactions
    */
-  async getTransactionHistory(userId, options = {}) {
+  async getTransactionHistory(userId: string, options: any = {}) {
     const { limit = 20, skip = 0, type, gameType } = options;
     
-    const filter = { userId };
+    const filter: any = { userId };
     if (type) filter.type = type;
     if (gameType) filter.gameType = gameType;
     
@@ -203,6 +203,35 @@ class BalanceService {
    */
   async getCurrentBalanceFromHistory(userId) {
     return await BalanceModel.getCurrentBalance(userId);
+  }
+
+  /**
+   * Check if user has sufficient balance for a bet
+   * @param {String} userId - User ID
+   * @param {Number} amount - Amount to check
+   * @returns {Promise<Boolean>} Whether user has sufficient balance
+   */
+  async hasSufficientBalance(userId, amount) {
+    try {
+      const balance = await this.getBalance(userId);
+      return balance >= amount;
+    } catch (error) {
+      console.error('Error checking sufficient balance:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Alias for updateBalance for backward compatibility
+   * @param {String} userId - User ID
+   * @param {Number} amount - Amount to add/subtract
+   * @param {String} type - Transaction type
+   * @param {String} gameType - Game type
+   * @param {Object} metadata - Additional metadata
+   * @returns {Promise<Object>} Updated user and transaction
+   */
+  async updateGameBalance(userId, amount, type, gameType = null, metadata = {}) {
+    return this.updateBalance(userId, amount, type, gameType, metadata);
   }
 }
 

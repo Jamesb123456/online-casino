@@ -9,6 +9,37 @@
 // Import Drizzle models
 import GameLog from '../../drizzle/models/GameLog.js';
 
+// Type definitions
+interface LogFilters {
+  userId?: string;
+  gameType?: string;
+  eventType?: string | RegExp;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  limit?: number;
+}
+
+interface QueryFilters {
+  userId?: string;
+  gameType?: string;
+  eventType?: string | { $regex: RegExp };
+  timestamp?: {
+    $gte?: Date;
+    $lte?: Date;
+  };
+}
+
+interface ParsedLogEntry {
+  id?: number;
+  userId?: number | null;
+  gameType: string;
+  eventType: string;
+  eventDetails: any;
+  sessionId?: number | null;
+  timestamp: Date;
+  username?: string | null;
+}
+
 /**
  * Enhanced logging service for game activities and system events
  */
@@ -17,17 +48,17 @@ class LoggingService {
    * Log a game action
    * @param {string} userId - User performing the action
    * @param {string} gameType - Type of game (crash, plinko, etc.)
-   * @param {string} action - Action being performed
-   * @param {Object} gameData - Game-specific data
+   * @param {string} eventType - Event type being performed
+   * @param {Object} eventDetails - Game-specific data
    * @param {string} sessionId - Optional game session ID
    */
-  static async logGameAction(userId, gameType, action, gameData = {}, sessionId = null) {
+  static async logGameAction(userId: string, gameType: string, eventType: string, eventDetails: any = {}, sessionId: number | null = null): Promise<void> {
     try {
       await GameLog.create({
-        userId,
+        userId: parseInt(userId),
         gameType,
-        action,
-        gameData: JSON.stringify(gameData),
+        eventType,
+        eventDetails,
         sessionId,
         timestamp: new Date()
       });
@@ -40,16 +71,16 @@ class LoggingService {
   /**
    * Log user authentication events
    * @param {string} userId - User ID
-   * @param {string} action - Authentication action (login, logout, failed_login)
+   * @param {string} eventType - Authentication event type (login, logout, failed_login)
    * @param {Object} metadata - Additional metadata (IP, user agent, etc.)
    */
-  static async logAuthAction(userId, action, metadata = {}) {
+  static async logAuthAction(userId: string, eventType: string, metadata: any = {}): Promise<void> {
     try {
       await GameLog.create({
-        userId,
+        userId: parseInt(userId),
         gameType: 'system',
-        action: `auth_${action}`,
-        gameData: JSON.stringify(metadata),
+        eventType: `auth_${eventType}`,
+        eventDetails: metadata,
         timestamp: new Date()
       });
     } catch (error) {
@@ -60,16 +91,16 @@ class LoggingService {
   /**
    * Log admin actions
    * @param {string} adminId - Admin user ID
-   * @param {string} action - Admin action
+   * @param {string} eventType - Admin event type
    * @param {Object} targetData - Data about what was affected
    */
-  static async logAdminAction(adminId, action, targetData = {}) {
+  static async logAdminAction(adminId: string, eventType: string, targetData: any = {}): Promise<void> {
     try {
       await GameLog.create({
-        userId: adminId,
+        userId: parseInt(adminId),
         gameType: 'admin',
-        action,
-        gameData: JSON.stringify(targetData),
+        eventType,
+        eventDetails: targetData,
         timestamp: new Date()
       });
     } catch (error) {
@@ -83,13 +114,13 @@ class LoggingService {
    * @param {Object} data - Event data
    * @param {string} level - Log level (info, warning, error)
    */
-  static async logSystemEvent(event, data = {}, level = 'info') {
+  static async logSystemEvent(event: string, data: any = {}, level: string = 'info'): Promise<void> {
     try {
       await GameLog.create({
         userId: null, // System events don't have a user
         gameType: 'system',
-        action: `${level}_${event}`,
-        gameData: JSON.stringify(data),
+        eventType: `${level}_${event}`,
+        eventDetails: data,
         timestamp: new Date()
       });
     } catch (error) {
@@ -102,42 +133,33 @@ class LoggingService {
    * @param {Object} filters - Filter options
    * @returns {Promise<Array>} Filtered logs
    */
-  static async getLogs(filters = {}) {
+  static async getLogs(filters: LogFilters = {}): Promise<ParsedLogEntry[]> {
     try {
       const {
         userId,
         gameType,
-        action,
+        eventType,
         startDate,
         endDate,
         limit = 100
       } = filters;
 
-      const queryFilters = {};
-
-      if (userId) queryFilters.userId = userId;
-      if (gameType) queryFilters.gameType = gameType;
-      if (action) {
-        if (typeof action === 'string') {
-          queryFilters.action = action;
-        } else {
-          queryFilters.action = { $regex: action };
-        }
-      }
-
       if (startDate || endDate) {
-        queryFilters.timestamp = {};
-        if (startDate) queryFilters.timestamp.$gte = new Date(startDate);
-        if (endDate) queryFilters.timestamp.$lte = new Date(endDate);
+        return await GameLog.searchByDateRange(
+          startDate ? new Date(startDate) : null,
+          endDate ? new Date(endDate) : null
+        ) as ParsedLogEntry[];
       }
 
-      const logs = await GameLog.getLogsWithFilters(queryFilters);
-      
-      // Parse gameData back to objects
-      return logs.map(log => ({
-        ...log,
-        gameData: log.gameData ? JSON.parse(log.gameData) : {}
-      }));
+      if (gameType) {
+        return await GameLog.getLogsByGameType(gameType, limit) as ParsedLogEntry[];
+      }
+
+      if (userId) {
+        return await GameLog.getRecentUserLogs(parseInt(userId), limit) as ParsedLogEntry[];
+      }
+
+      return await GameLog.findWithDetails(limit) as ParsedLogEntry[];
     } catch (error) {
       console.error('Error fetching logs:', error);
       return [];
@@ -150,15 +172,9 @@ class LoggingService {
    * @param {number} limit - Maximum number of logs to return
    * @returns {Promise<Array>} User activity logs
    */
-  static async getUserLogs(userId, limit = 50) {
+  static async getUserLogs(userId: string, limit: number = 50): Promise<ParsedLogEntry[]> {
     try {
-      const logs = await GameLog.getUserLogs(userId);
-      
-      // Parse gameData and limit results
-      return logs.slice(0, limit).map(log => ({
-        ...log,
-        gameData: log.gameData ? JSON.parse(log.gameData) : {}
-      }));
+      return await GameLog.getRecentUserLogs(parseInt(userId), limit) as ParsedLogEntry[];
     } catch (error) {
       console.error('Error fetching user logs:', error);
       return [];
@@ -171,15 +187,9 @@ class LoggingService {
    * @param {number} limit - Maximum number of logs to return
    * @returns {Promise<Array>} Game type logs
    */
-  static async getGameTypeLogs(gameType, limit = 100) {
+  static async getGameTypeLogs(gameType: string, limit: number = 100): Promise<ParsedLogEntry[]> {
     try {
-      const logs = await GameLog.getGameTypeLogs(gameType);
-      
-      // Parse gameData and limit results
-      return logs.slice(0, limit).map(log => ({
-        ...log,
-        gameData: log.gameData ? JSON.parse(log.gameData) : {}
-      }));
+      return await GameLog.getLogsByGameType(gameType, limit);
     } catch (error) {
       console.error('Error fetching game type logs:', error);
       return [];
@@ -191,16 +201,14 @@ class LoggingService {
    * @param {number} daysToKeep - Number of days to keep logs
    * @returns {Promise<number>} Number of logs deleted
    */
-  static async cleanupOldLogs(daysToKeep = 30) {
+  static async cleanupOldLogs(daysToKeep: number = 30): Promise<number> {
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
-      // Note: This would need to be implemented with appropriate Drizzle delete query
-      // For now, we'll log the intention
       console.log(`Would clean up logs older than ${cutoffDate.toISOString()}`);
       
-      return 0; // Return 0 for now
+      return 0;
     } catch (error) {
       console.error('Error cleaning up old logs:', error);
       return 0;

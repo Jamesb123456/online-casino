@@ -12,12 +12,17 @@ class BalanceModel {
         updatedAt: new Date(),
       });
 
-      // Get the created balance record
-      const balanceId = result.insertId;
-      const [balance] = await db.select().from(balances).where(eq(balances.id, balanceId));
+      // For MySQL, we need to get the last inserted ID differently
+      // Get the created balance record using the result's insertId or by querying the latest record
+      const [balance] = await db
+        .select()
+        .from(balances)
+        .where(eq(balances.userId, balanceData.userId))
+        .orderBy(desc(balances.createdAt))
+        .limit(1);
       return balance;
     } catch (error) {
-      throw new Error(`Error creating balance record: ${error.message}`);
+      throw new Error(`Error creating balance record: ${(error as Error).message}`);
     }
   }
 
@@ -27,7 +32,7 @@ class BalanceModel {
       const [balance] = await db.select().from(balances).where(eq(balances.id, id));
       return balance || null;
     } catch (error) {
-      throw new Error(`Error finding balance by ID: ${error.message}`);
+      throw new Error(`Error finding balance by ID: ${(error as Error).message}`);
     }
   }
 
@@ -43,7 +48,7 @@ class BalanceModel {
 
       return latestBalance ? parseFloat(latestBalance.amount) : 0;
     } catch (error) {
-      throw new Error(`Error getting current balance: ${error.message}`);
+      throw new Error(`Error getting current balance: ${(error as Error).message}`);
     }
   }
 
@@ -73,7 +78,7 @@ class BalanceModel {
 
       return balanceHistory;
     } catch (error) {
-      throw new Error(`Error getting balance history: ${error.message}`);
+      throw new Error(`Error getting balance history: ${(error as Error).message}`);
     }
   }
 
@@ -90,7 +95,7 @@ class BalanceModel {
 
       return userBalances;
     } catch (error) {
-      throw new Error(`Error finding balances by user ID: ${error.message}`);
+      throw new Error(`Error finding balances by user ID: ${(error as Error).message}`);
     }
   }
 
@@ -102,29 +107,39 @@ class BalanceModel {
   // Update balance record
   static async update(id, updateData) {
     try {
-      const [updatedBalance] = await db
+      await db
         .update(balances)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(balances.id, id))
-        .returning();
+        .where(eq(balances.id, id));
+
+      // Get the updated record
+      const [updatedBalance] = await db
+        .select()
+        .from(balances)
+        .where(eq(balances.id, id));
 
       return updatedBalance;
     } catch (error) {
-      throw new Error(`Error updating balance: ${error.message}`);
+      throw new Error(`Error updating balance: ${(error as Error).message}`);
     }
   }
 
   // Delete balance record
   static async delete(id) {
     try {
-      const [deletedBalance] = await db
-        .delete(balances)
-        .where(eq(balances.id, id))
-        .returning();
+      // Get the record before deleting it
+      const [balanceToDelete] = await db
+        .select()
+        .from(balances)
+        .where(eq(balances.id, id));
 
-      return deletedBalance;
+      await db
+        .delete(balances)
+        .where(eq(balances.id, id));
+
+      return balanceToDelete;
     } catch (error) {
-      throw new Error(`Error deleting balance: ${error.message}`);
+      throw new Error(`Error deleting balance: ${(error as Error).message}`);
     }
   }
 
@@ -150,7 +165,12 @@ class BalanceModel {
         .leftJoin(users, eq(balances.userId, users.id));
 
       if (userId) {
-        query = query.where(eq(balances.userId, userId));
+        const results = await query
+          .where(eq(balances.userId, userId))
+          .orderBy(desc(balances.createdAt))
+          .limit(limit)
+          .offset(offset);
+        return results;
       }
 
       const results = await query
@@ -160,51 +180,59 @@ class BalanceModel {
 
       return results;
     } catch (error) {
-      throw new Error(`Error finding balances with details: ${error.message}`);
+      throw new Error(`Error finding balances with details: ${(error as Error).message}`);
     }
   }
 
   // Find balances by type
   static async findByType(type, userId = null, limit = 50) {
     try {
-      let query = db
-        .select()
-        .from(balances)
-        .where(eq(balances.type, type));
-
       if (userId) {
-        query = query.where(eq(balances.userId, userId));
+        const results = await db
+          .select()
+          .from(balances)
+          .where(and(eq(balances.type, type), eq(balances.userId, userId)))
+          .orderBy(desc(balances.createdAt))
+          .limit(limit);
+        return results;
       }
 
-      const results = await query
+      const results = await db
+        .select()
+        .from(balances)
+        .where(eq(balances.type, type))
         .orderBy(desc(balances.createdAt))
         .limit(limit);
 
       return results;
     } catch (error) {
-      throw new Error(`Error finding balances by type: ${error.message}`);
+      throw new Error(`Error finding balances by type: ${(error as Error).message}`);
     }
   }
 
   // Find balances by game type
   static async findByGameType(gameType, userId = null, limit = 50) {
     try {
-      let query = db
-        .select()
-        .from(balances)
-        .where(eq(balances.gameType, gameType));
-
       if (userId) {
-        query = query.where(eq(balances.userId, userId));
+        const results = await db
+          .select()
+          .from(balances)
+          .where(and(eq(balances.gameType, gameType), eq(balances.userId, userId)))
+          .orderBy(desc(balances.createdAt))
+          .limit(limit);
+        return results;
       }
 
-      const results = await query
+      const results = await db
+        .select()
+        .from(balances)
+        .where(eq(balances.gameType, gameType))
         .orderBy(desc(balances.createdAt))
         .limit(limit);
 
       return results;
     } catch (error) {
-      throw new Error(`Error finding balances by game type: ${error.message}`);
+      throw new Error(`Error finding balances by game type: ${(error as Error).message}`);
     }
   }
 
@@ -250,7 +278,7 @@ class BalanceModel {
         netProfit: totalWins - totalLosses,
       };
     } catch (error) {
-      throw new Error(`Error getting balance stats: ${error.message}`);
+      throw new Error(`Error getting balance stats: ${(error as Error).message}`);
     }
   }
 
@@ -265,37 +293,20 @@ class BalanceModel {
     return result[0] || null;
   }
 
-  static async findOne(conditions) {
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
-      whereConditions.push(eq(balances[key], value));
-    });
-
+  // Get balance by specific user ID and type
+  static async findByUserIdAndType(userId, type) {
     const result = await db
       .select()
       .from(balances)
-      .where(and(...whereConditions))
+      .where(and(eq(balances.userId, userId), eq(balances.type, type)))
       .limit(1);
     
     return result[0] || null;
   }
 
-  static async find(conditions = {}) {
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
-      whereConditions.push(eq(balances[key], value));
-    });
-
-    if (whereConditions.length === 0) {
-      return await db.select().from(balances);
-    }
-
-    return await db
-      .select()
-      .from(balances)
-      .where(and(...whereConditions));
+  // Get all balances (mainly for admin use)
+  static async findAll() {
+    return await db.select().from(balances);
   }
 }
 

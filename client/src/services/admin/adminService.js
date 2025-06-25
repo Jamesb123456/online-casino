@@ -73,7 +73,7 @@ class AdminService {
           totalCount: response.data.length
         };
       }
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Error fetching players:', error);
       throw error;

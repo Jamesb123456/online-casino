@@ -60,23 +60,18 @@ const PlayerManagement = () => {
       if (activeFilter !== 'all') params.activeOnly = activeFilter === 'active';
       if (roleFilter !== 'all') params.role = roleFilter;
       
-      console.log('Fetching players with params:', params);
       const response = await adminService.getPlayers(params);
-      console.log('API response:', response);
       
       if (response && response.players) {
-        console.log('Players found:', response.players.length);
         setPlayers(response.players);
         setTotalUsers(response.totalCount || response.players.length);
         setTotalPages(Math.ceil((response.totalCount || response.players.length) / rowsPerPage));
       } else {
-        console.error('API returned unexpected format for players');
         setPlayers([]);
         setTotalUsers(0);
         setTotalPages(1);
       }
     } catch (error) {
-      console.error('Error fetching players:', error);
       setPlayers([]);
       setTotalUsers(0);
       setTotalPages(1);

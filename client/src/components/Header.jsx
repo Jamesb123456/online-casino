@@ -95,6 +95,7 @@ const Header = () => {
           <nav className="hidden md:flex items-center space-x-1">
             <NavLink to="/" label="Home" />
             <NavLink to="/games" label="Games" />
+            <NavLink to="/rewards" label="Rewards" />
             {/* <NavLink to="/leaderboard" label="Leaderboard" /> */}
             
             {isAuthenticated ? (
@@ -129,6 +130,7 @@ const Header = () => {
             <div className="flex flex-col space-y-4 pb-4">
               <MobileNavLink to="/" label="Home" />
               <MobileNavLink to="/games" label="Games" />
+              <MobileNavLink to="/rewards" label="Rewards" />
               <MobileNavLink to="/leaderboard" label="Leaderboard" />
               
               {/* Mobile balance display */}

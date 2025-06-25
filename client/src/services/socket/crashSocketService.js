@@ -27,10 +27,15 @@ class CrashSocketService {
       
       // Merge provided userInfo with stored currentUser data
       const authData = {
-        userId: (userInfo?.userId || this.currentUser?.id || `user_${Date.now()}`),
-        username: (userInfo?.username || this.currentUser?.username || `Player_${Math.floor(Math.random() * 10000)}`),
+        userId: (userInfo?.userId || this.currentUser?.id || null),
+        username: (userInfo?.username || this.currentUser?.username || null),
         avatar: (userInfo?.avatar || this.currentUser?.avatar || null)
       };
+      
+      // Only initialize socket with proper authentication
+      if (!authData.userId || !authData.username) {
+        console.warn('Missing authentication data for socket connection');
+      }
       
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
@@ -38,6 +43,7 @@ class CrashSocketService {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
+        withCredentials: true, // Important: send cookies for authentication
         auth: authData
       });
 
@@ -47,9 +53,17 @@ class CrashSocketService {
         this.isConnected = true;
       });
 
-      this.socket.on('disconnect', () => {
-        console.log('Disconnected from crash socket server');
+      this.socket.on('disconnect', (reason) => {
+        console.log('Disconnected from crash socket server:', reason);
         this.isConnected = false;
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('Crash socket connection error:', error);
+        // Emit a custom event for authentication errors
+        if (error.message && error.message.includes('Authentication')) {
+          this.socket.emit('authenticationError', error.message);
+        }
       });
 
       this.socket.on('error', (error) => {

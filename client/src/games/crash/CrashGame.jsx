@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { formatMultiplier, getMultiplierColor } from './crashUtils';
 import CrashBettingPanel from './CrashBettingPanel';
 import CrashHistory from './CrashHistory';
@@ -7,6 +7,8 @@ import CrashActiveBets from './CrashActiveBets';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import crashSocketService from '../../services/socket/crashSocketService';
+import { AuthContext } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 // Don't destructure socket methods as they will lose their 'this' context
 // Access methods directly through the service object instead
@@ -398,6 +400,18 @@ const useRealSocket = () => {
 };
 
 const CrashGame = () => {
+  const { user, isAuthenticated } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const [connectionError, setConnectionError] = useState(null);
+  
+  // Check authentication status on component mount
+  useEffect(() => {
+    if (!isAuthenticated) {
+      console.log('User not authenticated, redirecting to login');
+      navigate('/login', { state: { from: '/games/crash', message: 'You must be logged in to play games.' } });
+    }
+  }, [isAuthenticated, navigate]);
+  
   // Use either mock or real socket based on flag
   let gameState, history, activePlayers = [], activeBets = [], socketPlaceBet, socketCashOut;
   
@@ -422,6 +436,24 @@ const CrashGame = () => {
     socketPlaceBet = (data, callback) => crashSocket.placeBet(data, callback);
     socketCashOut = (data, callback) => crashSocket.cashOut(data, callback);
   }
+  
+  // Listen for authentication errors
+  useEffect(() => {
+    const handleConnectError = (error) => {
+      console.error('Socket connection error:', error);
+      if (typeof error === 'string' && error.includes('Authentication')) {
+        setConnectionError('Authentication error. Please log in again.');
+        // Redirect to login after a short delay
+        setTimeout(() => navigate('/login'), 2000);
+      }
+    };
+    
+    // Subscribe to socket connection errors
+    crashSocket.onConnectError(handleConnectError);
+    
+    // Cleanup
+    return () => crashSocket.offConnectError(handleConnectError);
+  }, [navigate]);
   
   const [bet, setBet] = useState({
     amount: 10,

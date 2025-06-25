@@ -11,8 +11,9 @@ const eventHandlers = new Map();
 
 /**
  * Initialize Socket.IO connection
+ * @param {Object} authData - Optional auth data to include with connection
  */
-export const initializeSocket = () => {
+export const initializeSocket = (authData = null) => {
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
   // Close any existing socket
@@ -20,17 +21,32 @@ export const initializeSocket = () => {
     socket.close();
   }
   
+  // Get any existing token from local storage as fallback
+  const token = localStorage.getItem('authToken');
+  
   // Create new socket instance with cookie-based auth
+  // Also include auth data in socket handshake as fallback authentication method
   socket = io(SOCKET_URL, {
     withCredentials: true, // Send cookies with socket requests
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
+    auth: authData || (token ? { token } : {})
   });
   
   // Setup default event listeners
   setupDefaultEventHandlers();
+  
+  // Listen for auth errors
+  socket.on('connect_error', (err) => {
+    console.error('Socket connection error:', err.message);
+    
+    // If we get authentication errors, disconnect
+    if (err.message.includes('Authentication')) {
+      console.log('Authentication error with socket connection - disconnecting');
+    }
+  });
   
   return socket;
 };

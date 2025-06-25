@@ -62,15 +62,22 @@ module.exports = function(namespace) {
   namespace.on('connection', (socket) => {
     console.log('Client connected to crash namespace:', socket.id);
     
-    // Extract user ID and info from socket (in production, this would use proper authentication)
-    const userId = socket.handshake.auth.userId || socket.id;
-    const username = socket.handshake.auth.username || `Player_${userId.substring(0, 5)}`;
-    const avatar = socket.handshake.auth.avatar || null;
+    // Get authenticated user from socket
+    const user = (socket as any).user;
+    if (!user) {
+      console.error('Unauthenticated user in crash handler');
+      socket.disconnect();
+      return;
+    }
+    
+    const userId = user.userId;
+    const username = user.username;
+    const avatar = null; // Could be added to user model if needed
     
     // Store user connection with player info
     connectedUsers.set(userId, { 
       socket, 
-      balance: 1000, // Default balance, would be fetched from DB in production
+      balance: user.balance, // Use actual balance from authenticated user
       username,
       avatar
     });
@@ -127,6 +134,13 @@ module.exports = function(namespace) {
      */
     socket.on('placeBet', async (data, callback) => {
       try {
+        // Verify user is still authenticated
+        const authenticatedUser = (socket as any).user;
+        if (!authenticatedUser) {
+          callback({ success: false, message: 'Authentication required' });
+          return;
+        }
+
         const { amount, autoCashoutAt } = data;
         
         // Validate bet
@@ -210,10 +224,18 @@ module.exports = function(namespace) {
      */
     socket.on('cashOut', async (data, callback) => {
       try {
+        // Verify user is still authenticated
+        const authenticatedUser = (socket as any).user;
+        if (!authenticatedUser) {
+          callback({ success: false, message: 'Authentication required' });
+          return;
+        }
+        
         if (!gameState.isGameRunning) {
           return callback({ success: false, error: 'Game is not running' });
         }
         
+        const userId = authenticatedUser.userId;
         const bet = activeBets.get(userId);
         if (!bet) {
           return callback({ success: false, error: 'No active bet found' });

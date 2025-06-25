@@ -3,10 +3,10 @@ import { relations, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // Enums (MySQL uses ENUM differently than PostgreSQL)
 export const userRoleEnum = mysqlEnum('user_role', ['user', 'admin']);
-export const transactionTypeEnum = mysqlEnum('transaction_type', ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus']);
+export const transactionTypeEnum = mysqlEnum('transaction_type', ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus', 'login_reward']);
 export const transactionStatusEnum = mysqlEnum('transaction_status', ['pending', 'completed', 'failed', 'voided', 'processing']);
 export const gameTypeEnum = mysqlEnum('game_type', ['crash', 'plinko', 'wheel', 'roulette', 'blackjack']);
-export const balanceTypeEnum = mysqlEnum('balance_type', ['deposit', 'withdrawal', 'win', 'loss', 'admin_adjustment']);
+export const balanceTypeEnum = mysqlEnum('balance_type', ['deposit', 'withdrawal', 'win', 'loss', 'admin_adjustment', 'login_reward']);
 export const eventTypeEnum = mysqlEnum('event_type', ['session_start', 'bet_placed', 'bet_updated', 'game_result', 'win', 'loss', 'cashout', 'error', 'game_state_change']);
 
 // Users table
@@ -152,6 +152,18 @@ export const messages = mysqlTable('messages', {
   createdAtIdx: index('messages_created_at_idx').on(table.createdAt),
 }));
 
+// Login Rewards table
+export const loginRewards = mysqlTable('login_rewards', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').notNull().references(() => users.id),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  transactionId: int('transaction_id').references(() => transactions.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('login_rewards_user_id_idx').on(table.userId),
+  createdAtIdx: index('login_rewards_created_at_idx').on(table.createdAt),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(transactions),
@@ -159,6 +171,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   gameLogs: many(gameLogs),
   balances: many(balances),
   messages: many(messages),
+  loginRewards: many(loginRewards),
 }));
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
@@ -220,6 +233,17 @@ export const balancesRelations = relations(balances, ({ one }) => ({
   }),
 }));
 
+export const loginRewardsRelations = relations(loginRewards, ({ one }) => ({
+  user: one(users, {
+    fields: [loginRewards.userId],
+    references: [users.id],
+  }),
+  transaction: one(transactions, {
+    fields: [loginRewards.transactionId],
+    references: [transactions.id],
+  }),
+}));
+
 export const messagesRelations = relations(messages, ({ one }) => ({
   user: one(users, {
     fields: [messages.userId],
@@ -241,4 +265,6 @@ export type NewBalance = InferInsertModel<typeof balances>;
 export type GameStat = InferSelectModel<typeof gameStats>;
 export type NewGameStat = InferInsertModel<typeof gameStats>;
 export type Message = InferSelectModel<typeof messages>;
-export type NewMessage = InferInsertModel<typeof messages>; 
+export type NewMessage = InferInsertModel<typeof messages>;
+export type LoginReward = InferSelectModel<typeof loginRewards>;
+export type NewLoginReward = InferInsertModel<typeof loginRewards>;

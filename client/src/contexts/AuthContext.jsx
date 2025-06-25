@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
+import socketService from '../services/socketService';
 
 // Create the auth context
 export const AuthContext = createContext();
@@ -45,6 +46,20 @@ export const AuthProvider = ({ children }) => {
       // The server will set the HTTP-only cookie
       // Get the user data from the response or fetch it again
       const user = response.user || await authService.getCurrentUser();
+      
+      // Store token in localStorage as fallback for socket connections
+      if (response.token) {
+        localStorage.setItem('authToken', response.token);
+      }
+      
+      // Reinitialize socket connection with authentication
+      socketService.disconnectSocket();
+      socketService.initializeSocket({ 
+        token: response.token, 
+        userId: user.id,
+        username: user.username 
+      });
+      
       setUser(user);
       return user;
     } catch (err) {
@@ -60,6 +75,15 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       await authService.logout();
+      
+      // Remove token from localStorage
+      localStorage.removeItem('authToken');
+      
+      // Disconnect and reinitialize socket without auth
+      socketService.disconnectSocket();
+      
+      // When user logs out, we don't initialize socket right away
+      // This prevents unauthenticated socket connections
     } catch (err) {
       console.error('Logout error:', err);
     } finally {

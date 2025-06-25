@@ -162,8 +162,8 @@ router.delete('/users/:id', auth, async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete user - using findByIdAndDelete if deleteById doesn't exist
-    await UserModel.findByIdAndDelete(parseInt(id));
+    // Delete user
+    await UserModel.delete(parseInt(id));
 
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -187,11 +187,12 @@ router.get('/dashboard', auth, async (req: Request, res: Response) => {
       }
     );
     
-    // Get game stats - use find() if getGameStatistics doesn't exist
-    const gameStats = await GameStatModel.find();
+    // Get game stats
+    const gameStats = await GameStatModel.findAll();
     
-    // Get total stats - create basic stats if getTotalStats doesn't exist
-    const totalUsers = await UserModel.countDocuments();
+    // Get total stats
+    const allUsers = await UserModel.findAll();
+    const totalUsers = allUsers.length;
     const totalStats = {
       totalUsers,
       activeUsers: totalUsers,
@@ -215,8 +216,8 @@ router.get('/games', auth, async (req: Request, res: Response) => {
   if (!checkAdminRole(req, res)) return;
   
   try {
-    // Use find() method since getGameStatistics might not exist
-    const gameStats = await GameStatModel.find();
+    // Use findAll() method to get game statistics
+    const gameStats = await GameStatModel.findAll();
     
     // Sort the results manually if needed
     gameStats.sort((a, b) => Number(b.totalGamesPlayed) - Number(a.totalGamesPlayed));
@@ -273,10 +274,7 @@ router.get('/transactions', auth, async (req: Request, res: Response) => {
     const sortOrderStr = typeof sortOrder === 'string' ? sortOrder : 'desc';
     
     const transactions = await Transaction.find(filter, {
-      populate: ['userId', 'createdBy'],
-      skip: (pageNumber - 1) * limitNumber,
-      limit: limitNumber,
-      sort: { [sortByStr]: sortOrderStr === 'desc' ? -1 : 1 }
+      limit: limitNumber
     });
 
     res.json(transactions);

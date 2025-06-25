@@ -3,6 +3,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import adminService from '../../services/admin/adminService';
+import { FaSort, FaSortUp, FaSortDown } from 'react-icons/fa';
 
 /**
  * Player Management Component
@@ -11,9 +12,18 @@ import adminService from '../../services/admin/adminService';
 const PlayerManagement = () => {
   // State for players data
   const [players, setPlayers] = useState([]);
-  const [filteredPlayers, setFilteredPlayers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Sorting and pagination
+  const [sortField, setSortField] = useState('username');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'active', 'inactive'
+  const [roleFilter, setRoleFilter] = useState('all'); // 'all', 'user', 'admin'
   
   // State for modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -25,6 +35,7 @@ const PlayerManagement = () => {
   // Form state
   const [formData, setFormData] = useState({
     username: '',
+    email: '',
     balance: 0,
     role: 'player',
     isActive: true
@@ -33,42 +44,97 @@ const PlayerManagement = () => {
   const [fundAmount, setFundAmount] = useState(0);
   
   // Fetch players data from API
-  useEffect(() => {
-    const fetchPlayers = async () => {
-      try {
-        const response = await adminService.getPlayers();
-        if (response && response.players) {
-          setPlayers(response.players);
-          setFilteredPlayers(response.players);
-        } else {
-          console.error('API returned unexpected format for players');
-          setPlayers([]);
-          setFilteredPlayers([]);
-        }
-      } catch (error) {
-        console.error('Error fetching players:', error);
+  const fetchPlayers = async () => {
+    setIsLoading(true);
+    try {
+      // Prepare query params for direct database table access
+      const params = {
+        page: currentPage,
+        limit: rowsPerPage,
+        sortBy: sortField,
+        sortDir: sortDirection
+      };
+      
+      // Add filters if set
+      if (searchTerm) params.searchTerm = searchTerm;
+      if (activeFilter !== 'all') params.activeOnly = activeFilter === 'active';
+      if (roleFilter !== 'all') params.role = roleFilter;
+      
+      console.log('Fetching players with params:', params);
+      const response = await adminService.getPlayers(params);
+      console.log('API response:', response);
+      
+      if (response && response.players) {
+        console.log('Players found:', response.players.length);
+        setPlayers(response.players);
+        setTotalUsers(response.totalCount || response.players.length);
+        setTotalPages(Math.ceil((response.totalCount || response.players.length) / rowsPerPage));
+      } else {
+        console.error('API returned unexpected format for players');
         setPlayers([]);
-        setFilteredPlayers([]);
-      } finally {
-        setIsLoading(false);
+        setTotalUsers(0);
+        setTotalPages(1);
       }
-    };
-
-    fetchPlayers();
-  }, []);
-  
-  // Filter players based on search term
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredPlayers(players);
-      return;
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      setPlayers([]);
+      setTotalUsers(0);
+      setTotalPages(1);
+    } finally {
+      setIsLoading(false);
     }
-    
-    const filtered = players.filter(player => 
-      player.username.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredPlayers(filtered);
-  }, [searchTerm, players]);
+  };
+
+  // Fetch players when parameters change
+  useEffect(() => {
+    fetchPlayers();
+  }, [currentPage, rowsPerPage, sortField, sortDirection, searchTerm, activeFilter, roleFilter]);
+  
+  // Handle sort toggle
+  const handleSortChange = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1); // Reset to first page on sort change
+  };
+  
+  // Get sort icon for column
+  const getSortIcon = (field) => {
+    if (sortField !== field) return <FaSort className="text-gray-400" />;
+    return sortDirection === 'asc' ? <FaSortUp /> : <FaSortDown />;
+  };
+  
+  // Handle search input changes - debounced search
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setCurrentPage(1); // Reset to first page on search
+  };
+  
+  // Handle filter changes
+  const handleFilterChange = (filterType, value) => {
+    if (filterType === 'active') {
+      setActiveFilter(value);
+    } else if (filterType === 'role') {
+      setRoleFilter(value);
+    }
+    setCurrentPage(1); // Reset to first page on filter change
+  };
+  
+  // Handle rows per page change
+  const handleRowsPerPageChange = (e) => {
+    setRowsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page
+  };
+  
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleString();
+  };
   
   // Handle form input changes
   const handleInputChange = (e) => {
@@ -87,8 +153,6 @@ const PlayerManagement = () => {
     }).format(value);
   };
   
-  // CRUD operations - in a real app these would make API calls
-  
   // Add new player
   const handleAddPlayer = async () => {
     try {
@@ -101,18 +165,7 @@ const PlayerManagement = () => {
       const response = await adminService.createPlayer(playerData);
       
       if (response && response.player) {
-        setPlayers(prev => [...prev, response.player]);
-        setFilteredPlayers(prev => [...prev, response.player]);
-      } else {
-        // Fallback if API response format is unexpected
-        const newPlayer = {
-          id: players.length + 1,
-          ...formData,
-          balance: parseFloat(formData.balance),
-          gamesPlayed: 0
-        };
-        setPlayers(prev => [...prev, newPlayer]);
-        setFilteredPlayers(prev => [...prev, newPlayer]);
+        fetchPlayers(); // Refresh the player list
       }
       
       setShowAddModal(false);
@@ -139,31 +192,8 @@ const PlayerManagement = () => {
   // Update player
   const handleUpdatePlayer = async () => {
     try {
-      const response = await adminService.updatePlayer(currentPlayer.id, formData);
-      
-      if (response && response.player) {
-        const updatedPlayers = players.map(player => 
-          player.id === currentPlayer.id ? response.player : player
-        );
-        setPlayers(updatedPlayers);
-        setFilteredPlayers(
-          filteredPlayers.map(player => 
-            player.id === currentPlayer.id ? response.player : player
-          )
-        );
-      } else {
-        // Fallback if API response is unexpected
-        const updatedPlayers = players.map(player => 
-          player.id === currentPlayer.id ? { ...player, ...formData } : player
-        );
-        setPlayers(updatedPlayers);
-        setFilteredPlayers(
-          filteredPlayers.map(player => 
-            player.id === currentPlayer.id ? { ...player, ...formData } : player
-          )
-        );
-      }
-      
+      await adminService.updatePlayer(currentPlayer.id, formData);
+      fetchPlayers(); // Refresh the player list
       setShowEditModal(false);
       resetForm();
     } catch (error) {
@@ -183,53 +213,14 @@ const PlayerManagement = () => {
   const handleFundUpdate = async (operation) => {
     try {
       const amount = parseFloat(fundAmount);
-      let response;
       
       if (operation === 'add') {
-        response = await adminService.addFunds(currentPlayer.id, amount);
+        await adminService.addFunds(currentPlayer.id, amount);
       } else {
-        response = await adminService.removeFunds(currentPlayer.id, amount);
+        await adminService.removeFunds(currentPlayer.id, amount);
       }
       
-      if (response && response.player) {
-        // Update local state with API response
-        const updatedPlayers = players.map(player => 
-          player.id === currentPlayer.id ? response.player : player
-        );
-        setPlayers(updatedPlayers);
-        setFilteredPlayers(
-          filteredPlayers.map(player => 
-            player.id === currentPlayer.id ? response.player : player
-          )
-        );
-      } else {
-        // Fallback if API response is unexpected
-        const updatedPlayers = players.map(player => {
-          if (player.id === currentPlayer.id) {
-            const newBalance = operation === 'add' 
-              ? player.balance + amount 
-              : Math.max(0, player.balance - amount);
-              
-            return { ...player, balance: newBalance };
-          }
-          return player;
-        });
-        
-        setPlayers(updatedPlayers);
-        setFilteredPlayers(
-          filteredPlayers.map(player => {
-            if (player.id === currentPlayer.id) {
-              const newBalance = operation === 'add' 
-                ? player.balance + amount 
-                : Math.max(0, player.balance - amount);
-                
-              return { ...player, balance: newBalance };
-            }
-            return player;
-          })
-        );
-      }
-      
+      fetchPlayers(); // Refresh the player list
       setShowFundModal(false);
     } catch (error) {
       console.error(`Error ${operation === 'add' ? 'adding' : 'removing'} funds:`, error);
@@ -247,12 +238,7 @@ const PlayerManagement = () => {
   const handleDeletePlayer = async () => {
     try {
       await adminService.deletePlayer(currentPlayer.id);
-      
-      // Update local state after successful API call
-      const updatedPlayers = players.filter(player => player.id !== currentPlayer.id);
-      setPlayers(updatedPlayers);
-      setFilteredPlayers(filteredPlayers.filter(player => player.id !== currentPlayer.id));
-      
+      fetchPlayers(); // Refresh the player list
       setShowDeleteModal(false);
     } catch (error) {
       console.error('Error deleting player:', error);
@@ -274,109 +260,173 @@ const PlayerManagement = () => {
   
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-white">Player Management</h1>
-        <Button 
-          color="success"
-          className="flex items-center" 
-          onClick={() => setShowAddModal(true)}
-        >
-          <span className="mr-2">➕</span>
-          Add Player
-        </Button>
-      </div>
-      
-      <Card className="bg-gray-800 text-white">
+      <Card>
         <div className="flex justify-between items-center mb-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-              <span className="text-gray-400">🔍</span>
-            </div>
+          <h2 className="text-xl font-bold">Player Management</h2>
+          <Button color="primary" onClick={() => setShowAddModal(true)}>
+            Add New Player
+          </Button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          {/* Search */}
+          <div className="md:col-span-2">
             <input
               type="text"
-              className="pl-10 p-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
-              placeholder="Search players..."
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              placeholder="Search by username..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
             />
           </div>
           
-          <div className="text-gray-400">
-            Showing {filteredPlayers.length} of {players.length} players
+          {/* Status Filter */}
+          <div>
+            <select
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              value={activeFilter}
+              onChange={(e) => handleFilterChange('active', e.target.value)}
+            >
+              <option value="all">All Users</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+            </select>
+          </div>
+          
+          {/* Role Filter */}
+          <div>
+            <select
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              value={roleFilter}
+              onChange={(e) => handleFilterChange('role', e.target.value)}
+            >
+              <option value="all">All Roles</option>
+              <option value="user">Users</option>
+              <option value="admin">Admins</option>
+            </select>
           </div>
         </div>
         
         {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="text-center py-8">
+            <p>Loading players...</p>
+          </div>
+        ) : players.length === 0 ? (
+          <div className="text-center py-8">
+            <p>No players found.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="py-3 px-4">Username</th>
-                  <th className="py-3 px-4">Balance</th>
-                  <th className="py-3 px-4">Games</th>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPlayers.map((player) => (
-                  <tr key={player.id} className="border-b border-gray-700 hover:bg-gray-700">
-                    <td className="py-3 px-4">{player.username}</td>
-                    <td className="py-3 px-4">{formatCurrency(player.balance)}</td>
-                    <td className="py-3 px-4">{player.gamesPlayed}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        player.role === 'vip' ? 'bg-purple-900 text-purple-200' : 'bg-blue-900 text-blue-200'
-                      }`}>
-                        {player.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        player.isActive ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
-                      }`}>
-                        {player.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Button 
-                        color="primary" 
-                        size="sm" 
-                        className="mr-2 flex items-center"
-                        onClick={() => handleFundClick(player)}
-                      >
-                        <span className="mr-1">💰</span>
-                        Funds
-                      </Button>
-                      <Button 
-                        color="warning" 
-                        size="sm"
-                        className="mr-2 flex items-center"
-                        onClick={() => handleEditClick(player)}
-                      >
-                        <span className="mr-1">✏️</span>
-                        Edit
-                      </Button>
-                      <Button 
-                        color="danger" 
-                        size="sm" 
-                        className="flex items-center"
-                        onClick={() => handleDeleteClick(player)}
-                      >
-                        <span className="mr-1">🗑️</span>
-                        Delete
-                      </Button>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-800 text-left">
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('id')}>
+                      ID {getSortIcon('id')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('username')}>
+                      Username {getSortIcon('username')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('isActive')}>
+                      Status {getSortIcon('isActive')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('role')}>
+                      Role {getSortIcon('role')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('balance')}>
+                      Balance {getSortIcon('balance')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('createdAt')}>
+                      Created {getSortIcon('createdAt')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('lastLogin')}>
+                      Last Login {getSortIcon('lastLogin')}
+                    </th>
+                    <th className="p-3 border-b border-gray-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {players.map(player => (
+                    <tr key={player.id} className="border-b border-gray-700 hover:bg-gray-800">
+                      <td className="p-3">{player.id}</td>
+                      <td className="p-3">{player.username}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 rounded-full text-xs ${player.isActive ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                          {player.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="p-3 capitalize">{player.role}</td>
+                      <td className="p-3">{formatCurrency(player.balance)}</td>
+                      <td className="p-3">{formatDate(player.createdAt)}</td>
+                      <td className="p-3">{formatDate(player.lastLogin)}</td>
+                      <td className="p-3 space-x-2 whitespace-nowrap">
+                        <Button color="secondary" size="small" onClick={() => handleEditClick(player)}>
+                          Edit
+                        </Button>
+                        <Button color="success" size="small" onClick={() => handleFundClick(player)}>
+                          Funds
+                        </Button>
+                        <Button color="danger" size="small" onClick={() => handleDeleteClick(player)}>
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination controls */}
+            <div className="mt-4 flex flex-col sm:flex-row justify-between items-center">
+              <div className="mb-3 sm:mb-0">
+                <select 
+                  className="p-2 bg-gray-700 border border-gray-600 rounded-md"
+                  value={rowsPerPage}
+                  onChange={handleRowsPerPageChange}
+                >
+                  <option value="10">10 per page</option>
+                  <option value="20">20 per page</option>
+                  <option value="50">50 per page</option>
+                  <option value="100">100 per page</option>
+                </select>
+                <span className="ml-2">Showing {players.length} of {totalUsers} users</span>
+              </div>
+              
+              <div className="flex space-x-1">
+                <Button 
+                  color="secondary" 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(1)}
+                >
+                  First
+                </Button>
+                <Button 
+                  color="secondary" 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                >
+                  Previous
+                </Button>
+                <span className="px-3 py-1 border border-gray-600 rounded-md bg-gray-800">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button 
+                  color="secondary" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                >
+                  Next
+                </Button>
+                <Button 
+                  color="secondary" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                >
+                  Last
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </Card>
       
@@ -395,20 +445,29 @@ const PlayerManagement = () => {
             <input
               type="text"
               name="username"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
               value={formData.username}
               onChange={handleInputChange}
             />
           </div>
           
-
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <input
+              type="email"
+              name="email"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              value={formData.email || ''}
+              onChange={handleInputChange}
+            />
+          </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Initial Balance</label>
             <input
               type="number"
               name="balance"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
               value={formData.balance}
               onChange={handleInputChange}
             />
@@ -418,12 +477,11 @@ const PlayerManagement = () => {
             <label className="block text-sm font-medium text-gray-300 mb-1">Role</label>
             <select
               name="role"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
               value={formData.role}
               onChange={handleInputChange}
             >
-              <option value="player">Player</option>
-              <option value="vip">VIP</option>
+              <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
           </div>
@@ -470,7 +528,7 @@ const PlayerManagement = () => {
             <input
               type="text"
               name="username"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
               value={formData.username}
               onChange={handleInputChange}
             />
@@ -481,8 +539,8 @@ const PlayerManagement = () => {
             <input
               type="email"
               name="email"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
-              value={formData.email}
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              value={formData.email || ''}
               onChange={handleInputChange}
             />
           </div>
@@ -491,12 +549,11 @@ const PlayerManagement = () => {
             <label className="block text-sm font-medium text-gray-300 mb-1">Role</label>
             <select
               name="role"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
               value={formData.role}
               onChange={handleInputChange}
             >
-              <option value="player">Player</option>
-              <option value="vip">VIP</option>
+              <option value="user">User</option>
               <option value="admin">Admin</option>
             </select>
           </div>

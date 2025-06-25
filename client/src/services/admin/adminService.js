@@ -53,12 +53,26 @@ class AdminService {
 
   /**
    * Get all players
-   * @param {Object} params - Query parameters like limit, page, searchTerm
+   * @param {Object} params - Query parameters for filtering and sorting
+   * @param {number} params.limit - Maximum number of results to return
+   * @param {number} params.page - Page number for pagination
+   * @param {string} params.searchTerm - Text to search for in usernames
+   * @param {string} params.sortBy - Field to sort by (e.g., 'username', 'balance', 'createdAt')
+   * @param {string} params.sortDir - Sort direction ('asc' or 'desc')
+   * @param {boolean} params.activeOnly - Filter by active users only
+   * @param {string} params.role - Filter by user role
    * @returns {Promise} Promise object with players data
    */
   async getPlayers(params = {}) {
     try {
       const response = await api.get('/admin/users', { params });
+      // Format the response to match what the component expects
+      if (Array.isArray(response.data)) {
+        return {
+          players: response.data,
+          totalCount: response.data.length
+        };
+      }
       return response.data;
     } catch (error) {
       console.error('Error fetching players:', error);

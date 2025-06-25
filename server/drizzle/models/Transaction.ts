@@ -3,34 +3,59 @@ import { alias } from 'drizzle-orm/mysql-core';
 import db from '../db.js';
 import { transactions, users } from '../schema.js';
 
+interface TransactionFilter {
+  userId?: number;
+  type?: 'deposit' | 'withdrawal' | 'game_win' | 'game_loss' | 'admin_adjustment' | 'bonus';
+  gameType?: 'crash' | 'plinko' | 'wheel' | 'roulette' | 'blackjack';
+  status?: 'pending' | 'completed' | 'failed' | 'voided' | 'processing';
+}
+
+interface QueryOptions {
+  populate?: string[];
+  sort?: { createdAt?: -1 | 1 };
+  limit?: number;
+}
+
+interface SelectFields {
+  [key: string]: any;
+}
+
 class TransactionModel {
   // Create a new transaction
-  static async create(transactionData) {
+  static async create(transactionData: any) {
     try {
-      const [transaction] = await db.insert(transactions).values({
+      await db.insert(transactions).values({
         ...transactionData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }).returning();
+      });
+
+      // Get the inserted transaction by finding the most recent one for this user
+      const [transaction] = await db.select().from(transactions)
+        .where(eq(transactions.userId, transactionData.userId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(1);
 
       return transaction;
     } catch (error) {
-      throw new Error(`Error creating transaction: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error creating transaction: ${err.message}`);
     }
   }
 
   // Find transaction by ID
-  static async findById(id) {
+  static async findById(id: number) {
     try {
       const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
       return transaction || null;
     } catch (error) {
-      throw new Error(`Error finding transaction by ID: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error finding transaction by ID: ${err.message}`);
     }
   }
 
   // Find transaction by ID with user details
-  static async findByIdWithUser(id) {
+  static async findByIdWithUser(id: number) {
     try {
       const [transaction] = await db
         .select({
@@ -61,12 +86,13 @@ class TransactionModel {
 
       return transaction || null;
     } catch (error) {
-      throw new Error(`Error finding transaction with user: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error finding transaction with user: ${err.message}`);
     }
   }
 
   // Get user transaction history
-  static async getUserTransactionHistory(userId, limit = 50, offset = 0) {
+  static async getUserTransactionHistory(userId: number, limit = 50, offset = 0) {
     try {
       const transactionHistory = await db
         .select({
@@ -98,12 +124,13 @@ class TransactionModel {
 
       return transactionHistory;
     } catch (error) {
-      throw new Error(`Error getting user transaction history: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error getting user transaction history: ${err.message}`);
     }
   }
 
   // Get transaction stats by date range
-  static async getTransactionStatsByDate(startDate, endDate) {
+  static async getTransactionStatsByDate(startDate?: string, endDate?: string) {
     try {
       const conditions = [];
       if (startDate) conditions.push(gte(transactions.createdAt, new Date(startDate)));
@@ -111,7 +138,7 @@ class TransactionModel {
 
       // Since Drizzle doesn't have direct aggregation grouping like Mongoose,
       // we need to fetch data and group manually or use raw SQL
-      const query = db
+      let query = db
         .select({
           type: transactions.type,
           amount: transactions.amount,
@@ -119,15 +146,13 @@ class TransactionModel {
         .from(transactions);
 
       if (conditions.length > 0) {
-        conditions.forEach(condition => {
-          query.where(condition);
-        });
+        query = query.where(and(...conditions));
       }
 
       const results = await query;
 
       // Group by type manually
-      const grouped = results.reduce((acc, transaction) => {
+      const grouped = results.reduce((acc: any, transaction: any) => {
         const type = transaction.type;
         if (!acc[type]) {
           acc[type] = { type, count: 0, totalAmount: 0 };
@@ -139,27 +164,30 @@ class TransactionModel {
 
       return Object.values(grouped);
     } catch (error) {
-      throw new Error(`Error getting transaction stats: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error getting transaction stats: ${err.message}`);
     }
   }
 
   // Update transaction
-  static async update(id, updateData) {
+  static async update(id: number, updateData: any) {
     try {
-      const [updatedTransaction] = await db
+      await db
         .update(transactions)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(transactions.id, id))
-        .returning();
+        .where(eq(transactions.id, id));
 
+      // Get the updated transaction
+      const [updatedTransaction] = await db.select().from(transactions).where(eq(transactions.id, id));
       return updatedTransaction;
     } catch (error) {
-      throw new Error(`Error updating transaction: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error updating transaction: ${err.message}`);
     }
   }
 
   // Void a transaction
-  static async voidTransaction(id, adminId, reason) {
+  static async voidTransaction(id: number, adminId: number, reason: string) {
     try {
       // First get the current transaction
       const transaction = await this.findById(id);
@@ -179,7 +207,7 @@ class TransactionModel {
         timestamp: new Date(),
       };
 
-      const [voidedTransaction] = await db
+      await db
         .update(transactions)
         .set({
           status: 'voided',
@@ -189,61 +217,63 @@ class TransactionModel {
           notes: [...currentNotes, newNote],
           updatedAt: new Date(),
         })
-        .where(eq(transactions.id, id))
-        .returning();
+        .where(eq(transactions.id, id));
 
+      // Get the updated transaction
+      const [voidedTransaction] = await db.select().from(transactions).where(eq(transactions.id, id));
       return voidedTransaction;
     } catch (error) {
-      throw new Error(`Error voiding transaction: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error voiding transaction: ${err.message}`);
     }
   }
 
   // Find transactions by filter
-  static async findMany(filter = {}, limit = 50, offset = 0) {
+  static async findMany(filter: TransactionFilter = {}, limit = 50, offset = 0) {
     try {
-      let query = db.select().from(transactions);
+      let baseQuery = db.select().from(transactions);
 
-      // Apply filters
-      const conditions = [];
-      if (filter.userId) conditions.push(eq(transactions.userId, filter.userId));
-      if (filter.type) conditions.push(eq(transactions.type, filter.type));
-      if (filter.gameType) conditions.push(eq(transactions.gameType, filter.gameType));
-      if (filter.status) conditions.push(eq(transactions.status, filter.status));
-
-      if (conditions.length > 0) {
-        // For multiple conditions, we'd need to use `and` from drizzle-orm
-        conditions.forEach(condition => {
-          query = query.where(condition);
-        });
+      if (filter.userId) {
+        baseQuery = baseQuery.where(eq(transactions.userId, filter.userId));
+      }
+      if (filter.type) {
+        baseQuery = baseQuery.where(eq(transactions.type, filter.type));
+      }
+      if (filter.gameType) {
+        baseQuery = baseQuery.where(eq(transactions.gameType, filter.gameType));
+      }
+      if (filter.status) {
+        baseQuery = baseQuery.where(eq(transactions.status, filter.status));
       }
 
-      const results = await query
+      const results = await baseQuery
         .orderBy(desc(transactions.createdAt))
         .limit(limit)
         .offset(offset);
 
       return results;
     } catch (error) {
-      throw new Error(`Error finding transactions: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error finding transactions: ${err.message}`);
     }
   }
 
   // Delete transaction
-  static async delete(id) {
+  static async delete(id: number) {
     try {
-      const [deletedTransaction] = await db
+      await db
         .delete(transactions)
-        .where(eq(transactions.id, id))
-        .returning();
+        .where(eq(transactions.id, id));
 
-      return deletedTransaction;
+      return { id, deleted: true };
     } catch (error) {
-      throw new Error(`Error deleting transaction: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error deleting transaction: ${err.message}`);
     }
   }
 
   // Add note to transaction
-  static async addNote(id, noteText, addedBy) {
+  static async addNote(id: number, noteText: string, addedBy: number) {
     try {
       const transaction = await this.findById(id);
       if (!transaction) {
@@ -257,22 +287,24 @@ class TransactionModel {
         timestamp: new Date(),
       };
 
-      const [updatedTransaction] = await db
+      await db
         .update(transactions)
         .set({
           notes: [...currentNotes, newNote],
           updatedAt: new Date(),
         })
-        .where(eq(transactions.id, id))
-        .returning();
+        .where(eq(transactions.id, id));
 
+      // Get the updated transaction
+      const [updatedTransaction] = await db.select().from(transactions).where(eq(transactions.id, id));
       return updatedTransaction;
     } catch (error) {
-      throw new Error(`Error adding note to transaction: ${error.message}`);
+      const err = error as Error;
+      throw new Error(`Error adding note to transaction: ${err.message}`);
     }
   }
 
-  static async getUserTransactions(userId) {
+  static async getUserTransactions(userId: number) {
     return await db
       .select({
         id: transactions.id,
@@ -282,9 +314,7 @@ class TransactionModel {
         status: transactions.status,
         description: transactions.description,
         gameType: transactions.gameType,
-        gameData: transactions.gameData,
         createdAt: transactions.createdAt,
-        processedAt: transactions.processedAt,
         createdByUsername: users.username
       })
       .from(transactions)
@@ -306,9 +336,7 @@ class TransactionModel {
         status: transactions.status,
         description: transactions.description,
         gameType: transactions.gameType,
-        gameData: transactions.gameData,
         createdAt: transactions.createdAt,
-        processedAt: transactions.processedAt,
         createdByUsername: createdByUser.username,
         voidedByUsername: voidedByUser.username
       })
@@ -318,12 +346,26 @@ class TransactionModel {
       .orderBy(desc(transactions.createdAt));
   }
 
-  static async findOne(conditions) {
+  static async findOne(conditions: Record<string, any>) {
     const whereConditions = [];
     
-    Object.entries(conditions).forEach(([key, value]) => {
-      whereConditions.push(eq(transactions[key], value));
-    });
+    for (const [key, value] of Object.entries(conditions)) {
+      if (key === 'id') {
+        whereConditions.push(eq(transactions.id, value));
+      } else if (key === 'userId') {
+        whereConditions.push(eq(transactions.userId, value));
+      } else if (key === 'type') {
+        whereConditions.push(eq(transactions.type, value));
+      } else if (key === 'gameType') {
+        whereConditions.push(eq(transactions.gameType, value));
+      } else if (key === 'status') {
+        whereConditions.push(eq(transactions.status, value));
+      } else if (key === 'reference') {
+        whereConditions.push(eq(transactions.reference, value));
+      } else if (key === 'gameSessionId') {
+        whereConditions.push(eq(transactions.gameSessionId, value));
+      }
+    }
 
     const result = await db
       .select()
@@ -334,12 +376,12 @@ class TransactionModel {
     return result[0] || null;
   }
 
-  static async find(conditions = {}, options = {}) {
+  static async find(conditions: Record<string, any> = {}, options: QueryOptions = {}) {
     const userAlias = alias(users, 'userInfo');
     const createdByAlias = alias(users, 'createdByInfo');
     
     // Base select fields for transactions
-    let selectFields = {
+    let selectFields: SelectFields = {
       id: transactions.id,
       userId: transactions.userId,
       type: transactions.type,
@@ -347,9 +389,7 @@ class TransactionModel {
       status: transactions.status,
       description: transactions.description,
       gameType: transactions.gameType,
-      gameData: transactions.gameData,
       createdAt: transactions.createdAt,
-      processedAt: transactions.processedAt,
       reference: transactions.reference,
       balanceBefore: transactions.balanceBefore,
       balanceAfter: transactions.balanceAfter,
@@ -367,7 +407,6 @@ class TransactionModel {
     if (options.populate) {
       if (options.populate.includes('userId')) {
         selectFields.userUsername = userAlias.username;
-        selectFields.userEmail = userAlias.email;
       }
       if (options.populate.includes('createdBy')) {
         selectFields.createdByUsername = createdByAlias.username;
@@ -390,27 +429,52 @@ class TransactionModel {
     if (Object.keys(conditions).length > 0) {
       const whereConditions = [];
       
-      Object.entries(conditions).forEach(([key, value]) => {
-        if (typeof value === 'object' && value.$gte && value.$lte) {
-          whereConditions.push(and(
-            gte(transactions[key], value.$gte),
-            lte(transactions[key], value.$lte)
-          ));
-        } else if (typeof value === 'object' && value.$regex) {
-          whereConditions.push(like(transactions[key], `%${value.$regex}%`));
+      for (const [key, value] of Object.entries(conditions)) {
+        if (value && typeof value === 'object' && '$gte' in value && '$lte' in value) {
+          if (key === 'createdAt') {
+            whereConditions.push(and(
+              gte(transactions.createdAt, value.$gte),
+              lte(transactions.createdAt, value.$lte)
+            ));
+          } else if (key === 'amount') {
+            whereConditions.push(and(
+              gte(transactions.amount, value.$gte),
+              lte(transactions.amount, value.$lte)
+            ));
+          }
+        } else if (value && typeof value === 'object' && '$regex' in value) {
+          if (key === 'description') {
+            whereConditions.push(like(transactions.description, `%${value.$regex}%`));
+          } else if (key === 'reference') {
+            whereConditions.push(like(transactions.reference, `%${value.$regex}%`));
+          }
         } else {
-          whereConditions.push(eq(transactions[key], value));
+          if (key === 'id') {
+            whereConditions.push(eq(transactions.id, value));
+          } else if (key === 'userId') {
+            whereConditions.push(eq(transactions.userId, value));
+          } else if (key === 'type') {
+            whereConditions.push(eq(transactions.type, value));
+          } else if (key === 'gameType') {
+            whereConditions.push(eq(transactions.gameType, value));
+          } else if (key === 'status') {
+            whereConditions.push(eq(transactions.status, value));
+          } else if (key === 'reference') {
+            whereConditions.push(eq(transactions.reference, value));
+          } else if (key === 'gameSessionId') {
+            whereConditions.push(eq(transactions.gameSessionId, value));
+          }
         }
-      });
+      }
       
-      query = query.where(and(...whereConditions));
+      if (whereConditions.length > 0) {
+        query = query.where(and(...whereConditions));
+      }
     }
 
     // Handle sorting
-    if (options.sort) {
-      if (options.sort.createdAt === -1) {
-        query = query.orderBy(desc(transactions.createdAt));
-      }
+    if (options.sort?.createdAt === -1) {
+      query = query.orderBy(desc(transactions.createdAt));
     }
 
     // Handle limit
@@ -421,41 +485,26 @@ class TransactionModel {
     return await query;
   }
 
-  static async updateById(id, updateData) {
-    const result = await db
+  static async updateById(id: number, updateData: any) {
+    await db
       .update(transactions)
       .set({ ...updateData, updatedAt: new Date() })
-      .where(eq(transactions.id, id))
-      .returning();
+      .where(eq(transactions.id, id));
     
-    return result[0] || null;
+    // Get the updated transaction
+    const [result] = await db.select().from(transactions).where(eq(transactions.id, id));
+    return result || null;
   }
 
-  static async deleteById(id) {
-    const result = await db
+  static async deleteById(id: number) {
+    // Get the transaction before deleting
+    const [result] = await db.select().from(transactions).where(eq(transactions.id, id));
+    
+    await db
       .delete(transactions)
-      .where(eq(transactions.id, id))
-      .returning();
+      .where(eq(transactions.id, id));
     
-    return result[0] || null;
-  }
-
-  // Instance methods (when you have a transaction object)
-  async save() {
-    if (this.id) {
-      const result = await db
-        .update(transactions)
-        .set({ ...this, updatedAt: new Date() })
-        .where(eq(transactions.id, this.id))
-        .returning();
-      
-      Object.assign(this, result[0]);
-      return this;
-    } else {
-      const result = await db.insert(transactions).values(this).returning();
-      Object.assign(this, result[0]);
-      return this;
-    }
+    return result || null;
   }
 }
 

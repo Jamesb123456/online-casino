@@ -214,6 +214,39 @@ class LoggingService {
       return 0;
     }
   }
+
+  /**
+   * Convenience wrappers used by socket handlers (backwards-compat)
+   */
+  static async logGameEvent(gameType: string, eventType: string, eventDetails: any = {}, userId?: string | number, sessionId?: string | number): Promise<void> {
+    try {
+      await GameLog.create({
+        userId: userId !== undefined && userId !== null ? Number(userId) : null,
+        gameType,
+        eventType,
+        eventDetails: { ...eventDetails, sessionId },
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.error('Error logging game event:', error);
+    }
+  }
+
+  static async logBetPlaced(gameType: string, sessionId: string | number | null, userId: string | number, amount: number, metadata: any = {}): Promise<void> {
+    await this.logGameEvent(gameType, 'bet_placed', { amount, ...metadata }, userId, sessionId ?? undefined);
+  }
+
+  static async logBetResult(gameType: string, sessionId: string | number | null, userId: string | number, betAmount: number, winAmount: number, isWin: boolean, metadata: any = {}): Promise<void> {
+    await this.logGameEvent(gameType, 'game_result', { betAmount, winAmount, isWin, ...metadata }, userId, sessionId ?? undefined);
+  }
+
+  static async logGameStart(gameType: string, sessionId: string | number | null, metadata: any = {}): Promise<void> {
+    await this.logGameEvent(gameType, 'game_start', metadata, undefined, sessionId ?? undefined);
+  }
+
+  static async logGameEnd(gameType: string, sessionId: string | number | null, metadata: any = {}): Promise<void> {
+    await this.logGameEvent(gameType, 'game_end', metadata, undefined, sessionId ?? undefined);
+  }
 }
 
 export default LoggingService;

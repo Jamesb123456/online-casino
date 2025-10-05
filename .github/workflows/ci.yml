@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install server deps
+        working-directory: server
+        run: |
+          npm ci
+          npm i zod seedrandom --no-save
+
+      - name: Typecheck server
+        working-directory: server
+        run: npx tsc --noEmit
+
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      - name: Install client deps
+        working-directory: client
+        run: npm ci
+
+      - name: Build client
+        working-directory: client
+        run: npm run build

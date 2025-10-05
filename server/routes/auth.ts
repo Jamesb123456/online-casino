@@ -2,10 +2,8 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-
-// Import Drizzle models
-import UserModel from '../drizzle/models/User.js';
-import Balance from '../drizzle/models/Balance.js';
+import { z } from 'zod';
+import LoggingService from '../src/services/loggingService.js';
 
 const router = express.Router();
 
@@ -16,10 +14,25 @@ const authLimiter = rateLimit({
   message: 'Too many authentication attempts, please try again later'
 });
 
+// Zod schemas
+const registerSchema = z.object({
+  username: z.string().min(3).max(32),
+  password: z.string().min(6).max(128)
+});
+
+const loginSchema = z.object({
+  username: z.string().min(3).max(32),
+  password: z.string().min(6).max(128)
+});
+
 // Register
 router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+    }
+    const { username, password } = parsed.data;
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({ username });
@@ -70,6 +83,9 @@ router.post('/register', authLimiter, async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
+    // Log auth action
+    LoggingService.logAuthAction(String(newUser.id), 'register', { username: newUser.username });
+
     res.status(201).json({
       message: 'User registered successfully',
       user: {
@@ -80,7 +96,7 @@ router.post('/register', authLimiter, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    LoggingService.logSystemEvent('registration_error', { error: (error as any)?.message }, 'error');
     res.status(500).json({ message: 'Error creating user' });
   }
 });
@@ -88,7 +104,11 @@ router.post('/register', authLimiter, async (req, res) => {
 // Login
 router.post('/login', authLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Invalid payload', errors: parsed.error.flatten() });
+    }
+    const { username, password } = parsed.data;
 
     // Find user
     const user = await UserModel.findOne({ username });
@@ -132,6 +152,9 @@ router.post('/login', authLimiter, async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
 
+    // Log auth action
+    LoggingService.logAuthAction(String(user.id), 'login', { username: user.username });
+
     res.json({
       message: 'Login successful',
       user: {
@@ -142,7 +165,7 @@ router.post('/login', authLimiter, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    LoggingService.logSystemEvent('login_error', { error: (error as any)?.message }, 'error');
     res.status(500).json({ message: 'Error during login' });
   }
 });
@@ -188,7 +211,7 @@ router.get('/verify', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Token verification error:', error);
+    LoggingService.logSystemEvent('token_verification_error', { error: (error as any)?.message }, 'error');
     res.status(401).json({ message: 'Invalid token' });
   }
 });

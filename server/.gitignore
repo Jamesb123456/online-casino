@@ -1,1 +1,33 @@
+# Dependencies
 node_modules/
+npm-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database files (if any local files)
+*.db
+*.sqlite
+
+# IDE/editor
+vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# TS build info
+*.tsbuildinfo

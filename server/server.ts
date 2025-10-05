@@ -6,6 +6,8 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
+import LoggingService from './src/services/loggingService.js';
 import type { Socket } from 'socket.io';
 // import initChatHandlers from './src/socket/chatHandler.js';
 // import initLiveGamesHandlers from './src/socket/liveGamesHandler.js';
@@ -47,6 +49,15 @@ app.use(cors({
 app.use(helmet());
 app.use(morgan('dev'));
 
+// Global API rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api', apiLimiter);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -67,25 +78,32 @@ const crashNamespace = io.of('/crash');
 // Apply authentication middleware to crash namespace
 crashNamespace.use(socketAuth);
 
+// Initialize crash handlers once at startup (handler attaches its own connection listener)
+import('./src/socket/crashHandler.js')
+  .then((mod: any) => {
+    const init = mod?.default || mod;
+    if (typeof init === 'function') init(crashNamespace);
+  })
+  .catch((err) => LoggingService.logSystemEvent('crash_handler_init_failed', { error: String(err) }, 'error'));
+
 crashNamespace.on('connection', (socket) => {
-  console.log('Client connected to crash namespace:', socket.id);
+  LoggingService.logGameEvent('crash', 'namespace_connection', { socketId: socket.id });
   
   // Get authenticated user from socket
   const user = getAuthenticatedUser(socket);
   if (!user) {
-    console.error('Unauthenticated connection attempt to crash namespace');
+    LoggingService.logSystemEvent('unauthenticated_crash_namespace', { socketId: socket.id }, 'warning');
     socket.disconnect();
     return;
   }
   
-  console.log(`Authenticated user ${user.username} connected to crash namespace`);
+  LoggingService.logGameEvent('crash', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
-  // Initialize crash handlers
-  // require('./src/socket/crashHandler')(crashNamespace);
+  // Crash handler is initialized at namespace level above
   
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`User ${user.username} disconnected from crash namespace`);
+    LoggingService.logGameEvent('crash', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
 });
 
@@ -96,24 +114,29 @@ const rouletteNamespace = io.of('/roulette');
 rouletteNamespace.use(socketAuth);
 
 rouletteNamespace.on('connection', (socket) => {
-  console.log('Client connected to roulette namespace:', socket.id);
+  LoggingService.logGameEvent('roulette', 'namespace_connection', { socketId: socket.id });
   
   // Get authenticated user from socket
   const user = getAuthenticatedUser(socket);
   if (!user) {
-    console.error('Unauthenticated connection attempt to roulette namespace');
+    LoggingService.logSystemEvent('unauthenticated_roulette_namespace', { socketId: socket.id }, 'warning');
     socket.disconnect();
     return;
   }
   
-  console.log(`Authenticated user ${user.username} connected to roulette namespace`);
+  LoggingService.logGameEvent('roulette', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize roulette handlers
-  // require('./src/socket/rouletteHandler').initRouletteHandlers(io, socket, user);
+  import('./src/socket/rouletteHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initRouletteHandlers || mod?.default?.initRouletteHandlers;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('roulette_handler_init_failed', { error: String(err) }, 'error'));
   
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`User ${user.username} disconnected from roulette namespace`);
+    LoggingService.logGameEvent('roulette', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
 });
 
@@ -124,24 +147,29 @@ const landminesNamespace = io.of('/landmines');
 landminesNamespace.use(socketAuth);
 
 landminesNamespace.on('connection', (socket) => {
-  console.log('Client connected to landmines namespace:', socket.id);
+  LoggingService.logGameEvent('landmines', 'namespace_connection', { socketId: socket.id });
   
   // Get authenticated user from socket
   const user = getAuthenticatedUser(socket);
   if (!user) {
-    console.error('Unauthenticated connection attempt to landmines namespace');
+    LoggingService.logSystemEvent('unauthenticated_landmines_namespace', { socketId: socket.id }, 'warning');
     socket.disconnect();
     return;
   }
   
-  console.log(`Authenticated user ${user.username} connected to landmines namespace`);
+  LoggingService.logGameEvent('landmines', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize landmines handlers
-  // require('./src/socket/landminesHandler').initLandminesHandlers(io, socket, user);
+  import('./src/socket/landminesHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
   
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`User ${user.username} disconnected from landmines namespace`);
+    LoggingService.logGameEvent('landmines', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
 });
 
@@ -152,36 +180,84 @@ const blackjackNamespace = io.of('/blackjack');
 blackjackNamespace.use(socketAuth);
 
 blackjackNamespace.on('connection', (socket) => {
-  console.log('Client connected to blackjack namespace:', socket.id);
+  LoggingService.logGameEvent('blackjack', 'namespace_connection', { socketId: socket.id });
   
   // Get authenticated user from socket
   const user = getAuthenticatedUser(socket);
   if (!user) {
-    console.error('Unauthenticated connection attempt to blackjack namespace');
+    LoggingService.logSystemEvent('unauthenticated_blackjack_namespace', { socketId: socket.id }, 'warning');
     socket.disconnect();
     return;
   }
   
-  console.log(`Authenticated user ${user.username} connected to blackjack namespace`);
+  LoggingService.logGameEvent('blackjack', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize blackjack handlers
-  // require('./src/socket/blackjackHandler')(blackjackNamespace, socket);
+  // TODO: Wire Blackjack when handler is ready
   
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log(`User ${user.username} disconnected from blackjack namespace`);
+    LoggingService.logGameEvent('blackjack', 'namespace_disconnected', { username: user.username, userId: user.userId });
+  });
+});
+
+// Plinko game namespace
+const plinkoNamespace = io.of('/plinko');
+plinkoNamespace.use(socketAuth);
+plinkoNamespace.on('connection', (socket) => {
+  LoggingService.logGameEvent('plinko', 'namespace_connection', { socketId: socket.id });
+  const user = getAuthenticatedUser(socket);
+  if (!user) {
+    LoggingService.logSystemEvent('unauthenticated_plinko_namespace', { socketId: socket.id }, 'warning');
+    socket.disconnect();
+    return;
+  }
+  LoggingService.logGameEvent('plinko', 'namespace_authenticated', { username: user.username, userId: user.userId });
+  // Initialize plinko handlers per-connection
+  import('./src/socket/plinkoHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
+  socket.on('disconnect', () => {
+    LoggingService.logGameEvent('plinko', 'namespace_disconnected', { username: user.username, userId: user.userId });
+  });
+});
+
+// Wheel game namespace
+const wheelNamespace = io.of('/wheel');
+wheelNamespace.use(socketAuth);
+wheelNamespace.on('connection', (socket) => {
+  LoggingService.logGameEvent('wheel', 'namespace_connection', { socketId: socket.id });
+  const user = getAuthenticatedUser(socket);
+  if (!user) {
+    LoggingService.logSystemEvent('unauthenticated_wheel_namespace', { socketId: socket.id }, 'warning');
+    socket.disconnect();
+    return;
+  }
+  LoggingService.logGameEvent('wheel', 'namespace_authenticated', { username: user.username, userId: user.userId });
+  // Initialize wheel handlers per-connection
+  import('./src/socket/wheelHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initWheelHandlers || mod?.default?.initWheelHandlers;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'));
+  socket.on('disconnect', () => {
+    LoggingService.logGameEvent('wheel', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
 });
 
 // Socket.io main namespace connection
 io.on('connection', (socket: Socket) => {
-  console.log('New client connected:', socket.id);
+  LoggingService.logSystemEvent('socket_connected', { socketId: socket.id });
   
   // Check authentication before allowing game room joins
   socket.on('joinGame', (gameType, callback) => {
     // Only authenticated sockets can join game rooms
     if (!(socket as any).user) {
-      console.log(`Unauthenticated user ${socket.id} attempted to join ${gameType}`);
+      LoggingService.logSystemEvent('unauthenticated_join_attempt', { socketId: socket.id, gameType }, 'warning');
       
       if (callback) {
         callback({ 
@@ -198,7 +274,7 @@ io.on('connection', (socket: Socket) => {
     // If authenticated, allow join
     socket.join(gameType);
     const username = (socket as any).user?.username || socket.id;
-    console.log(`User ${username} joined ${gameType}`);
+    LoggingService.logSystemEvent('join_game', { username, gameType, socketId: socket.id });
     
     if (callback) {
       callback({ success: true });
@@ -208,7 +284,7 @@ io.on('connection', (socket: Socket) => {
   // Handle disconnection from main namespace
   socket.on('disconnect', () => {
     const username = (socket as any).user?.username || socket.id;
-    console.log(`Client disconnected: ${username}`);
+    LoggingService.logSystemEvent('socket_disconnected', { username, socketId: socket.id });
   });
 });
 
@@ -220,13 +296,13 @@ io.on('connection', (socket: Socket) => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
+  LoggingService.logSystemEvent('sigint_received', {});
   await closeDB();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+  LoggingService.logSystemEvent('sigterm_received', {});
   await closeDB();
   process.exit(0);
 });
@@ -234,7 +310,7 @@ process.on('SIGTERM', async () => {
 // Start server
 const PORT = process.env.PORT || 5000; // Default port 5000
 server.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
+  LoggingService.logSystemEvent('server_started', { port: PORT });
   await connectDB();
 });
 

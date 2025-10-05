@@ -3,7 +3,7 @@
  * Handles all socket.io events for the Plinko game
  */
 const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
+const loggingService = require('../services/loggingService').default;
 
 const { generatePath, calculateMultiplier } = require('../utils/plinkoUtils');
 

@@ -4,7 +4,7 @@
  * Implements multiplayer functionality with shared game state
  */
 const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
+const loggingService = require('../services/loggingService').default;
 
 // Store active game sessions
 const activeSessions = new Map();

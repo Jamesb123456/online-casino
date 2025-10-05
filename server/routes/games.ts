@@ -1,5 +1,8 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import LoggingService from '../src/services/loggingService.js';
 
 const router = express.Router();
 
@@ -53,22 +56,33 @@ router.get('/', authenticate, (req, res) => {
 });
 
 // Place a bet for a game
-router.post('/:gameId/bet', authenticate, async (req, res) => {
+// Limit bet placement to mitigate abuse
+const betLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
+
+const betSchema = z.object({
+  betAmount: z.number().positive()
+});
+
+const gameParamSchema = z.object({
+  gameId: z.enum(['crash', 'plinko', 'wheel', 'roulette', 'blackjack'])
+});
+
+router.post('/:gameId/bet', authenticate, betLimiter, async (req, res) => {
   try {
-    const { gameId } = req.params;
-    const { betAmount } = req.body;
-    const userId = req.user._id;
-    
-    // Basic validation
-    if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
+    const paramsParse = gameParamSchema.safeParse(req.params);
+    if (!paramsParse.success) {
+      return res.status(400).json({ message: 'Invalid gameId' });
+    }
+    const { gameId } = paramsParse.data;
+
+    const bodyParse = betSchema.safeParse({
+      betAmount: Number(req.body?.betAmount)
+    });
+    if (!bodyParse.success) {
       return res.status(400).json({ message: 'Invalid bet amount' });
     }
-    
-    // Check if game exists
-    const validGames = ['crash', 'plinko', 'wheel', 'roulette', 'blackjack'];
-    if (!validGames.includes(gameId)) {
-      return res.status(404).json({ message: 'Game not found' });
-    }
+    const { betAmount } = bodyParse.data;
+    const userId = req.user._id;
     
     // Later we will implement the actual game logic and session tracking
     // For now, return a placeholder response
@@ -80,7 +94,7 @@ router.post('/:gameId/bet', authenticate, async (req, res) => {
       sessionId: `${gameId}-${Date.now()}`
     });
   } catch (error) {
-    console.error('Error placing bet:', error);
+    LoggingService.logSystemEvent('place_bet_error', { error: (error as any)?.message }, 'error');
     res.status(500).json({ message: 'Server error while placing bet' });
   }
 });

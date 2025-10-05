@@ -8,64 +8,41 @@
  * - Real-time player bet and cashout broadcasting
  * - Active player tracking and presence management
  */
+ import BalanceService from '../services/balanceService.js';
+ import LoggingService from '../services/loggingService.js';
+ import { calculateHouseEdge } from '../utils/gameUtils.js';
 
-// Use ES6 imports to avoid variable conflicts
-import BalanceService from '../services/balanceService.js';
-import LoggingService from '../services/loggingService.js';
-const { calculateHouseEdge } = require('../utils/gameUtils');
+ export default function(namespace) {
+   const gameState = {
+     isGameRunning: false,
+     isGameStarting: false,
+     currentMultiplier: 1,
+     crashPoint: null,
+     startTime: null,
+     tickInterval: null,
+     gameId: null
+   };
 
-// Namespace crash-specific variables to avoid conflicts
-const crashGame = {
-  activeSessions: new Map(),
-  gameHistory: [],
-  gameState: {
-    status: 'waiting', // 'waiting', 'countdown', 'flying', 'crashed'
-    players: new Map(), // Map of playerId -> player data
-    bets: new Map(), // Map of playerId -> bet data  
-    currentMultiplier: 1,
-    gameId: null,
-    crashPoint: null,
-    startTime: null,
-    tickInterval: null
-  }
-};
-
-/**
- * Initialize Crash game socket handlers
- * @param {Object} namespace - Socket.IO namespace
- */
-module.exports = function(namespace) {
-  // Store game state
-  const gameState = {
-    isGameRunning: false,
-    isGameStarting: false,
-    currentMultiplier: 1,
-    crashPoint: null,
-    startTime: null,
-    tickInterval: null,
-    gameId: null
-  };
-  
   // Store active bets by user
   const activeBets = new Map();
-  
+ 
   // Store user connections with additional player info
   const connectedUsers = new Map();
-  
+ 
   // Track active players in the room
   const activePlayers = new Map();
-  
+ 
   // Game history
   const gameHistory = [];
-  
+ 
   // Connect socket handlers
   namespace.on('connection', (socket) => {
-    console.log('Client connected to crash namespace:', socket.id);
+    LoggingService.logSystemEvent('crash_namespace_connection', { socketId: socket.id });
     
     // Get authenticated user from socket
     const user = (socket as any).user;
     if (!user) {
-      console.error('Unauthenticated user in crash handler');
+      LoggingService.logSystemEvent('unauthenticated_crash_socket', { socketId: socket.id }, 'warning');
       socket.disconnect();
       return;
     }
@@ -298,193 +275,42 @@ module.exports = function(namespace) {
         console.error('Error in cashOut:', error);
         callback({ success: false, error: 'Server error' });
       }
-    });
-    
-    /**
      * Handle disconnection
      */
     socket.on('disconnect', () => {
-      console.log('Client disconnected from crash namespace:', socket.id);
+      LoggingService.logSystemEvent('crash_namespace_disconnection', { socketId: socket.id });
       
       // Remove from connected users
       connectedUsers.delete(userId);
       
       // Remove from active players and notify others
-      if (activePlayers.has(userId)) {
-        const playerInfo = activePlayers.get(userId);
-        activePlayers.delete(userId);
-        
-        // Broadcast player left to all remaining clients
-        namespace.emit('playerLeft', {
-          id: userId,
-          username: playerInfo.username
-        });
-      }
-    });
-  });
-  
-  /**
-   * Start a new game cycle
-   */
-  function startGame() {
-    if (gameState.isGameRunning || gameState.isGameStarting) {
-      return;
-    }
-    
-    // Mark game as starting soon
-    gameState.isGameStarting = true;
-    gameState.gameId = `game_${Date.now()}`;
-    
+{{ ... }
     // Generate a provably fair crash point
     // In a real implementation, this would use verifiable random algorithms
     const houseEdge = calculateHouseEdge('crash');
     gameState.crashPoint = generateCrashPoint(houseEdge);
     
-    console.log(`Starting new crash game with crash point: ${gameState.crashPoint}x`);
+    LoggingService.logGameEvent('crash', 'game_seeded', { crashPoint: gameState.crashPoint });
     
     // Log game starting
     LoggingService.logGameStart('crash', gameState.gameId, {
       crashPoint: gameState.crashPoint,
       houseEdge,
-      startTime: new Date()
-    });
-    
-    // Notify clients game is starting soon
-    namespace.emit('gameStarting', {
-      gameId: gameState.gameId,
-      startingIn: 5 // Start in 5 seconds
-    });
-    
-    // Set the start time to 5 seconds in the future
-    gameState.startTime = Date.now() + 5000;
-    
-    // Start the game after 5 seconds
-    setTimeout(() => {
-      if (!gameState.isGameStarting) return; // Safety check
-      
-      // Start the game
-      gameState.isGameStarting = false;
-      gameState.isGameRunning = true;
-      gameState.currentMultiplier = 1.0;
-      gameState.startTime = Date.now();
-      
-      // Notify clients game has started
-      namespace.emit('gameStarted', {
-        gameId: gameState.gameId
-      });
-      
-      // Start ticking the multiplier
-      gameState.tickInterval = setInterval(() => tickGame(), 100);
-    }, 5000);
-  }
-  
-  /**
-   * Update the game state on each tick
-   */
-  function tickGame() {
-    if (!gameState.isGameRunning) return;
-    
-    // Calculate elapsed time
-    const elapsed = (Date.now() - gameState.startTime) / 1000;
-    
-    // Calculate new multiplier (exponential growth function)
-    // This formula can be adjusted for game balance
-    gameState.currentMultiplier = Math.pow(Math.E, 0.06 * elapsed);
-    
-    // Check for auto-cashouts
-    processAutoCashouts();
-    
-    // Check if game should crash
-    if (gameState.currentMultiplier >= gameState.crashPoint) {
-      gameOver();
-      return;
-    }
-    
-    // Notify clients of new multiplier
-    namespace.emit('multiplierUpdate', {
-      multiplier: gameState.currentMultiplier
-    });
-  }
-  
-  /**
-   * Process automatic cashouts
-   */
-  async function processAutoCashouts() {
-    // Check all active bets for auto cashout
-    for (const [userId, bet] of activeBets.entries()) {
-      if (bet.cashedOut) continue;
-      
-      if (bet.autoCashoutAt && gameState.currentMultiplier >= bet.autoCashoutAt) {
-        // Process auto-cashout
-        const cashoutMultiplier = gameState.currentMultiplier;
-        const winAmount = bet.amount * cashoutMultiplier;
-        const profit = winAmount - bet.amount;
-        
-        // Update bet record
-        bet.cashedOut = true;
-        bet.cashedOutAt = cashoutMultiplier;
-        bet.profit = profit;
-        activeBets.set(userId, bet);
-        
-        // Use balanceService to record the win
-        try {
-          await BalanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
+{{ ... }
             multiplier: cashoutMultiplier,
             profit,
             gameId: gameState.gameId,
             autoCashout: true
           });
         } catch (error) {
-          console.error('Error recording auto-cashout win:', error);
+          LoggingService.logSystemEvent('crash_auto_cashout_record_error', { error: String(error) }, 'error');
         }
         
         // Get player info for the broadcast
         const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
         
         // Notify everyone about the cashout with player details
-        namespace.emit('playerCashout', {
-          userId,
-          username: playerInfo.username,
-          avatar: playerInfo.avatar,
-          multiplier: cashoutMultiplier,
-          profit,
-          amount: bet.amount,
-          automatic: true
-        });
-        
-        // Notify the specific user
-        const userConnection = connectedUsers.get(userId);
-        if (userConnection && userConnection.socket) {
-          userConnection.socket.emit('autoCashoutSuccess', {
-            multiplier: cashoutMultiplier,
-            winAmount,
-            profit
-          });
-        }
-      }
-    }
-  }
-  
-  /**
-   * End the current game
-   */
-  function gameOver() {
-    if (!gameState.isGameRunning) return;
-    
-    // Stop the tick interval
-    clearInterval(gameState.tickInterval);
-    
-    // Update game state
-    gameState.isGameRunning = false;
-    
-    // Record game in history
-    const gameResult = {
-      gameId: gameState.gameId,
-      crashPoint: gameState.crashPoint,
-      timestamp: Date.now()
-    };
-    
-    gameHistory.push(gameResult);
+{{ ... }
     if (gameHistory.length > 50) {
       gameHistory.shift(); // Keep last 50 games
     }
@@ -501,7 +327,7 @@ module.exports = function(namespace) {
     namespace.emit('gameCrashed', {
       crashPoint: gameState.crashPoint,
       nextGameIn: 3 // Start next game in 3 seconds
-    });
+{{ ... }
     
     // Process lost bets
     processLostBets();

@@ -10,12 +10,12 @@ A Node.js server application for an online casino platform built with Express, S
 - **Admin Dashboard**: Comprehensive admin panel for user and game management
 - **Balance Management**: Secure transaction and balance tracking system
 - **Chat System**: Real-time chat functionality
-- **Database**: PostgreSQL with Drizzle ORM for type-safe database operations
+- **Database**: MySQL with Drizzle ORM for type-safe database operations
 
 ## Tech Stack
 
 - **Backend**: Node.js, Express.js
-- **Database**: PostgreSQL with Drizzle ORM
+- **Database**: MySQL with Drizzle ORM
 - **Real-time**: Socket.IO
 - **Authentication**: JWT (JSON Web Tokens)
 - **Security**: Helmet, CORS, bcryptjs
@@ -24,7 +24,7 @@ A Node.js server application for an online casino platform built with Express, S
 ## Prerequisites
 
 - Node.js (v16 or higher)
-- PostgreSQL database
+- MySQL database
 - npm or yarn
 
 ## Installation
@@ -44,8 +44,8 @@ A Node.js server application for an online casino platform built with Express, S
    Create a `.env` file in the root directory:
    ```env
    # Database
-   DATABASE_URL=postgresql://username:password@localhost:5432/casino_db
-   
+   DATABASE_URL=mysql://username:password@localhost:3306/casino
+
    # JWT
    JWT_SECRET=your-super-secret-jwt-key-here
    
@@ -152,7 +152,7 @@ The application uses the following main entities:
 
 ### Database Changes
 
-1. Modify schema in `drizzle/schema.js`
+1. Modify schema in `drizzle/schema.ts`
 2. Generate migration: `npm run db:generate`
 3. Run migration: `npm run db:migrate`
 

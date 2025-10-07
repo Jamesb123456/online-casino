@@ -12,7 +12,7 @@
 // Use ES6 imports to avoid variable conflicts
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
-const { calculateHouseEdge } = require('../utils/gameUtils');
+import { calculateHouseEdge } from '../utils/gameUtils.js';
 
 // Namespace crash-specific variables to avoid conflicts
 const crashGame = {
@@ -34,7 +34,7 @@ const crashGame = {
  * Initialize Crash game socket handlers
  * @param {Object} namespace - Socket.IO namespace
  */
-module.exports = function(namespace) {
+export default function initCrashHandlers(namespace) {
   // Store game state
   const gameState = {
     isGameRunning: false,

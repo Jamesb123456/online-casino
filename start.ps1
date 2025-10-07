@@ -76,8 +76,8 @@ Write-Host "Database setup completed." -ForegroundColor Green
 Write-Host "Starting server and client..." -ForegroundColor Yellow
 Set-Location -Path $scriptDir
 
-# Start the server in a new window
-Start-Process powershell -ArgumentList "-NoExit -Command Set-Location '$scriptDir\server'; npm run dev"
+# Start the server in a new window (using start:ts instead of dev since bun is not installed)
+Start-Process powershell -ArgumentList "-NoExit -Command Set-Location '$scriptDir\server'; npm run start:ts"
 
 # Wait a moment to ensure server starts first
 Start-Sleep -Seconds 5

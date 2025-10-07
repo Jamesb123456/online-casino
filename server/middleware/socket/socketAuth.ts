@@ -99,9 +99,9 @@ const verifyAndAttachUser = async (socket: Socket, token: string, next: (err?: E
     // Add authenticated user to socket
     (socket as any).user = {
       userId: user.id,
-      username: user.username,
       role: user.role,
-      balance: parseFloat(user.balance || '0')
+      balance: parseFloat(user.balance || '0'),
+      isActive: user.isActive
     };
 
     next();
@@ -110,17 +110,12 @@ const verifyAndAttachUser = async (socket: Socket, token: string, next: (err?: E
     next(new Error('Authentication error: Invalid token'));
   }
 };
-  } catch (error) {
-    console.error('Socket authentication error:', error);
-    next(new Error('Authentication error'));
-  }
-};
 
 /**
  * Get authenticated user from socket
  * @param {Socket} socket - Socket.io socket
  * @returns {Object|null} User object or null if not authenticated
  */
-export const getAuthenticatedUser = (socket: Socket): { userId: number, username: string, role: string } | null => {
+export const getAuthenticatedUser = (socket: Socket): { userId: number, username: string, role: string, balance: number, isActive: boolean } | null => {
   return (socket as any).user || null;
 };

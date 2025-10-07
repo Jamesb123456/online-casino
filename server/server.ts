@@ -28,6 +28,17 @@ import loginRewardsRoutes from './routes/login-rewards.js';
 // Config
 dotenv.config();
 
+// Add global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
@@ -160,12 +171,13 @@ landminesNamespace.on('connection', (socket) => {
   LoggingService.logGameEvent('landmines', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize landmines handlers
-  import('./src/socket/landminesHandler.js')
-    .then((mod: any) => {
-      const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers;
-      if (typeof init === 'function') init(io, socket, user);
-    })
-    .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
+  // TODO: Temporarily disabled - needs ESM conversion
+  // import('./src/socket/landminesHandler.js')
+  //   .then((mod: any) => {
+  //     const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers;
+  //     if (typeof init === 'function') init(io, socket, user);
+  //   })
+  //   .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
   
   // Handle disconnection
   socket.on('disconnect', () => {
@@ -214,12 +226,13 @@ plinkoNamespace.on('connection', (socket) => {
   }
   LoggingService.logGameEvent('plinko', 'namespace_authenticated', { username: user.username, userId: user.userId });
   // Initialize plinko handlers per-connection
-  import('./src/socket/plinkoHandler.js')
-    .then((mod: any) => {
-      const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers;
-      if (typeof init === 'function') init(io, socket, user);
-    })
-    .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
+  // TODO: Temporarily disabled - needs ESM conversion
+  // import('./src/socket/plinkoHandler.js')
+  //   .then((mod: any) => {
+  //     const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers;
+  //     if (typeof init === 'function') init(io, socket, user);
+  //   })
+  //   .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
   socket.on('disconnect', () => {
     LoggingService.logGameEvent('plinko', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
@@ -238,12 +251,13 @@ wheelNamespace.on('connection', (socket) => {
   }
   LoggingService.logGameEvent('wheel', 'namespace_authenticated', { username: user.username, userId: user.userId });
   // Initialize wheel handlers per-connection
-  import('./src/socket/wheelHandler.js')
-    .then((mod: any) => {
-      const init = mod?.initWheelHandlers || mod?.default?.initWheelHandlers;
-      if (typeof init === 'function') init(io, socket, user);
-    })
-    .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'));
+  // TODO: Temporarily disabled - needs ESM conversion
+  // import('./src/socket/wheelHandler.js')
+  //   .then((mod: any) => {
+  //     const init = mod?.initWheelHandlers || mod?.default?.initWheelHandlers;
+  //     if (typeof init === 'function') init(io, socket, user);
+  //   })
+  //   .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'));
   socket.on('disconnect', () => {
     LoggingService.logGameEvent('wheel', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });

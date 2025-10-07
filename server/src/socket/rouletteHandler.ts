@@ -3,8 +3,8 @@
  * Handles all socket.io events for the Roulette game
  * Implements multiplayer functionality with shared game state
  */
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService').default;
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
 
 // Store active game sessions
 const activeSessions = new Map();
@@ -694,6 +694,5 @@ function initRouletteHandlers(io, socket, user) {
   });
 }
 
-module.exports = {
-  initRouletteHandlers
-};
+export default initRouletteHandlers;
+export { initRouletteHandlers };

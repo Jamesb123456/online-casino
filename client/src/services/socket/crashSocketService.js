@@ -319,8 +319,28 @@ class CrashSocketService {
     return () => socketRef && socketRef.off('multiplierUpdate', callback);
   }
 
-  // Nothing here - duplicate methods removed
-  
+  /**
+   * Listen for socket connection errors
+   * @param {Function} callback 
+   * @returns {Function} Unsubscribe function
+   */
+  onConnectError(callback) {
+    if (!this.socket) return () => {};
+    const socketRef = this.socket;
+    socketRef.on('connect_error', callback);
+    return () => socketRef && socketRef.off('connect_error', callback);
+  }
+
+  /**
+   * Remove listener for socket connection errors
+   * @param {Function} callback 
+   */
+  offConnectError(callback) {
+    if (this.socket) {
+      this.socket.off('connect_error', callback);
+    }
+  }
+
   /**
    * Place a bet in the crash game
    * @param {Object} betData - Bet data (amount, autoCashout)

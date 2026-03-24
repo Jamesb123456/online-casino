@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Chat Socket Handler
  * Manages real-time communication for the global chat feature

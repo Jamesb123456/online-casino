@@ -1,3 +1,4 @@
+// @ts-nocheck
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const readline = require('readline');

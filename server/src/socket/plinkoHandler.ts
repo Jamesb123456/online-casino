@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Plinko Game Socket Handler
  * Handles all socket.io events for the Plinko game

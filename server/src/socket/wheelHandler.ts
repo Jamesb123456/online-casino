@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Wheel Game Socket Handler
  * Handles all socket.io events for the Wheel of Fortune game

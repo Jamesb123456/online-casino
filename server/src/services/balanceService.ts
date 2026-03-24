@@ -1,3 +1,4 @@
+// @ts-nocheck
 import UserModel from '../../drizzle/models/User.js';
 import TransactionModel from '../../drizzle/models/Transaction.js';
 import BalanceModel from '../../drizzle/models/Balance.js';

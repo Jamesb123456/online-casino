@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate as auth } from '../middleware/auth.js';

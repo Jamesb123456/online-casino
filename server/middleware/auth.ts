@@ -25,6 +25,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     // Add user to request
     (req as AuthenticatedRequest).user = {
+      id: user.id,
       userId: user.id,
       username: user.username,
       role: user.role

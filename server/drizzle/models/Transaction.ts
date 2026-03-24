@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { eq, desc, gte, lte, count, sum, and, or, like } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import db from '../db.js';

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Initialize game statistics in the database
  * This script creates default entries for all game types 

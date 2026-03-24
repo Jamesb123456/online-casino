@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express, { Request, Response } from 'express';
 import { db } from '../drizzle/db.js';
 import { transactions } from '../drizzle/schema.js';

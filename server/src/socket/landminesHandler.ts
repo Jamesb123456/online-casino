@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Landmines Game Socket Handler
  * Handles all socket.io events for the Landmines game

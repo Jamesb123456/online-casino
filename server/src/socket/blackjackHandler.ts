@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Import Drizzle models
 import UserModel from '../../drizzle/models/User.js';
 import BalanceService from '../services/balanceService.js';

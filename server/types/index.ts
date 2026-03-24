@@ -17,8 +17,10 @@ export interface User {
 
 export interface AuthenticatedRequest extends Request {
   user: {
+    id: number;
     userId: number;
     username: string;
+    email?: string;
     role: 'user' | 'admin';
   };
 }

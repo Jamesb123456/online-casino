@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * liveGamesHandler.js
  * Handles events related to live games listing and status

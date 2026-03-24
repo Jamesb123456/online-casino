@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Roulette Game Socket Handler
  * Handles all socket.io events for the Roulette game

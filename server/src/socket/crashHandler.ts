@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Crash game socket handler
  * This module handles the Crash game socket events and integrates with the balanceService

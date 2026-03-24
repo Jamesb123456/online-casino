@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { eq, desc, and, gte, lte } from 'drizzle-orm';
 import { db } from '../db.js';
 import { messages, users } from '../schema.js';

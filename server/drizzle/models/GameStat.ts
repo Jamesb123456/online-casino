@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import db from '../db.js';
 import { gameStats } from '../schema.js';

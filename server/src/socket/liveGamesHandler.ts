@@ -1,100 +1,65 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
- * liveGamesHandler.js
+ * liveGamesHandler.ts
  * Handles events related to live games listing and status
  * Provides real-time information about active game sessions
  */
 
-import GameSession from '../../drizzle/models/GameSession.js';
-import User from '../../drizzle/models/User.js';
+import { eq, desc } from 'drizzle-orm';
+import db from '../../drizzle/db.js';
+import { gameSessions, users } from '../../drizzle/schema.js';
+import LoggingService from '../services/loggingService.js';
+
+const GAME_TYPES = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'landmines'];
 
 /**
  * Initialize live games socket handlers
  * @param {Object} io - Socket.io instance
  */
 const initLiveGamesHandlers = (io) => {
-  // Listen for clients requesting live games data
-  io.on('connection', (socket) => {
-    // Handle request for live games list
+  const liveNsp = io.of('/live-games');
+
+  liveNsp.on('connection', (socket) => {
     socket.on('get_live_games', async () => {
       try {
-        console.log('Client requested live games data');
-        
-        // Get active game sessions from the database
-        // Group by game type, limit to recent active sessions
-        const activeSessions = await GameSession.aggregate([
-          { $match: { active: true } },
-          { $sort: { updatedAt: -1 } },
-          { $limit: 50 }, // Limit to 50 most recent active sessions
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'userId',
-              foreignField: '_id',
-              as: 'userInfo'
-            }
-          },
-          { $unwind: '$userInfo' },
-          {
-            $project: {
-              id: '$_id',
-              type: '$gameType',
-              userId: '$userId',
-              bet: '$currentBet',
-              username: '$userInfo.username',
-              createdAt: 1,
-              updatedAt: 1
-            }
-          },
-          {
-            $group: {
-              _id: '$type',
-              players: { $sum: 1 },
-              sessions: { $push: '$$ROOT' }
-            }
-          },
-          {
-            $project: {
-              _id: 0,
-              type: '$_id',
-              players: 1,
-              id: { $arrayElemAt: ['$sessions.id', 0] },
-              recentUsers: { $slice: ['$sessions.username', 0, 3] }
-            }
-          }
-        ]);
+        // Fetch active sessions joined with user info
+        const activeSessions = await db
+          .select({
+            id: gameSessions.id,
+            gameType: gameSessions.gameType,
+            username: users.username,
+          })
+          .from(gameSessions)
+          .leftJoin(users, eq(gameSessions.userId, users.id))
+          .where(eq(gameSessions.isCompleted, false))
+          .orderBy(desc(gameSessions.updatedAt))
+          .limit(50);
 
-        // Transform the data for client consumption
-        const liveGames = activeSessions.map(game => ({
-          id: game.id,
-          type: game.type,
-          players: game.players,
-          recentPlayers: game.recentUsers
-        }));
-        
-        // Ensure we have all game types represented (even if no active sessions)
-        const gameTypes = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel'];
-        const existingTypes = liveGames.map(game => game.type);
-        
-        // Add placeholder entries for game types with no active sessions
-        gameTypes.forEach(type => {
-          if (!existingTypes.includes(type)) {
-            liveGames.push({
-              id: `${type}_placeholder`,
-              type,
-              players: 0,
-              recentPlayers: []
-            });
+        // Group sessions by game type
+        const grouped: Record<string, { players: number; recentPlayers: string[] }> = {};
+        for (const session of activeSessions) {
+          const type = session.gameType;
+          if (!grouped[type]) {
+            grouped[type] = { players: 0, recentPlayers: [] };
           }
-        });
-        
-        console.log(`Sending ${liveGames.length} live games to client`);
-        
-        // Emit the live games data to the requesting client
+          grouped[type].players++;
+          if (grouped[type].recentPlayers.length < 3 && session.username) {
+            grouped[type].recentPlayers.push(session.username);
+          }
+        }
+
+        // Build response with all game types represented
+        const liveGames = GAME_TYPES.map(type => ({
+          id: grouped[type] ? `${type}_live` : `${type}_placeholder`,
+          type,
+          players: grouped[type]?.players ?? 0,
+          recentPlayers: grouped[type]?.recentPlayers ?? [],
+        }));
+
         socket.emit('live_games', liveGames);
       } catch (error) {
-        console.error('Error fetching live games:', error);
-        socket.emit('live_games', []); // Send empty array on error
+        LoggingService.logSystemEvent('live_games_fetch_error', { error: (error as Error)?.message }, 'error');
+        socket.emit('live_games', []);
       }
     });
   });

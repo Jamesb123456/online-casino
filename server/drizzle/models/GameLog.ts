@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, and, like } from 'drizzle-orm';
 import db from '../db.js';
 import { gameLogs, users, gameSessions } from '../schema.js';
@@ -7,12 +7,13 @@ class GameLogModel {
   // Create a new game log
   static async create(logData) {
     try {
-      const [log] = await db.insert(gameLogs).values({
+      const result = await db.insert(gameLogs).values({
         ...logData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }).returning();
+      });
 
+      const [log] = await db.select().from(gameLogs).where(eq(gameLogs.id, (result as any).insertId));
       return log;
     } catch (error) {
       throw new Error(`Error creating game log: ${error.message}`);
@@ -175,12 +176,12 @@ class GameLogModel {
   // Update log
   static async update(id, updateData) {
     try {
-      const [updatedLog] = await db
+      await db
         .update(gameLogs)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(gameLogs.id, id))
-        .returning();
+        .where(eq(gameLogs.id, id));
 
+      const [updatedLog] = await db.select().from(gameLogs).where(eq(gameLogs.id, id));
       return updatedLog;
     } catch (error) {
       throw new Error(`Error updating game log: ${error.message}`);
@@ -190,10 +191,8 @@ class GameLogModel {
   // Delete log
   static async delete(id) {
     try {
-      const [deletedLog] = await db
-        .delete(gameLogs)
-        .where(eq(gameLogs.id, id))
-        .returning();
+      const [deletedLog] = await db.select().from(gameLogs).where(eq(gameLogs.id, id));
+      await db.delete(gameLogs).where(eq(gameLogs.id, id));
 
       return deletedLog;
     } catch (error) {
@@ -431,17 +430,18 @@ class GameLogModel {
   // Instance method for save functionality
   async save() {
     if (this.id) {
-      const result = await db
+      await db
         .update(gameLogs)
         .set(this)
-        .where(eq(gameLogs.id, this.id))
-        .returning();
-      
-      Object.assign(this, result[0]);
+        .where(eq(gameLogs.id, this.id));
+
+      const [updated] = await db.select().from(gameLogs).where(eq(gameLogs.id, this.id));
+      Object.assign(this, updated);
       return this;
     } else {
-      const result = await db.insert(gameLogs).values(this).returning();
-      Object.assign(this, result[0]);
+      const result = await db.insert(gameLogs).values(this);
+      const [inserted] = await db.select().from(gameLogs).where(eq(gameLogs.id, (result as any).insertId));
+      Object.assign(this, inserted);
       return this;
     }
   }

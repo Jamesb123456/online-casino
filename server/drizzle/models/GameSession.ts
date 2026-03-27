@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, and } from 'drizzle-orm';
 import db from '../db.js';
 import { gameSessions, users } from '../schema.js';
@@ -12,12 +12,13 @@ class GameSessionModel {
         sessionData.totalBet = sessionData.initialBet;
       }
 
-      const [session] = await db.insert(gameSessions).values({
+      const result = await db.insert(gameSessions).values({
         ...sessionData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }).returning();
+      });
 
+      const [session] = await db.select().from(gameSessions).where(eq(gameSessions.id, (result as any).insertId));
       return session;
     } catch (error) {
       throw new Error(`Error creating game session: ${error.message}`);
@@ -54,12 +55,12 @@ class GameSessionModel {
   // Update session
   static async update(id, updateData) {
     try {
-      const [updatedSession] = await db
+      await db
         .update(gameSessions)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(gameSessions.id, id))
-        .returning();
+        .where(eq(gameSessions.id, id));
 
+      const [updatedSession] = await db.select().from(gameSessions).where(eq(gameSessions.id, id));
       return updatedSession;
     } catch (error) {
       throw new Error(`Error updating game session: ${error.message}`);
@@ -157,12 +158,12 @@ class GameSessionModel {
         updateData.resultDetails = resultDetails;
       }
 
-      const [completedSession] = await db
+      await db
         .update(gameSessions)
         .set(updateData)
-        .where(eq(gameSessions.id, id))
-        .returning();
+        .where(eq(gameSessions.id, id));
 
+      const [completedSession] = await db.select().from(gameSessions).where(eq(gameSessions.id, id));
       return completedSession;
     } catch (error) {
       throw new Error(`Error completing session: ${error.message}`);
@@ -189,10 +190,8 @@ class GameSessionModel {
   // Delete session
   static async delete(id) {
     try {
-      const [deletedSession] = await db
-        .delete(gameSessions)
-        .where(eq(gameSessions.id, id))
-        .returning();
+      const [deletedSession] = await db.select().from(gameSessions).where(eq(gameSessions.id, id));
+      await db.delete(gameSessions).where(eq(gameSessions.id, id));
 
       return deletedSession;
     } catch (error) {

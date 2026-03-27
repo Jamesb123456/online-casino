@@ -24,27 +24,14 @@ class CrashSocketService {
   connect(userInfo = null) {
     if (!this.socket) {
       console.log(`Connecting to crash socket at ${this.apiUrl}${this.namespace}`);
-      
-      // Merge provided userInfo with stored currentUser data
-      const authData = {
-        userId: (userInfo?.userId || this.currentUser?.id || null),
-        username: (userInfo?.username || this.currentUser?.username || null),
-        avatar: (userInfo?.avatar || this.currentUser?.avatar || null)
-      };
-      
-      // Only initialize socket with proper authentication
-      if (!authData.userId || !authData.username) {
-        console.warn('Missing authentication data for socket connection');
-      }
-      
+
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        withCredentials: true, // Important: send cookies for authentication
-        auth: authData
+        withCredentials: true,
       });
 
       // Socket connection event listeners

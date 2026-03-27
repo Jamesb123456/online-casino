@@ -1,9 +1,24 @@
 import React, { createContext, useState, useEffect } from 'react';
-import authService from '../services/authService';
+import { authClient } from '../lib/auth-client';
 import socketService from '../services/socketService';
+import { api } from '../services/api';
 
 // Create the auth context
 export const AuthContext = createContext();
+
+/**
+ * Map Better Auth session user to the shape the app expects
+ */
+function mapUser(sessionUser) {
+  if (!sessionUser) return null;
+  return {
+    id: Number(sessionUser.id),
+    username: sessionUser.username || sessionUser.name,
+    role: sessionUser.role || 'user',
+    balance: parseFloat(sessionUser.balance || '0'),
+    isActive: sessionUser.isActive,
+  };
+}
 
 /**
  * AuthProvider Component
@@ -18,19 +33,25 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        console.log('Checking for existing auth session...');
-        const userData = await authService.getCurrentUser();
-        console.log('User data retrieved successfully:', userData);
-        setUser(userData);
+        const { data: session, error: sessionError } = await authClient.getSession();
+        if (session?.user && !sessionError) {
+          // Fetch full user data including balance from our API
+          try {
+            const userData = await api.get('/users/me');
+            setUser(userData);
+          } catch {
+            // Fallback to session data
+            setUser(mapUser(session.user));
+          }
+        } else {
+          setUser(null);
+        }
         setError(null);
       } catch (err) {
-        console.log('No valid session found:', err.message);
-        // User is not authenticated, which is normal - don't set this as an error
         setUser(null);
         setError(null);
       } finally {
         setLoading(false);
-        console.log('Auth initialization complete');
       }
     };
 
@@ -42,26 +63,30 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       setLoading(true);
-      const response = await authService.login(credentials);
-      // The server will set the HTTP-only cookie
-      // Get the user data from the response or fetch it again
-      const user = response.user || await authService.getCurrentUser();
-      
-      // Store token in localStorage as fallback for socket connections
-      if (response.token) {
-        localStorage.setItem('authToken', response.token);
-      }
-      
-      // Reinitialize socket connection with authentication
-      socketService.disconnectSocket();
-      socketService.initializeSocket({ 
-        token: response.token, 
-        userId: user.id,
-        username: user.username 
+
+      const { data, error: signInError } = await authClient.signIn.username({
+        username: credentials.username,
+        password: credentials.password,
       });
-      
-      setUser(user);
-      return user;
+
+      if (signInError) {
+        throw new Error(signInError.message || 'Login failed');
+      }
+
+      // Fetch full user data including balance from our API
+      let userData;
+      try {
+        userData = await api.get('/users/me');
+      } catch {
+        userData = mapUser(data?.user);
+      }
+
+      // Reinitialize socket connection (cookies will handle auth)
+      socketService.disconnectSocket();
+      socketService.initializeSocket();
+
+      setUser(userData);
+      return userData;
     } catch (err) {
       setError(err.message || 'Login failed');
       throw err;
@@ -74,20 +99,13 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setLoading(true);
-      await authService.logout();
-      
-      // Remove token from localStorage
-      localStorage.removeItem('authToken');
-      
-      // Disconnect and reinitialize socket without auth
+      await authClient.signOut();
+
+      // Disconnect socket
       socketService.disconnectSocket();
-      
-      // When user logs out, we don't initialize socket right away
-      // This prevents unauthenticated socket connections
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      // Clear user state regardless of API call success
       setUser(null);
       setError(null);
       setLoading(false);
@@ -99,12 +117,28 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
       setLoading(true);
-      const response = await authService.register(userData);
-      // The server will set the HTTP-only cookie
-      // Get the user data from the response or fetch it again
-      const user = response.user || await authService.getCurrentUser();
-      setUser(user);
-      return user;
+
+      const { data, error: signUpError } = await authClient.signUp.email({
+        email: `${userData.username}@platinum.local`,
+        password: userData.password,
+        name: userData.username,
+        username: userData.username,
+      });
+
+      if (signUpError) {
+        throw new Error(signUpError.message || 'Registration failed');
+      }
+
+      // Fetch full user data including balance from our API
+      let mappedUser;
+      try {
+        mappedUser = await api.get('/users/me');
+      } catch {
+        mappedUser = mapUser(data?.user);
+      }
+
+      setUser(mappedUser);
+      return mappedUser;
     } catch (err) {
       setError(err.message || 'Registration failed');
       throw err;
@@ -118,7 +152,7 @@ export const AuthProvider = ({ children }) => {
     if (user) {
       setUser({
         ...user,
-        balance: newBalance
+        balance: newBalance,
       });
     }
   };
@@ -132,7 +166,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     register,
     updateBalance,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

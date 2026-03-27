@@ -1,13 +1,12 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Landmines Game Socket Handler
  * Handles all socket.io events for the Landmines game
  */
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
-
-// Import GameStat model for tracking statistics
-const GameStat = require('../../models/GameStat.js').default;
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
+import GameStat from '../../drizzle/models/GameStat.js';
+import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
@@ -34,53 +33,47 @@ const calculateMultiplier = (mines, revealed) => {
   // Base multiplier depends on the number of mines (higher risk = higher reward)
   // For 1 mine: ~1.05x base, for 24 mines: ~24x base
   const baseMultiplier = 1 + (mines / 12);
-  
+
   // Growth constant: how quickly the multiplier increases with each reveal
   // For fewer mines, growth is slower. For many mines, growth is faster.
   const growthFactor = 1 + (mines / 25);
-  
+
   // Calculate the multiplier with exponential growth
   // First reveal gives the base multiplier, then it grows exponentially
   return Math.round((baseMultiplier * Math.pow(growthFactor, revealed)) * 100) / 100;
 };
 
 /**
- * Generate a grid with mines
- * Uses a provably fair approach with server + client seeds
+ * Generate a grid with mines using cryptographically secure randomness
  * @param {Number} mines - Number of mines to place
- * @param {String} serverSeed - Server seed for fairness
  * @returns {Array} - 5x5 grid with mines (true) and diamonds (false)
  */
-const generateGrid = (mines, serverSeed = '') => {
+const generateGrid = (mines) => {
   if (mines < MIN_MINES || mines > MAX_MINES) {
     throw new Error(`Number of mines must be between ${MIN_MINES} and ${MAX_MINES}`);
   }
-  
+
   // Create a flat array of 25 cells (5x5 grid)
   let cells = Array(GRID_SIZE * GRID_SIZE).fill(false);
-  
-  // Create a deterministic PRNG using the server seed
-  const seedrandom = require('seedrandom');
-  const rng = seedrandom(serverSeed);
-  
-  // Place mines randomly
+
+  // Place mines using cryptographically secure random placement
   let minesToPlace = mines;
   while (minesToPlace > 0) {
-    const index = Math.floor(rng() * cells.length);
-    
+    const index = crypto.randomInt(cells.length);
+
     // If this cell doesn't already have a mine, place one
     if (!cells[index]) {
       cells[index] = true;
       minesToPlace--;
     }
   }
-  
+
   // Convert flat array to 2D grid for easier reference
   const grid = [];
   for (let i = 0; i < GRID_SIZE; i++) {
     grid.push(cells.slice(i * GRID_SIZE, (i + 1) * GRID_SIZE));
   }
-  
+
   return grid;
 };
 
@@ -91,11 +84,18 @@ const generateGrid = (mines, serverSeed = '') => {
  * @param {Object} user - Authenticated user information
  */
 function initLandminesHandlers(io, socket, user) {
-  const userId = user?._id || socket.id;
-  
+  // Read user identity from server-side authenticated user (set by auth middleware)
+  const authenticatedUser = (socket as any).user;
+  if (!authenticatedUser) {
+    socket.emit('landmines:error', { message: 'Authentication required' });
+    socket.disconnect();
+    return;
+  }
+  const userId = authenticatedUser.userId;
+
   // Join the landmines namespace/room
   socket.join('landmines');
-  
+
   // Create or get user session
   if (!activeSessions.has(userId)) {
     activeSessions.set(userId, {
@@ -105,15 +105,15 @@ function initLandminesHandlers(io, socket, user) {
       currentGame: null,
       isPlaying: false
     });
-    
+
     // Log session initialization
-    loggingService.logGameEvent('landmines', 'session_start', {
+    LoggingService.logGameEvent('landmines', 'session_start', {
       userId,
       initialBalance: user?.balance || 1000,
       timestamp: new Date()
     }, userId);
   }
-  
+
   /**
    * Handle joining the landmines game
    */
@@ -121,21 +121,21 @@ function initLandminesHandlers(io, socket, user) {
     try {
       // Get recent game history (limited to last 10 results)
       const recentHistory = gameHistory.slice(-10);
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Return game state to the client
       const response = {
         success: true,
         balance: session.balance,
         history: recentHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error joining Landmines game:', error);
+      LoggingService.logGameEvent('landmines', 'error_join', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -147,55 +147,52 @@ function initLandminesHandlers(io, socket, user) {
     try {
       // Validate game data
       const { betAmount, mines } = data;
-      
+
       if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
         throw new Error('Invalid bet amount');
       }
-      
+
       if (!mines || isNaN(mines) || mines < MIN_MINES || mines > MAX_MINES) {
         throw new Error(`Number of mines must be between ${MIN_MINES} and ${MAX_MINES}`);
       }
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Check if user already has an active game
       if (session.currentGame) {
         throw new Error('You already have an active game. Cash out or continue playing.');
       }
-      
+
       // Check if user has enough balance
       if (session.balance < betAmount) {
         throw new Error('Insufficient balance');
       }
-      
+
       // Deduct bet amount from balance
       session.balance -= betAmount;
-      
+
       // Generate a unique game ID
-      const gameId = Date.now().toString();
-      
-      // Use balanceService to record the bet transaction
-      await balanceService.placeBet(userId, betAmount, 'landmines', {
+      const gameId = crypto.randomUUID();
+
+      // Use BalanceService to record the bet transaction
+      await BalanceService.placeBet(userId, betAmount, 'landmines', {
         mines,
         landminesSessionId: gameId
       });
-      
+
       // Log bet placed
-      loggingService.logBetPlaced('landmines', gameId, userId, betAmount, {
+      LoggingService.logBetPlaced('landmines', gameId, userId, betAmount, {
         mines,
         timestamp: new Date()
       });
-      
-      // Generate the server seed for provably fair play
-      const serverSeed = Math.random().toString(36).substring(2, 15);
-      
-      // Generate grid with mines
-      const grid = generateGrid(mines, serverSeed);
-      
+
+      // Generate grid with mines (cryptographically secure)
+      const grid = generateGrid(mines);
+
       // Track revealed cells
       const revealedCells = [];
-      
+
       // Setup game state
       const currentGame = {
         id: gameId,
@@ -203,16 +200,15 @@ function initLandminesHandlers(io, socket, user) {
         mines,
         grid,
         revealedCells,
-        serverSeed,
         currentMultiplier: 0,
         potentialWin: 0,
         isActive: true,
         startTime: new Date()
       };
-      
+
       // Store the current game in the session
       session.currentGame = currentGame;
-      
+
       // Return game setup to client
       const response = {
         success: true,
@@ -221,11 +217,11 @@ function initLandminesHandlers(io, socket, user) {
         gridSize: GRID_SIZE,
         balance: session.balance
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error starting Landmines game:', error);
+      LoggingService.logGameEvent('landmines', 'error_start', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -237,37 +233,37 @@ function initLandminesHandlers(io, socket, user) {
     try {
       // Validate selection data
       const { row, col } = data;
-      
+
       if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) {
         throw new Error('Invalid cell selection');
       }
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Check if user has an active game
       if (!session.currentGame || !session.currentGame.isActive) {
         throw new Error('No active game found');
       }
-      
+
       const game = session.currentGame;
-      
+
       // Check if cell was already revealed
       const cellPosition = `${row},${col}`;
       if (game.revealedCells.includes(cellPosition)) {
         throw new Error('This cell has already been revealed');
       }
-      
+
       // Check if cell has a mine
       const hasMine = game.grid[row][col];
-      
+
       // Add to revealed cells
       game.revealedCells.push(cellPosition);
-      
+
       if (hasMine) {
         // Game over - hit a mine
         game.isActive = false;
-        
+
         // Create game result
         const gameResult = {
           id: game.id,
@@ -284,9 +280,9 @@ function initLandminesHandlers(io, socket, user) {
           grid: game.grid, // Full grid for display
           endTime: new Date()
         };
-        
+
         // Log the loss
-        loggingService.logBetResult(
+        LoggingService.logBetResult(
           'landmines',
           game.id,
           userId,
@@ -300,17 +296,17 @@ function initLandminesHandlers(io, socket, user) {
             timestamp: new Date()
           }
         );
-        
+
         // Add to history
         gameHistory.push(gameResult);
         session.history.push(gameResult);
         session.currentGame = null;
-        
+
         // Update game statistics (loss)
         GameStat.updateStats('landmines', game.betAmount, 0).catch(err => {
-          console.error('Failed to update game stats:', err);
+          LoggingService.logGameEvent('landmines', 'error_update_stats', { error: String(err), userId });
         });
-        
+
         // Return result to client
         const response = {
           success: true,
@@ -321,28 +317,28 @@ function initLandminesHandlers(io, socket, user) {
           gameOver: true,
           fullGrid: game.grid // Send full grid for reveal
         };
-        
+
         if (callback) callback(response);
-        
+
       } else {
         // Success - found a diamond
         // Number of diamonds revealed (excluding the current one)
         const revealedCount = game.revealedCells.length - 1;
-        
+
         // Calculate current multiplier
         const multiplier = calculateMultiplier(game.mines, revealedCount);
-        
+
         // Calculate potential win if cashed out now
         const potentialWin = game.betAmount * multiplier;
-        
+
         // Update game state
         game.currentMultiplier = multiplier;
         game.potentialWin = potentialWin;
-        
+
         // Get number of remaining cells that aren't mines
         const totalCells = GRID_SIZE * GRID_SIZE;
         const remainingSafeCells = totalCells - game.mines - game.revealedCells.length;
-        
+
         // Return result to client
         const response = {
           success: true,
@@ -354,18 +350,18 @@ function initLandminesHandlers(io, socket, user) {
           balance: session.balance,
           gameOver: false
         };
-        
+
         if (callback) callback(response);
-        
+
         // If all diamonds have been found
         if (remainingSafeCells === 0) {
           // Auto cash-out since all diamonds have been found
           handleCashout(socket, session, game, callback);
         }
       }
-      
+
     } catch (error) {
-      console.error('Error picking landmines cell:', error);
+      LoggingService.logGameEvent('landmines', 'error_pick', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -377,19 +373,19 @@ function initLandminesHandlers(io, socket, user) {
     try {
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Check if user has an active game
       if (!session.currentGame || !session.currentGame.isActive) {
         throw new Error('No active game found');
       }
-      
+
       const game = session.currentGame;
-      
+
       // Process cashout
       handleCashout(socket, session, game, callback);
-      
+
     } catch (error) {
-      console.error('Error cashing out from Landmines game:', error);
+      LoggingService.logGameEvent('landmines', 'error_cashout', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -400,25 +396,25 @@ function initLandminesHandlers(io, socket, user) {
   socket.on('landmines:get_history', async (data, callback) => {
     try {
       const limit = data?.limit || 10;
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Get recent game history (limited to specified number)
       const userHistory = session.history.slice(-limit);
       const globalHistory = gameHistory.slice(-limit);
-      
+
       // Return history to the client
       const response = {
         success: true,
         userHistory,
         globalHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error getting Landmines history:', error);
+      LoggingService.logGameEvent('landmines', 'error_get_history', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -446,30 +442,34 @@ function initLandminesHandlers(io, socket, user) {
    * Helper function to process cashout
    */
   const handleCashout = async (socket, session, game, callback) => {
+    // Guard against double-cashout: immediately mark inactive before any async work
+    if (!game.isActive) {
+      if (callback) callback({ success: false, error: 'Game already ended' });
+      return;
+    }
+    game.isActive = false;
+
     // Diamonds revealed so far
     const revealedCount = game.revealedCells.length;
-    
+
     // Calculate final multiplier
     const multiplier = calculateMultiplier(game.mines, revealedCount);
-    
+
     // Calculate win amount
     const winAmount = game.betAmount * multiplier;
     const profit = winAmount - game.betAmount;
-    
+
     // Add winnings to balance
     session.balance += winAmount;
-    
-    // Use balanceService to record the win transaction
-    await balanceService.recordWin(userId, game.betAmount, winAmount, 'landmines', {
+
+    // Use BalanceService to record the win transaction
+    await BalanceService.recordWin(userId, game.betAmount, winAmount, 'landmines', {
       mines: game.mines,
       revealedCells: revealedCount,
       multiplier,
       profit
     });
-    
-    // Mark game as inactive
-    game.isActive = false;
-    
+
     // Create game result
     const gameResult = {
       id: game.id,
@@ -485,9 +485,9 @@ function initLandminesHandlers(io, socket, user) {
       grid: game.grid, // Full grid for display
       endTime: new Date()
     };
-    
+
     // Log the win
-    loggingService.logBetResult(
+    LoggingService.logBetResult(
       'landmines',
       game.id,
       userId,
@@ -502,17 +502,17 @@ function initLandminesHandlers(io, socket, user) {
         timestamp: new Date()
       }
     );
-    
+
     // Add to history
     gameHistory.push(gameResult);
     session.history.push(gameResult);
     session.currentGame = null;
-    
+
     // Update game statistics (win)
     GameStat.updateStats('landmines', game.betAmount, winAmount).catch(err => {
-      console.error('Failed to update game stats:', err);
+      LoggingService.logGameEvent('landmines', 'error_update_stats', { error: String(err), userId });
     });
-    
+
     // Return result to client
     const response = {
       success: true,
@@ -524,9 +524,9 @@ function initLandminesHandlers(io, socket, user) {
       fullGrid: game.grid, // Send full grid for reveal
       cashedOut: true
     };
-    
+
     if (callback) callback(response);
-    
+
     // Broadcast cashout to other players (optional, for live feed)
     socket.to('landmines').emit('landmines:player_cashout', {
       userId,
@@ -539,6 +539,5 @@ function initLandminesHandlers(io, socket, user) {
   };
 }
 
-module.exports = {
-  initLandminesHandlers
-};
+export default initLandminesHandlers;
+export { initLandminesHandlers };

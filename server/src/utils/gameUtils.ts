@@ -2,6 +2,7 @@
  * Game Utilities
  * Common functions used across different game types
  */
+import crypto from 'crypto';
 
 // Card deck constants
 const SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
@@ -34,12 +35,12 @@ function createDeck() {
  */
 function shuffleArray(array) {
   const newArray = [...array];
-  
+
   for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = crypto.randomInt(i + 1);
     [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
-  
+
   return newArray;
 }
 
@@ -52,7 +53,7 @@ function shuffleArray(array) {
 function getRandomInt(min, max) {
   min = Math.ceil(min);
   max = Math.floor(max);
-  return Math.floor(Math.random() * (max - min + 1) + min);
+  return crypto.randomInt(min, max + 1);
 }
 
 /**

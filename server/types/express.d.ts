@@ -1,13 +1,11 @@
 // Global type declarations for Express
 declare namespace Express {
   export interface User {
-    id: number;
-    userId?: number; // For backward compatibility
+    userId: number;
     username: string;
-    email?: string;
     role?: string;
   }
-  
+
   export interface Request {
     user?: User;
   }

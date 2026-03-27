@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { eq, desc, and } from 'drizzle-orm';
 import { db } from '../db.js';
 import { balances, users, transactions } from '../schema.js';
@@ -13,14 +12,11 @@ class BalanceModel {
         updatedAt: new Date(),
       });
 
-      // For MySQL, we need to get the last inserted ID differently
-      // Get the created balance record using the result's insertId or by querying the latest record
+      // Use insertId from the insert result to retrieve the exact row we just created
       const [balance] = await db
         .select()
         .from(balances)
-        .where(eq(balances.userId, balanceData.userId))
-        .orderBy(desc(balances.createdAt))
-        .limit(1);
+        .where(eq(balances.id, (result as any).insertId));
       return balance;
     } catch (error) {
       throw new Error(`Error creating balance record: ${(error as Error).message}`);

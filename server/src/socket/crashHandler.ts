@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Crash game socket handler
  * This module handles the Crash game socket events and integrates with the balanceService
@@ -14,6 +14,7 @@
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import { calculateHouseEdge } from '../utils/gameUtils.js';
+import crypto from 'crypto';
 
 // Namespace crash-specific variables to avoid conflicts
 const crashGame = {
@@ -61,12 +62,12 @@ export default function initCrashHandlers(namespace) {
   
   // Connect socket handlers
   namespace.on('connection', (socket) => {
-    console.log('Client connected to crash namespace:', socket.id);
+    LoggingService.logGameEvent('crash', 'client_connected', { socketId: socket.id });
     
     // Get authenticated user from socket
     const user = (socket as any).user;
     if (!user) {
-      console.error('Unauthenticated user in crash handler');
+      LoggingService.logSystemEvent('unauthenticated_user', { handler: 'crash' }, 'warning');
       socket.disconnect();
       return;
     }
@@ -166,7 +167,7 @@ export default function initCrashHandlers(namespace) {
             return callback({ success: false, error: 'Insufficient balance' });
           }
         } catch (error) {
-          console.error('Error checking user balance:', error);
+          LoggingService.logGameEvent('crash', 'error_checking_balance', { error: String(error), userId });
           return callback({ success: false, error: 'Could not verify balance' });
         }
         
@@ -177,7 +178,7 @@ export default function initCrashHandlers(namespace) {
             gameId: gameState.gameId || `game_${Date.now()}`
           });
         } catch (error) {
-          console.error('Error recording bet transaction:', error);
+          LoggingService.logGameEvent('crash', 'error_recording_bet', { error: String(error), userId });
           return callback({ success: false, error: 'Failed to place bet' });
         }
         
@@ -215,7 +216,7 @@ export default function initCrashHandlers(namespace) {
           message: 'Bet placed successfully'
         });
       } catch (error) {
-        console.error('Error in placeBet:', error);
+        LoggingService.logGameEvent('crash', 'error_place_bet', { error: String(error), userId });
         callback({ success: false, error: 'Server error' });
       }
     });
@@ -265,7 +266,7 @@ export default function initCrashHandlers(namespace) {
             gameId: gameState.gameId
           });
         } catch (error) {
-          console.error('Error recording win transaction:', error);
+          LoggingService.logGameEvent('crash', 'error_recording_win', { error: String(error), userId });
           return callback({ success: false, error: 'Failed to process cashout' });
         }
         
@@ -296,7 +297,7 @@ export default function initCrashHandlers(namespace) {
           profit
         });
       } catch (error) {
-        console.error('Error in cashOut:', error);
+        LoggingService.logGameEvent('crash', 'error_cashout', { error: String(error), userId });
         callback({ success: false, error: 'Server error' });
       }
     });
@@ -305,7 +306,7 @@ export default function initCrashHandlers(namespace) {
      * Handle disconnection
      */
     socket.on('disconnect', () => {
-      console.log('Client disconnected from crash namespace:', socket.id);
+      LoggingService.logGameEvent('crash', 'client_disconnected', { socketId: socket.id, userId });
       
       // Remove from connected users
       connectedUsers.delete(userId);
@@ -341,11 +342,8 @@ export default function initCrashHandlers(namespace) {
     const houseEdge = calculateHouseEdge('crash');
     gameState.crashPoint = generateCrashPoint(houseEdge);
     
-    console.log(`Starting new crash game with crash point: ${gameState.crashPoint}x`);
-    
-    // Log game starting
+    // Log game starting (do NOT log crash point to avoid game integrity issues)
     LoggingService.logGameStart('crash', gameState.gameId, {
-      crashPoint: gameState.crashPoint,
       houseEdge,
       startTime: new Date()
     });
@@ -436,7 +434,7 @@ export default function initCrashHandlers(namespace) {
             autoCashout: true
           });
         } catch (error) {
-          console.error('Error recording auto-cashout win:', error);
+          LoggingService.logGameEvent('crash', 'error_auto_cashout', { error: String(error), userId });
         }
         
         // Get player info for the broadcast
@@ -550,20 +548,23 @@ export default function initCrashHandlers(namespace) {
     // Base algorithm for crash point (simplified)
     // A more sophisticated implementation would use provably fair algorithms
     const edge = 1 - houseEdge;
-    
-    // Generate a random value between 0 and 1
-    const r = Math.random();
-    
+
+    // Generate a cryptographically secure random value between 0 and 1
+    const r = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+
     // Apply mathematical formula to create house edge
     // This is a simplified version; real casinos use more complex formulas
     if (r < houseEdge) {
       // House edge forces early crash (with 1-5x multiplier)
-      return 1 + (Math.random() * 4);
+      const r2 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+      return 1 + (r2 * 4);
     } else {
       // Normal distribution centered around 2x with variance
       // This creates a bell curve with most values between 1.5x and 10x
       // but still allows for rare high multipliers
-      const variance = Math.random() * Math.random() * 20; // Higher variance for occasional big crashes
+      const r3 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+      const r4 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+      const variance = r3 * r4 * 20; // Higher variance for occasional big crashes
       return 1 + variance;
     }
   }

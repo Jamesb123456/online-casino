@@ -1,12 +1,12 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Plinko Game Socket Handler
  * Handles all socket.io events for the Plinko game
  */
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService').default;
-
-const { generatePath, calculateMultiplier } = require('../utils/plinkoUtils');
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
+import { generatePath, calculateMultiplier } from '../utils/plinkoUtils.js';
+import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
@@ -21,11 +21,18 @@ const gameHistory = [];
  * @param {Object} user - Authenticated user information
  */
 function initPlinkoHandlers(io, socket, user) {
-  const userId = user?._id || socket.id;
-  
+  // Read user identity from server-side authenticated user (set by auth middleware)
+  const authenticatedUser = (socket as any).user;
+  if (!authenticatedUser) {
+    socket.emit('plinko:error', { message: 'Authentication required' });
+    socket.disconnect();
+    return;
+  }
+  const userId = authenticatedUser.userId;
+
   // Join the plinko namespace/room
   socket.join('plinko');
-  
+
   // Create or get user session
   if (!activeSessions.has(userId)) {
     activeSessions.set(userId, {
@@ -35,15 +42,15 @@ function initPlinkoHandlers(io, socket, user) {
       currentBets: [],
       isPlaying: false
     });
-    
+
     // Log session initialization
-    loggingService.logGameEvent('plinko', 'session_start', {
+    LoggingService.logGameEvent('plinko', 'session_start', {
       userId,
       initialBalance: user?.balance || 1000,
       timestamp: new Date()
     }, userId);
   }
-  
+
   /**
    * Handle joining the plinko game
    */
@@ -51,21 +58,21 @@ function initPlinkoHandlers(io, socket, user) {
     try {
       // Get recent game history (limited to last 10 results)
       const recentHistory = gameHistory.slice(-10);
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Return game state to the client
       const response = {
         success: true,
         balance: session.balance,
         history: recentHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error joining Plinko game:', error);
+      LoggingService.logGameEvent('plinko', 'error_join', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -77,56 +84,56 @@ function initPlinkoHandlers(io, socket, user) {
     try {
       // Validate bet data
       const { betAmount, risk = 'medium', rows = 16 } = data;
-      
+
       if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
         throw new Error('Invalid bet amount');
       }
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Check if user has enough balance
       if (session.balance < betAmount) {
         throw new Error('Insufficient balance');
       }
-      
+
       // Deduct bet amount from balance
       session.balance -= betAmount;
-      
+
       // Generate a unique game ID
-      const gameId = Date.now().toString();
-      
-      // Use balanceService to record the bet transaction
-      await balanceService.placeBet(userId, betAmount, 'plinko', {
+      const gameId = crypto.randomUUID();
+
+      // Use BalanceService to record the bet transaction
+      await BalanceService.placeBet(userId, betAmount, 'plinko', {
         risk,
         rows,
         plinkoSessionId: gameId
       });
-      
+
       // Log bet placed
-      loggingService.logBetPlaced('plinko', gameId, userId, betAmount, {
+      LoggingService.logBetPlaced('plinko', gameId, userId, betAmount, {
         risk,
         rows,
         timestamp: new Date()
       });
-      
-      // Generate the ball path (simplified for demonstration)
-      const serverSeed = Math.random().toString(36).substring(2, 15);
+
+      // Generate the ball path using cryptographic seed
+      const serverSeed = crypto.randomBytes(16).toString('hex');
       const path = generatePath(rows, serverSeed);
-      
+
       // Calculate the multiplier based on the path and risk level
       const multiplier = calculateMultiplier(path[path.length - 1], rows, risk);
-      
+
       // Calculate winnings
       const winAmount = betAmount * multiplier;
       const profit = winAmount - betAmount;
-      
+
       // Add winnings to balance
       session.balance += winAmount;
-      
-      // Use balanceService to record the win transaction
+
+      // Use BalanceService to record the win transaction
       if (winAmount > 0) {
-        await balanceService.recordWin(userId, betAmount, winAmount, 'plinko', {
+        await BalanceService.recordWin(userId, betAmount, winAmount, 'plinko', {
           risk,
           rows,
           multiplier,
@@ -134,10 +141,10 @@ function initPlinkoHandlers(io, socket, user) {
           profit
         });
       }
-      
+
       // Create game result
       const gameResult = {
-        id: gameId, // Use the same gameId we generated earlier
+        id: gameId,
         userId,
         timestamp: new Date(),
         betAmount,
@@ -148,14 +155,14 @@ function initPlinkoHandlers(io, socket, user) {
         winAmount,
         profit
       };
-      
+
       // Log game result
-      loggingService.logBetResult(
-        'plinko', 
-        gameId, 
-        userId, 
-        betAmount, 
-        winAmount, 
+      LoggingService.logBetResult(
+        'plinko',
+        gameId,
+        userId,
+        betAmount,
+        winAmount,
         profit >= 0, // true if win, false if loss
         {
           risk,
@@ -166,14 +173,11 @@ function initPlinkoHandlers(io, socket, user) {
           timestamp: new Date()
         }
       );
-      
+
       // Add to history
       gameHistory.push(gameResult);
       session.history.push(gameResult);
-      
-      // Wait a bit to simulate ball drop animation time
-      // In real implementation, we'd send path data first and results later
-      
+
       // Send result to client
       const response = {
         success: true,
@@ -184,9 +188,9 @@ function initPlinkoHandlers(io, socket, user) {
         profit: gameResult.profit,
         balance: session.balance
       };
-      
+
       if (callback) callback(response);
-      
+
       // Broadcast to room that a new game happened (for real-time updates)
       socket.to('plinko').emit('plinko:game_result', {
         userId,
@@ -194,9 +198,9 @@ function initPlinkoHandlers(io, socket, user) {
         multiplier,
         profit
       });
-      
+
     } catch (error) {
-      console.error('Error dropping Plinko ball:', error);
+      LoggingService.logGameEvent('plinko', 'error_drop_ball', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -207,25 +211,25 @@ function initPlinkoHandlers(io, socket, user) {
   socket.on('plinko:get_history', async (data, callback) => {
     try {
       const limit = data?.limit || 10;
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Get recent game history (limited to specified number)
       const userHistory = session.history.slice(-limit);
       const globalHistory = gameHistory.slice(-limit);
-      
+
       // Return history to the client
       const response = {
         success: true,
         userHistory,
         globalHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error getting Plinko history:', error);
+      LoggingService.logGameEvent('plinko', 'error_get_history', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -250,6 +254,5 @@ function initPlinkoHandlers(io, socket, user) {
   });
 }
 
-module.exports = {
-  initPlinkoHandlers
-};
+export default initPlinkoHandlers;
+export { initPlinkoHandlers };

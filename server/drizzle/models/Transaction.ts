@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, count, sum, and, or, like } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import db from '../db.js';
@@ -226,6 +226,38 @@ class TransactionModel {
     } catch (error) {
       const err = error as Error;
       throw new Error(`Error voiding transaction: ${err.message}`);
+    }
+  }
+
+  // Count transactions matching a filter
+  static async count(filter: TransactionFilter = {}): Promise<number> {
+    try {
+      const conditions = [];
+
+      if (filter.userId) {
+        conditions.push(eq(transactions.userId, filter.userId));
+      }
+      if (filter.type) {
+        conditions.push(eq(transactions.type, filter.type));
+      }
+      if (filter.gameType) {
+        conditions.push(eq(transactions.gameType, filter.gameType));
+      }
+      if (filter.status) {
+        conditions.push(eq(transactions.status, filter.status));
+      }
+
+      let baseQuery = db.select({ count: count() }).from(transactions);
+
+      if (conditions.length > 0) {
+        baseQuery = baseQuery.where(and(...conditions));
+      }
+
+      const [result] = await baseQuery;
+      return result?.count ?? 0;
+    } catch (error) {
+      const err = error as Error;
+      throw new Error(`Error counting transactions: ${err.message}`);
     }
   }
 

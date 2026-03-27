@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import db from '../db.js';
 import { gameStats } from '../schema.js';
@@ -7,12 +7,13 @@ class GameStatModel {
   // Create a new game stat
   static async create(statData) {
     try {
-      const [stat] = await db.insert(gameStats).values({
+      const result = await db.insert(gameStats).values({
         ...statData,
         createdAt: new Date(),
         updatedAt: new Date(),
-      }).returning();
+      });
 
+      const [stat] = await db.select().from(gameStats).where(eq(gameStats.id, (result as any).insertId));
       return stat;
     } catch (error) {
       throw new Error(`Error creating game stat: ${error.message}`);
@@ -142,12 +143,12 @@ class GameStatModel {
   // Update stat
   static async update(id, updateData) {
     try {
-      const [updatedStat] = await db
+      await db
         .update(gameStats)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(gameStats.id, id))
-        .returning();
+        .where(eq(gameStats.id, id));
 
+      const [updatedStat] = await db.select().from(gameStats).where(eq(gameStats.id, id));
       return updatedStat;
     } catch (error) {
       throw new Error(`Error updating game stat: ${error.message}`);
@@ -157,12 +158,12 @@ class GameStatModel {
   // Update stat by game type
   static async updateByGameType(gameType, updateData) {
     try {
-      const [updatedStat] = await db
+      await db
         .update(gameStats)
         .set({ ...updateData, updatedAt: new Date() })
-        .where(eq(gameStats.gameType, gameType))
-        .returning();
+        .where(eq(gameStats.gameType, gameType));
 
+      const [updatedStat] = await db.select().from(gameStats).where(eq(gameStats.gameType, gameType));
       return updatedStat;
     } catch (error) {
       throw new Error(`Error updating game stat by game type: ${error.message}`);
@@ -172,10 +173,8 @@ class GameStatModel {
   // Delete stat
   static async delete(id) {
     try {
-      const [deletedStat] = await db
-        .delete(gameStats)
-        .where(eq(gameStats.id, id))
-        .returning();
+      const [deletedStat] = await db.select().from(gameStats).where(eq(gameStats.id, id));
+      await db.delete(gameStats).where(eq(gameStats.id, id));
 
       return deletedStat;
     } catch (error) {

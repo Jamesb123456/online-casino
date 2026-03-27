@@ -1,12 +1,15 @@
-// @ts-nocheck
-require('dotenv').config();
-const bcrypt = require('bcryptjs');
-const readline = require('readline');
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
+import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import * as readline from 'readline';
 
 // Import Drizzle models
-const UserModel = require('../drizzle/models/User');
-const Balance = require('../drizzle/models/Balance');
-const { db } = require('../drizzle/db');
+import UserModel from '../drizzle/models/User.js';
+import BalanceModel from '../drizzle/models/Balance.js';
+import { db } from '../drizzle/db.js';
+import { account } from '../drizzle/schema.js';
+
+dotenv.config();
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -24,10 +27,10 @@ function askQuestion(question) {
 async function createAdmin() {
   try {
     console.log('Creating new admin user...\n');
-    
+
     const username = await askQuestion('Enter admin username: ');
     const password = await askQuestion('Enter admin password: ');
-    
+
     if (!username || !password) {
       console.log('Username and password are required!');
       process.exit(1);
@@ -43,22 +46,36 @@ async function createAdmin() {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create admin user
+    // Create admin user with Better Auth required fields
     const newAdmin = await UserModel.create({
       username,
       passwordHash: hashedPassword,
+      name: username,
+      email: `${username}@platinum.local`,
+      emailVerified: true,
+      displayUsername: username,
       role: 'admin',
-      balance: '100000', // Starting balance
+      balance: '100000',
       isActive: true,
       createdAt: new Date()
     });
 
-    console.log('\n✅ Admin user created successfully!');
+    // Create Better Auth account record
+    await db.insert(account).values({
+      userId: newAdmin.id,
+      accountId: String(newAdmin.id),
+      providerId: 'credential',
+      password: hashedPassword,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    console.log('\nAdmin user created successfully!');
     console.log('Admin Details:');
     console.log(`Username: ${username}`);
 
   } catch (error) {
-    console.error('❌ Error creating admin user:', error.message);
+    console.error('Error creating admin user:', error.message);
   } finally {
     // Close readline interface and database connection
     rl.close();

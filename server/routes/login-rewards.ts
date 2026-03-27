@@ -1,27 +1,19 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express, { Request, Response } from 'express';
 import { db } from '../drizzle/db.js';
 import { transactions } from '../drizzle/schema.js';
 import UserModel from '../drizzle/models/User.js';
 import LoginRewardModel from '../drizzle/models/LoginReward.js';
 import { authenticate } from '../middleware/auth.js';
-
-// Extend Express Request type to include user property added by authentication middleware
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { id: number; username: string; email: string }
-    }
-  }
-}
 import { eq, desc } from 'drizzle-orm';
+import LoggingService from '../src/services/loggingService.js';
 
 const router = express.Router();
 
 // Check if daily reward is available
 router.get('/status', authenticate, async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -34,7 +26,7 @@ router.get('/status', authenticate, async (req: Request, res: Response) => {
       nextRewardTime: hasClaimedToday ? getNextRewardTime() : null
     });
   } catch (error: any) {
-    console.error('Error checking reward status:', error);
+    LoggingService.logSystemEvent('reward_status_check_error', { error: (error as Error)?.message }, 'error');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -42,7 +34,7 @@ router.get('/status', authenticate, async (req: Request, res: Response) => {
 // Claim daily reward
 router.post('/claim', authenticate, async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -115,7 +107,7 @@ router.post('/claim', authenticate, async (req: Request, res: Response) => {
       newBalance: balanceAfter
     });
   } catch (error: any) {
-    console.error('Error claiming reward:', error);
+    LoggingService.logSystemEvent('reward_claim_error', { error: (error as Error)?.message }, 'error');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -123,14 +115,15 @@ router.post('/claim', authenticate, async (req: Request, res: Response) => {
 // Get reward history for the current user
 router.get('/history', authenticate, async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 30;
-    const rewards = await LoginRewardModel.getHistoryByUserId(userId, limit);
+    const rawLimit = req.query.limit ? parseInt(req.query.limit as string) : 30;
+    const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 30;
+    const rewards = await LoginRewardModel.getHistoryByUserId(userId, safeLimit);
     const totalRewards = await LoginRewardModel.getTotalRewardsByUserId(userId);
     
     return res.json({
@@ -138,7 +131,7 @@ router.get('/history', authenticate, async (req: Request, res: Response) => {
       totalRewards
     });
   } catch (error: any) {
-    console.error('Error fetching reward history:', error);
+    LoggingService.logSystemEvent('reward_history_fetch_error', { error: (error as Error)?.message }, 'error');
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

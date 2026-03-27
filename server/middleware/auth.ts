@@ -1,40 +1,36 @@
-import jwt from 'jsonwebtoken';
 import type { Request, Response, NextFunction } from 'express';
-import UserModel from '../drizzle/models/User.js';
+import { fromNodeHeaders } from 'better-auth/node';
+import { auth } from '../lib/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import LoggingService from '../src/services/loggingService.js';
 
-// Middleware to verify JWT token from HTTP-only cookie
+// Middleware to verify Better Auth session
 export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void | Response> => {
   try {
-    // Get token from HTTP-only cookie instead of Authorization header
-    const token = req.cookies.authToken;
-    
-    if (!token) {
-      return res.status(401).json({ message: 'No token, authorization denied' });
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    if (!session || !session.user) {
+      return res.status(401).json({ message: 'No valid session, authorization denied' });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
-    
-    // Get user from database
-    const user = await UserModel.findById(decoded.userId);
-    
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: 'Token is not valid' });
+    // Check isActive custom field
+    if ((session.user as any).isActive === false) {
+      return res.status(401).json({ message: 'Account is disabled' });
     }
 
-    // Add user to request
+    // Add user to request in the same shape the rest of the app expects
     (req as AuthenticatedRequest).user = {
-      id: user.id,
-      userId: user.id,
-      username: user.username,
-      role: user.role
+      userId: Number(session.user.id),
+      username: (session.user as any).username || session.user.name,
+      role: (session.user.role as 'user' | 'admin') || 'user',
     };
-    
+
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(401).json({ message: 'Token is not valid' });
+    LoggingService.logSystemEvent('auth_middleware_error', { error: (error as Error)?.message }, 'error');
+    res.status(401).json({ message: 'Session is not valid' });
   }
 };
 

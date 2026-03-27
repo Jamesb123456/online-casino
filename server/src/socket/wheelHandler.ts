@@ -1,10 +1,11 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Wheel Game Socket Handler
  * Handles all socket.io events for the Wheel of Fortune game
  */
-const balanceService = require('../services/balanceService');
-const loggingService = require('../services/loggingService');
+import BalanceService from '../services/balanceService.js';
+import LoggingService from '../services/loggingService.js';
+import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
@@ -58,9 +59,9 @@ const getWheelSegments = (difficulty = 'medium') => {
   const expandedSegments = [];
   segments.forEach(segment => {
     for (let i = 0; i < segment.weight; i++) {
-      expandedSegments.push({ 
-        multiplier: segment.multiplier, 
-        color: segment.color 
+      expandedSegments.push({
+        multiplier: segment.multiplier,
+        color: segment.color
       });
     }
   });
@@ -69,27 +70,13 @@ const getWheelSegments = (difficulty = 'medium') => {
 };
 
 /**
- * Generate a cryptographically fair wheel result
- * @param {String} serverSeed - Server generated seed for fairness
+ * Generate a cryptographically secure wheel result
  * @param {Array<Object>} segments - Array of wheel segments
  * @returns {Object} - Selected segment and additional result data
  */
-const generateWheelResult = (serverSeed = '', segments) => {
-  // In a real implementation, this would use a cryptographic hash function
-  // Here we're using a simplified approach for demonstration
-  
-  // Create a deterministic but seemingly random value from the seeds
-  const seedString = `${serverSeed}-${Date.now()}`;
-  let hash = 0;
-  
-  for (let i = 0; i < seedString.length; i++) {
-    const char = seedString.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-
-  // Use the hash to select a segment
-  const index = Math.abs(hash) % segments.length;
+const generateWheelResult = (segments) => {
+  // Use cryptographically secure random number for game-critical result
+  const index = crypto.randomInt(segments.length);
   return {
     segmentIndex: index,
     multiplier: segments[index].multiplier,
@@ -105,15 +92,20 @@ const generateWheelResult = (serverSeed = '', segments) => {
  * @param {Object} user - Authenticated user information
  */
 function initWheelHandlers(io, socket, user) {
-  // Extract user info from socket handshake auth or fallback to defaults
-  const auth = socket.handshake.auth || {};
-  const userId = auth.userId || user?._id || socket.id;
-  const username = auth.username || user?.username || `Player_${userId.substring(0, 5)}`;
-  const avatar = auth.avatar || user?.avatar || null;
-  
+  // Read user identity from server-side authenticated user (set by auth middleware)
+  const authenticatedUser = (socket as any).user;
+  if (!authenticatedUser) {
+    socket.emit('wheel:error', { message: 'Authentication required' });
+    socket.disconnect();
+    return;
+  }
+  const userId = authenticatedUser.userId;
+  const username = authenticatedUser.username;
+  const avatar = user?.avatar || null;
+
   // Join the wheel namespace/room
   socket.join('wheel');
-  
+
   // Track connected user
   connectedUsers.set(userId, {
     socketId: socket.id,
@@ -122,7 +114,7 @@ function initWheelHandlers(io, socket, user) {
     avatar,
     balance: user?.balance || 1000 // Demo balance if no user
   });
-  
+
   // Add to active players
   const playerInfo = {
     id: userId,
@@ -130,18 +122,18 @@ function initWheelHandlers(io, socket, user) {
     avatar,
     joinedAt: new Date()
   };
-  
+
   activePlayers.set(userId, playerInfo);
-  
+
   // Broadcast to other clients that a new player has joined
   socket.broadcast.emit('wheel:playerJoined', playerInfo);
-  
+
   // Send current active players to the new client
   socket.emit('wheel:activePlayers', Array.from(activePlayers.values()));
-  
+
   // Send current bets to the new client
   socket.emit('wheel:currentBets', currentBets);
-  
+
   // Create or get user session
   if (!activeSessions.has(userId)) {
     activeSessions.set(userId, {
@@ -150,16 +142,16 @@ function initWheelHandlers(io, socket, user) {
       history: [],
       isPlaying: false
     });
-    
+
     // Log session initialization
-    loggingService.logGameEvent('wheel', 'session_start', {
+    LoggingService.logGameEvent('wheel', 'session_start', {
       userId,
       username,
       initialBalance: user?.balance || 1000,
       timestamp: new Date()
     }, userId);
   }
-  
+
   /**
    * Handle joining the wheel game
    */
@@ -167,21 +159,21 @@ function initWheelHandlers(io, socket, user) {
     try {
       // Get recent game history (limited to last 10 results)
       const recentHistory = gameHistory.slice(-10);
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Return game state to the client
       const response = {
         success: true,
         balance: session.balance,
         history: recentHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error joining Wheel game:', error);
+      LoggingService.logGameEvent('wheel', 'error_join', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -193,83 +185,82 @@ function initWheelHandlers(io, socket, user) {
     try {
       // Validate bet data
       const { betAmount, difficulty = 'medium' } = data;
-      
+
       if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
         throw new Error('Invalid bet amount');
       }
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Check if user has enough balance
       if (session.balance < betAmount) {
         throw new Error('Insufficient balance');
       }
-      
+
       // Deduct bet amount from balance
       session.balance -= betAmount;
-      
+
       // Create bet object with player info
       const betId = `bet_${Date.now()}_${userId}`;
-      const playerInfo = activePlayers.get(userId);
+      const betPlayerInfo = activePlayers.get(userId);
       const bet = {
         id: betId,
         userId,
-        username: playerInfo.username,
-        avatar: playerInfo.avatar,
+        username: betPlayerInfo.username,
+        avatar: betPlayerInfo.avatar,
         betAmount,
         difficulty,
         timestamp: new Date()
       };
-      
+
       // Add to current bets
       currentBets.push(bet);
-      
+
       // Broadcast the bet to all clients
       socket.broadcast.emit('wheel:playerBet', bet);
-      
+
       // Generate a unique game ID
-      const gameId = Date.now().toString();
-      
-      // Use balanceService to record the bet transaction
-      await balanceService.placeBet(userId, betAmount, 'wheel', {
+      const gameId = crypto.randomUUID();
+
+      // Use BalanceService to record the bet transaction
+      await BalanceService.placeBet(userId, betAmount, 'wheel', {
         difficulty,
         wheelSessionId: gameId
       });
-      
+
       // Log bet placed
-      loggingService.logBetPlaced('wheel', gameId, userId, betAmount, {
+      LoggingService.logBetPlaced('wheel', gameId, userId, betAmount, {
         difficulty,
         timestamp: new Date()
       });
-      
+
       // Get wheel segments for the selected difficulty
       const segments = getWheelSegments(difficulty);
-      
-      // Generate a random but fair wheel result
-      const serverSeed = Math.random().toString(36).substring(2, 15);
-      const result = generateWheelResult(serverSeed, segments);
-      
+
+      // Generate a cryptographically secure wheel result
+      const result = generateWheelResult(segments);
+
       // Calculate winnings
       const winAmount = betAmount * result.multiplier;
       const profit = winAmount - betAmount;
-      
+
       // Add winnings to balance
       session.balance += winAmount;
-      
-      // Use balanceService to record the win transaction
+
+      // Use BalanceService to record the win transaction
       if (winAmount > 0) {
-        await balanceService.recordWin(userId, betAmount, winAmount, 'wheel', {
+        await BalanceService.recordWin(userId, betAmount, winAmount, 'wheel', {
           difficulty,
           multiplier: result.multiplier,
           segmentIndex: result.segmentIndex,
           profit
         });
       }
-      
+
       // Create game result
       const gameResult = {
-        id: gameId, // Use the same gameId we generated earlier
+        id: gameId,
         userId,
         timestamp: new Date(),
         betAmount,
@@ -280,14 +271,14 @@ function initWheelHandlers(io, socket, user) {
         winAmount,
         profit
       };
-      
+
       // Log game result
-      loggingService.logBetResult(
-        'wheel', 
-        gameId, 
-        userId, 
-        betAmount, 
-        winAmount, 
+      LoggingService.logBetResult(
+        'wheel',
+        gameId,
+        userId,
+        betAmount,
+        winAmount,
         profit >= 0, // true if win, false if loss
         {
           multiplier: result.multiplier,
@@ -297,11 +288,11 @@ function initWheelHandlers(io, socket, user) {
           timestamp: new Date()
         }
       );
-      
+
       // Add to history
       gameHistory.push(gameResult);
       session.history.push(gameResult);
-      
+
       // Calculate target angle for animation
       const segmentAngle = 360 / segments.length;
       const baseRotation = 270; // Arrow at top is 270 degrees
@@ -309,7 +300,7 @@ function initWheelHandlers(io, socket, user) {
       const randomOffset = Math.random() * (segmentAngle * 0.6) - (segmentAngle * 0.3);
       const fullRotations = 4 * 360; // 4 full rotations
       const finalAngle = targetAngle + randomOffset + fullRotations;
-      
+
       // Send result to client
       const response = {
         success: true,
@@ -321,9 +312,9 @@ function initWheelHandlers(io, socket, user) {
         profit,
         balance: session.balance
       };
-      
+
       if (callback) callback(response);
-      
+
       // Broadcast to room that a new game happened (for real-time updates)
       socket.to('wheel').emit('wheel:game_result', {
         userId,
@@ -331,9 +322,9 @@ function initWheelHandlers(io, socket, user) {
         multiplier: result.multiplier,
         profit
       });
-      
+
     } catch (error) {
-      console.error('Error spinning wheel:', error);
+      LoggingService.logGameEvent('wheel', 'error_place_bet', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -344,25 +335,25 @@ function initWheelHandlers(io, socket, user) {
   socket.on('wheel:get_history', async (data, callback) => {
     try {
       const limit = data?.limit || 10;
-      
+
       // Get user session
       const session = activeSessions.get(userId);
-      
+
       // Get recent game history (limited to specified number)
       const userHistory = session.history.slice(-limit);
       const globalHistory = gameHistory.slice(-limit);
-      
+
       // Return history to the client
       const response = {
         success: true,
         userHistory,
         globalHistory
       };
-      
+
       if (callback) callback(response);
-      
+
     } catch (error) {
-      console.error('Error getting Wheel history:', error);
+      LoggingService.logGameEvent('wheel', 'error_get_history', { error: error.message, userId });
       if (callback) callback({ success: false, error: error.message });
     }
   });
@@ -383,26 +374,25 @@ function initWheelHandlers(io, socket, user) {
       const session = activeSessions.get(userId);
       session.isPlaying = false;
     }
-    
+
     // Remove from active players for multiplayer tracking
     if (activePlayers.has(userId)) {
-      const playerInfo = activePlayers.get(userId);
+      const playerLeftInfo = activePlayers.get(userId);
       activePlayers.delete(userId);
-      
+
       // Broadcast to other clients that a player has left
-      socket.broadcast.emit('wheel:playerLeft', { 
+      socket.broadcast.emit('wheel:playerLeft', {
         id: userId,
-        username: playerInfo.username
+        username: playerLeftInfo.username
       });
-      
-      console.log(`Wheel: Player left - ${playerInfo.username} (${userId})`);
+
+      LoggingService.logGameEvent('wheel', 'player_left', { userId, username: playerLeftInfo.username });
     }
-    
+
     // Remove from connected users
     connectedUsers.delete(userId);
   });
 }
 
-module.exports = {
-  initWheelHandlers
-};
+export default initWheelHandlers;
+export { initWheelHandlers };

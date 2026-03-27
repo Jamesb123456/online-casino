@@ -1,8 +1,9 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express, { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate as auth } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
+import LoggingService from '../src/services/loggingService.js';
 
 // Import Drizzle models
 import UserModel from '../drizzle/models/User.js';
@@ -32,7 +33,7 @@ router.get('/me', auth, async (req: AuthenticatedRequest, res: Response) => {
       lastLogin: user.lastLogin
     });
   } catch (error) {
-    console.error('Error fetching current user:', error);
+    LoggingService.logSystemEvent('fetch_current_user_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching user data' });
   }
 });
@@ -59,7 +60,7 @@ router.get('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
       }
     });
   } catch (error) {
-    console.error('Error fetching user profile:', error);
+    LoggingService.logSystemEvent('fetch_user_profile_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching profile' });
   }
 });
@@ -68,7 +69,7 @@ router.get('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
 router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    
+
     const user = await UserModel.findById(req.user.userId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -96,7 +97,7 @@ router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
 
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
-    console.error('Error updating profile:', error);
+    LoggingService.logSystemEvent('update_profile_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error updating profile' });
   }
 });
@@ -105,11 +106,11 @@ router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
 router.get('/balance', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const currentBalance = await Balance.getLatestBalance(req.user.userId);
-    res.json({ 
-      balance: currentBalance ? currentBalance.amount : 0 
+    res.json({
+      balance: currentBalance ? currentBalance.amount : 0
     });
   } catch (error) {
-    console.error('Error fetching balance:', error);
+    LoggingService.logSystemEvent('fetch_balance_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching balance' });
   }
 });
@@ -117,10 +118,10 @@ router.get('/balance', auth, async (req: AuthenticatedRequest, res: Response) =>
 // Get user balance history
 router.get('/balance/history', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const balanceHistory = await Balance.getBalanceHistory(req.user.userId);
+    const balanceHistory = await Balance.getBalanceHistory(req.user.userId, 100);
     res.json(balanceHistory);
   } catch (error) {
-    console.error('Error fetching balance history:', error);
+    LoggingService.logSystemEvent('fetch_balance_history_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching balance history' });
   }
 });
@@ -129,26 +130,40 @@ router.get('/balance/history', auth, async (req: AuthenticatedRequest, res: Resp
 router.get('/transactions', auth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { limit = 50, type, startDate, endDate } = req.query;
-    
+
+    // Validate and clamp limit
+    const rawLimit = parseInt(limit as string);
+    const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+
     // Build filter
     const filter = { userId: req.user.userId };
-    
-    if (type) filter.type = type;
-    
+
+    // Validate type against allowlist
+    const allowedTypes = ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus', 'login_reward'];
+    if (type && allowedTypes.includes(type as string)) {
+      filter.type = type;
+    }
+
     if (startDate || endDate) {
       filter.createdAt = {};
-      if (startDate) filter.createdAt.$gte = new Date(startDate);
-      if (endDate) filter.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const parsed = new Date(startDate as string);
+        if (!isNaN(parsed.getTime())) filter.createdAt.$gte = parsed;
+      }
+      if (endDate) {
+        const parsed = new Date(endDate as string);
+        if (!isNaN(parsed.getTime())) filter.createdAt.$lte = parsed;
+      }
     }
 
     const transactions = await Transaction.find(filter, {
       sort: { createdAt: -1 },
-      limit: parseInt(limit)
+      limit: safeLimit
     });
 
     res.json(transactions);
   } catch (error) {
-    console.error('Error fetching transactions:', error);
+    LoggingService.logSystemEvent('fetch_transactions_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching transactions' });
   }
 });

@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
@@ -83,7 +83,7 @@ router.post('/:gameId/bet', authenticate, betLimiter, async (req, res) => {
       return res.status(400).json({ message: 'Invalid bet amount' });
     }
     const { betAmount } = bodyParse.data;
-    const userId = req.user._id;
+    const userId = req.user.userId;
     
     // Later we will implement the actual game logic and session tracking
     // For now, return a placeholder response

@@ -1,14 +1,16 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Initialize game statistics in the database
- * This script creates default entries for all game types 
+ * This script creates default entries for all game types
  * Run this script when setting up the database for the first time
  */
-require('dotenv').config();
+import dotenv from 'dotenv';
 
 // Import Drizzle models
-const GameStat = require('../drizzle/models/GameStat');
-const { db } = require('../drizzle/db');
+import GameStatModel from '../drizzle/models/GameStat.js';
+import { db } from '../drizzle/db.js';
+
+dotenv.config();
 
 /**
  * Initialize game statistics for all supported games
@@ -31,11 +33,11 @@ async function initializeGameStats() {
 
     for (const game of gameTypes) {
       // Check if game stats already exist
-      const existingStat = await GameStat.findOne({ gameType: game.type });
-      
+      const existingStat = await GameStatModel.findByGameType(game.type);
+
       if (!existingStat) {
         // Create new game stats
-        await GameStat.create({
+        await GameStatModel.create({
           gameType: game.type,
           name: game.name,
           totalGamesPlayed: 0,
@@ -46,11 +48,11 @@ async function initializeGameStats() {
           createdAt: new Date(),
           updatedAt: new Date()
         });
-        
-        console.log(`✅ Created game stats for ${game.name}`);
+
+        console.log(`Created game stats for ${game.name}`);
         created++;
       } else {
-        console.log(`⚪ Game stats for ${game.name} already exist`);
+        console.log(`Game stats for ${game.name} already exist`);
         existing++;
       }
     }
@@ -59,15 +61,15 @@ async function initializeGameStats() {
     console.log(`Created: ${created} new game stat records`);
     console.log(`Existing: ${existing} game stat records`);
     console.log(`Total games: ${gameTypes.length}`);
-    
+
     if (created > 0) {
-      console.log('\n✅ Game statistics initialization completed successfully!');
+      console.log('\nGame statistics initialization completed successfully!');
     } else {
-      console.log('\n⚪ All game statistics were already initialized.');
+      console.log('\nAll game statistics were already initialized.');
     }
 
   } catch (error) {
-    console.error('❌ Error initializing game statistics:', error);
+    console.error('Error initializing game statistics:', error);
     process.exit(1);
   } finally {
     // Close database connection

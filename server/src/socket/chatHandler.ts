@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Chat Socket Handler
  * Manages real-time communication for the global chat feature
@@ -7,7 +7,8 @@
 // Import Drizzle models
 import Message from '../../drizzle/models/Message.js';
 import UserModel from '../../drizzle/models/User.js';
-import jwt from 'jsonwebtoken';
+import { auth } from '../../lib/auth.js';
+import LoggingService from '../services/loggingService.js';
 
 /**
  * Initialize chat handlers
@@ -17,60 +18,39 @@ const initChatHandlers = (io) => {
   // Create a namespace for chat
   const chatNamespace = io.of('/chat');
   
-  // Middleware to authenticate connections using cookies
+  // Middleware to authenticate connections using Better Auth sessions
   chatNamespace.use(async (socket, next) => {
     try {
-      // Get cookies from the socket handshake
       const cookies = socket.handshake.headers.cookie;
-      
       if (!cookies) {
-        console.log('No cookies provided for chat connection');
         return next(new Error('Authentication token required'));
       }
-      
-      // Parse the authToken cookie
-      const cookieArray = cookies.split(';');
-      let authToken = null;
-      
-      for (const cookie of cookieArray) {
-        const [name, value] = cookie.trim().split('=');
-        if (name === 'authToken') {
-          authToken = value;
-          break;
-        }
+
+      const headers = new Headers();
+      headers.set('cookie', cookies);
+      const session = await auth.api.getSession({ headers });
+
+      if (!session?.user) {
+        return next(new Error('Invalid authentication session'));
       }
-      
-      if (!authToken) {
-        console.log('No authToken cookie found for chat connection');
-        return next(new Error('Authentication token required'));
-      }
-      
-      // Verify token
-      const decoded = jwt.verify(authToken, process.env.JWT_SECRET || 'default_jwt_secret');
-      
-      if (!decoded || !decoded.userId) {
-        console.log('Invalid token for chat connection');
-        return next(new Error('Invalid authentication token'));
-      }
-      
-      // Store user ID in socket for later use
-      socket.userId = decoded.userId;
+
+      socket.userId = Number(session.user.id);
       next();
     } catch (error) {
-      console.error('Authentication error in chat socket:', error.message);
+      LoggingService.logSystemEvent('chat_auth_error', { error: error.message }, 'error');
       next(new Error('Authentication failed'));
     }
   });
   
   chatNamespace.on('connection', async (socket) => {
-    console.log('Client connected to chat namespace:', socket.id);
+    LoggingService.logGameEvent('chat', 'client_connected', { socketId: socket.id });
     
     try {
       // Get user ID from the socket (set by auth middleware)
       const userId = socket.userId;
       
       if (!userId) {
-        console.log('Unauthenticated connection attempt to chat');
+        LoggingService.logSystemEvent('chat_unauthenticated', { socketId: socket.id }, 'warning');
         socket.emit('error', { message: 'Authentication required' });
         socket.disconnect();
         return;
@@ -80,7 +60,7 @@ const initChatHandlers = (io) => {
       const user = await UserModel.findById(userId);
       
       if (!user) {
-        console.log('User not found for chat');
+        LoggingService.logSystemEvent('chat_user_not_found', { userId }, 'warning');
         socket.emit('error', { message: 'User not found' });
         return;
       }
@@ -160,9 +140,9 @@ const initChatHandlers = (io) => {
           // Broadcast message to all users in chat
           chatNamespace.to('global_chat').emit('new_message', formattedMessage);
 
-          console.log(`Message from ${user.username}: ${content}`);
+          LoggingService.logGameEvent('chat', 'message_sent', { userId, username: user.username });
         } catch (error) {
-          console.error('Error sending message:', error);
+          LoggingService.logGameEvent('chat', 'error_sending_message', { error: String(error), userId });
           socket.emit('chat_error', { message: 'Failed to send message' });
         }
       });
@@ -182,7 +162,7 @@ const initChatHandlers = (io) => {
       
       // Handle disconnection
       socket.on('leave_chat', () => {
-        console.log('Client disconnected from chat namespace:', socket.id);
+        LoggingService.logGameEvent('chat', 'client_disconnected', { socketId: socket.id, userId });
         chatNamespace.to('global_chat').emit('userLeft', {
           user: socket.user,
           timestamp: new Date(),
@@ -191,7 +171,7 @@ const initChatHandlers = (io) => {
       });
       
     } catch (error) {
-      console.error('Error in chat handler:', error);
+      LoggingService.logSystemEvent('chat_handler_error', { error: String(error), socketId: socket.id }, 'error');
     }
   });
   

@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import { db } from '../db.js';
@@ -8,12 +8,7 @@ class UserModel {
   // Create a new user
   static async create(userData: Partial<NewUser>): Promise<User> {
     try {
-      // Hash password if provided
-      if (userData.passwordHash) {
-        const salt = await bcrypt.genSalt(10);
-        userData.passwordHash = await bcrypt.hash(userData.passwordHash, salt);
-      }
-
+      // passwordHash is expected to be already hashed by the caller
       const result = await db.insert(users).values({
         ...userData,
         createdAt: new Date(),
@@ -60,12 +55,7 @@ class UserModel {
   // Update user by ID
   static async updateById(id: number, updateData: Partial<NewUser>): Promise<User> {
     try {
-      // Hash password if being updated
-      if (updateData.passwordHash) {
-        const salt = await bcrypt.genSalt(10);
-        updateData.passwordHash = await bcrypt.hash(updateData.passwordHash, salt);
-      }
-
+      // passwordHash is expected to be already hashed by the caller
       await db
         .update(users)
         .set({ ...updateData, updatedAt: new Date() })

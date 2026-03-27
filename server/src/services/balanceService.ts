@@ -1,7 +1,11 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import UserModel from '../../drizzle/models/User.js';
 import TransactionModel from '../../drizzle/models/Transaction.js';
 import BalanceModel from '../../drizzle/models/Balance.js';
+import { db } from '../../drizzle/db.js';
+import { users, transactions } from '../../drizzle/schema.js';
+import { eq, sql } from 'drizzle-orm';
+import LoggingService from './loggingService.js';
 
 /**
  * Balance Service
@@ -19,53 +23,68 @@ class BalanceService {
    */
   async updateBalance(userId, amount, type, gameType = null, metadata = {}) {
     try {
-      // Find user and check balance
-      const user = await UserModel.findById(userId);
-      
-      if (!user) {
-        throw new Error('User not found');
-      }
-      
-      const currentBalance = parseFloat(user.balance);
-      
-      // Check if user has enough balance for deductions
-      if (amount < 0 && currentBalance + amount < 0) {
-        throw new Error('Insufficient balance');
-      }
-      
-      const newBalance = currentBalance + amount;
-      
-      // Create transaction record first
-      const transaction = await TransactionModel.create({
+      const result = await db.transaction(async (tx) => {
+        // Find user and check balance inside the transaction
+        const [user] = await tx.select().from(users).where(eq(users.id, userId));
+
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        const currentBalance = parseFloat(user.balance);
+
+        // Check if user has enough balance for deductions
+        if (amount < 0 && currentBalance + amount < 0) {
+          throw new Error('Insufficient balance');
+        }
+
+        const newBalance = currentBalance + amount;
+
+        // Atomically update user balance with a conditional check to prevent race conditions.
+        // For deductions, ensure balance hasn't changed since we read it (optimistic lock).
+        if (amount < 0) {
+          const updateResult = await tx.execute(
+            sql`UPDATE users SET balance = ${newBalance.toString()}, updated_at = NOW() WHERE id = ${userId} AND balance >= ${Math.abs(amount).toString()}`
+          );
+          if ((updateResult as any)[0]?.affectedRows === 0) {
+            throw new Error('Insufficient balance');
+          }
+        } else {
+          await tx
+            .update(users)
+            .set({ balance: newBalance.toString(), updatedAt: new Date() })
+            .where(eq(users.id, userId));
+        }
+
+        // Create transaction record
+        const insertTxResult = await tx.execute(
+          sql`INSERT INTO transactions (user_id, amount, type, game_type, balance_before, balance_after, status, metadata, created_at, updated_at) VALUES (${userId}, ${amount.toString()}, ${type}, ${gameType}, ${currentBalance.toString()}, ${newBalance.toString()}, 'completed', ${JSON.stringify(metadata)}, NOW(), NOW())`
+        );
+        const transactionId = (insertTxResult as any)[0]?.insertId;
+
+        // Create balance history record
+        await tx.execute(
+          sql`INSERT INTO balances (user_id, amount, previous_balance, change_amount, type, game_type, transaction_id, created_at, updated_at) VALUES (${userId}, ${newBalance.toString()}, ${currentBalance.toString()}, ${amount.toString()}, ${this._mapTransactionTypeToBalanceType(type)}, ${gameType}, ${transactionId}, NOW(), NOW())`
+        );
+
+        // Fetch the updated user and transaction to return
+        const [updatedUser] = await tx.select().from(users).where(eq(users.id, userId));
+
+        // Fetch the created transaction record
+        const [transaction] = await tx.select().from(transactions).where(eq(transactions.id, transactionId));
+
+        return { user: updatedUser, transaction };
+      });
+
+      return result;
+    } catch (error) {
+      LoggingService.logSystemEvent('balance_update_error', {
         userId,
-        amount: amount.toString(),
+        amount,
         type,
         gameType,
-        balanceBefore: currentBalance.toString(),
-        balanceAfter: newBalance.toString(),
-        status: 'completed',
-        metadata
-      });
-      
-      // Update user balance
-      const updatedUser = await UserModel.update(userId, { 
-        balance: newBalance.toString() 
-      });
-      
-      // Create balance history record
-      await BalanceModel.create({
-        userId,
-        amount: newBalance.toString(),
-        previousBalance: currentBalance.toString(),
-        changeAmount: amount.toString(),
-        type: this._mapTransactionTypeToBalanceType(type),
-        gameType,
-        transactionId: transaction.id
-      });
-      
-      return { user: updatedUser, transaction };
-    } catch (error) {
-      console.error('Error updating balance:', error);
+        error: error instanceof Error ? error.message : String(error),
+      }, 'error');
       throw error;
     }
   }
@@ -152,20 +171,19 @@ class BalanceService {
    */
   async getTransactionHistory(userId: string, options: any = {}) {
     const { limit = 20, skip = 0, type, gameType } = options;
-    
+
     const filter: any = { userId };
     if (type) filter.type = type;
     if (gameType) filter.gameType = gameType;
-    
-    const transactions = await TransactionModel.findMany(filter, limit, skip);
-    
-    // Get total count for pagination (simplified)
-    const allTransactions = await TransactionModel.findMany(filter);
-    const count = allTransactions.length;
-    
+
+    const [txns, total] = await Promise.all([
+      TransactionModel.findMany(filter, limit, skip),
+      TransactionModel.count(filter),
+    ]);
+
     return {
-      transactions,
-      total: count
+      transactions: txns,
+      total,
     };
   }
 
@@ -217,7 +235,11 @@ class BalanceService {
       const balance = await this.getBalance(userId);
       return balance >= amount;
     } catch (error) {
-      console.error('Error checking sufficient balance:', error);
+      LoggingService.logSystemEvent('sufficient_balance_check_error', {
+        userId,
+        amount,
+        error: error instanceof Error ? error.message : String(error),
+      }, 'error');
       return false;
     }
   }

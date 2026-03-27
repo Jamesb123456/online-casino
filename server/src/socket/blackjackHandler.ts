@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 // Import Drizzle models
 import UserModel from '../../drizzle/models/User.js';
 import BalanceService from '../services/balanceService.js';
@@ -38,19 +38,27 @@ class BlackjackHandler {
   }
 
   handleConnection(socket: any) {
+    // Get authenticated user from socket (set by auth middleware)
+    const authenticatedUser = (socket as any).user;
+    if (!authenticatedUser) {
+      socket.emit('blackjack_error', { message: 'Authentication required' });
+      socket.disconnect();
+      return;
+    }
+    const userId = authenticatedUser.userId;
+    const userIdNum = Number(userId);
+
     // Start new game
     socket.on('blackjack_start', async (data) => {
       try {
-        const { userId, betAmount } = data;
-        
-        if (!userId || !betAmount || betAmount <= 0) {
+        const { betAmount } = data;
+
+        if (!betAmount || betAmount <= 0) {
           socket.emit('blackjack_error', { message: 'Invalid game parameters' });
           return;
         }
 
         // Check if user exists
-        // Convert userId types as needed by different APIs
-        const userIdNum = Number(userId);
         const user = await UserModel.findById(userIdNum);
         if (!user) {
           socket.emit('blackjack_error', { message: 'User not found' });
@@ -65,8 +73,8 @@ class BlackjackHandler {
         }
 
         // Check if user already has an active game
-        if (this.playerGames.has(userId)) {
-          const existingGameId = this.playerGames.get(userId);
+        if (this.playerGames.has(userIdNum)) {
+          const existingGameId = this.playerGames.get(userIdNum);
           const existingGame = this.games.get(existingGameId);
           if (existingGame && existingGame.status === 'active') {
             socket.emit('blackjack_error', { message: 'You already have an active game' });
@@ -76,18 +84,18 @@ class BlackjackHandler {
 
         // Create new game
         const gameId = this.generateGameId();
-        const game = this.createNewGame(Number(userId), Number(betAmount));
-        
+        const game = this.createNewGame(userIdNum, Number(betAmount));
+
         // Store game
         this.games.set(gameId, game);
         this.playerGames.set(userIdNum, gameId);
-        
+
         // Join game room
         socket.join(`blackjack_${gameId}`);
-        
+
         // Deal initial cards
         this.dealInitialCards(game);
-        
+
         // Send game state
         socket.emit('blackjack_game_state', {
           gameId,
@@ -102,20 +110,24 @@ class BlackjackHandler {
 
         // Log game start
         await LoggingService.logGameAction(
-          userId, 
-          'blackjack', 
-          'game_started', 
-          { 
-            gameId, 
+          String(userId),
+          'blackjack',
+          'game_started',
+          {
+            gameId,
             betAmount,
             playerHand: game.playerHand,
             dealerUpCard: game.dealerHand[0]
           }
         );
 
-        console.log(`Blackjack game ${gameId} started for user ${userId} with bet ${betAmount}`);
+        LoggingService.logGameEvent('blackjack', 'game_started', {
+          gameId,
+          userId,
+          betAmount
+        }, userId);
       } catch (error) {
-        console.error('Error starting blackjack game:', error);
+        LoggingService.logGameEvent('blackjack', 'error_start', { error: String(error), userId });
         socket.emit('blackjack_error', { message: 'Failed to start game' });
       }
     });
@@ -123,13 +135,7 @@ class BlackjackHandler {
     // Player hits
     socket.on('blackjack_hit', async (data) => {
       try {
-        const { userId } = data;
-        if (!userId) {
-          socket.emit('blackjack_error', { message: 'Invalid user ID' });
-          return;
-        }
-        
-        const gameId = this.playerGames.get(Number(userId));
+        const gameId = this.playerGames.get(userIdNum);
         if (!gameId) {
           socket.emit('blackjack_error', { message: 'No game found' });
           return;
@@ -155,10 +161,10 @@ class BlackjackHandler {
         this.io.to(`blackjack_${gameId}`).emit('blackjack_game_state', {
           gameId,
           playerHand: game.playerHand,
-          dealerHand: game.status === 'completed' as 'active' | 'completed' ? game.dealerHand : [game.dealerHand[0]],
+          dealerHand: game.status === 'completed' ? game.dealerHand : [game.dealerHand[0]],
           playerScore,
           // Only show dealer score after game is completed
-          dealerScore: game.status === 'completed' as 'active' | 'completed' ? this.calculateScore(game.dealerHand) : null,
+          dealerScore: game.status === 'completed' ? this.calculateScore(game.dealerHand) : null,
           betAmount: game.betAmount,
           status: game.status,
           result: game.result,
@@ -167,18 +173,18 @@ class BlackjackHandler {
 
         // Log action
         await LoggingService.logGameAction(
-          userId, 
-          'blackjack', 
-          'hit', 
-          { 
-            gameId, 
+          String(userId),
+          'blackjack',
+          'hit',
+          {
+            gameId,
             card,
             playerHand: game.playerHand,
             playerScore
           }
         );
       } catch (error) {
-        console.error('Error handling blackjack hit:', error);
+        LoggingService.logGameEvent('blackjack', 'error_hit', { error: String(error), userId });
         socket.emit('blackjack_error', { message: 'Failed to process hit' });
       }
     });
@@ -186,13 +192,7 @@ class BlackjackHandler {
     // Player stands
     socket.on('blackjack_stand', async (data) => {
       try {
-        const { userId } = data;
-        if (!userId) {
-          socket.emit('blackjack_error', { message: 'Invalid user ID' });
-          return;
-        }
-        
-        const gameId = this.playerGames.get(Number(userId));
+        const gameId = this.playerGames.get(userIdNum);
         if (!gameId) {
           socket.emit('blackjack_error', { message: 'No game found' });
           return;
@@ -206,7 +206,7 @@ class BlackjackHandler {
 
         // Dealer plays
         await this.playDealer(game);
-        
+
         // Determine winner
         await this.endGame(gameId, 'completed');
 
@@ -225,11 +225,11 @@ class BlackjackHandler {
 
         // Log action
         await LoggingService.logGameAction(
-          userId, 
-          'blackjack', 
-          'stand', 
-          { 
-            gameId, 
+          String(userId),
+          'blackjack',
+          'stand',
+          {
+            gameId,
             playerScore: this.calculateScore(game.playerHand),
             dealerScore: this.calculateScore(game.dealerHand),
             result: game.result,
@@ -237,7 +237,7 @@ class BlackjackHandler {
           }
         );
       } catch (error) {
-        console.error('Error handling blackjack stand:', error);
+        LoggingService.logGameEvent('blackjack', 'error_stand', { error: String(error), userId });
         socket.emit('blackjack_error', { message: 'Failed to process stand' });
       }
     });
@@ -245,13 +245,7 @@ class BlackjackHandler {
     // Player doubles down
     socket.on('blackjack_double', async (data) => {
       try {
-        const { userId } = data;
-        if (!userId) {
-          socket.emit('blackjack_error', { message: 'Invalid user ID' });
-          return;
-        }
-        
-        const gameId = this.playerGames.get(Number(userId));
+        const gameId = this.playerGames.get(userIdNum);
         if (!gameId) {
           socket.emit('blackjack_error', { message: 'No game found' });
           return;
@@ -304,18 +298,18 @@ class BlackjackHandler {
 
         // Log action
         await LoggingService.logGameAction(
-          userId, 
-          'blackjack', 
-          'double_down', 
-          { 
-            gameId, 
+          String(userId),
+          'blackjack',
+          'double_down',
+          {
+            gameId,
             finalBetAmount: game.betAmount,
             result: game.result,
             winAmount: game.winAmount
           }
         );
       } catch (error) {
-        console.error('Error handling blackjack double:', error);
+        LoggingService.logGameEvent('blackjack', 'error_double', { error: String(error), userId });
         socket.emit('blackjack_error', { message: 'Failed to process double down' });
       }
     });
@@ -330,10 +324,13 @@ class BlackjackHandler {
   createNewGame(userId: number, betAmount: number): Game {
     // Generate and shuffle a fresh deck for this game
     const freshDeck = this.createDeck();
-    
-    // Log deck size for verification
-    console.log(`Creating new game for user ${userId} with a deck of ${freshDeck.length} cards`);
-    
+
+    // Log deck creation
+    LoggingService.logGameEvent('blackjack', 'deck_created', {
+      userId,
+      deckSize: freshDeck.length
+    }, userId);
+
     return {
       userId,
       betAmount,
@@ -365,32 +362,23 @@ class BlackjackHandler {
     // Use cryptographically secure shuffling
     return this.secureShuffle(deck);
   }
-  
-  // Secure Fisher-Yates shuffle with cryptographic random numbers
+
+  // Secure Fisher-Yates shuffle with cryptographic random numbers (single pass)
   secureShuffle(deck: Card[]) {
     // Make a copy of the deck to avoid mutations
     const result = [...deck];
-    
+
     // Fisher-Yates shuffle with crypto secure random numbers
     for (let i = result.length - 1; i > 0; i--) {
       // Generate cryptographically secure random number
       const randomBytes = crypto.randomBytes(4);
       const randomValue = randomBytes.readUInt32BE(0);
       const j = randomValue % (i + 1);
-      
+
       // Swap elements
       [result[i], result[j]] = [result[j], result[i]];
     }
-    
-    // Additional shuffling for extra randomness
-    for (let i = result.length - 1; i > 0; i--) {
-      const randomBytes = crypto.randomBytes(4);
-      const randomValue = randomBytes.readUInt32BE(0);
-      const j = randomValue % (i + 1);
-      
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    
+
     return result;
   }
 
@@ -404,7 +392,9 @@ class BlackjackHandler {
     // Check for empty deck and handle it
     const card = deck.pop();
     if (!card) {
-      console.error('Attempted to deal from an empty deck');
+      LoggingService.logGameEvent('blackjack', 'error_empty_deck', {
+        message: 'Attempted to deal from an empty deck'
+      });
       // Create a fallback card if deck is empty (shouldn't happen in normal gameplay)
       return { suit: 'hearts', rank: 'A', value: 11 };
     }
@@ -502,11 +492,11 @@ class BlackjackHandler {
 
       // Log game end
       await LoggingService.logGameAction(
-        game.userId, 
-        'blackjack', 
-        'game_ended', 
-        { 
-          gameId, 
+        game.userId,
+        'blackjack',
+        'game_ended',
+        {
+          gameId,
           result: game.result,
           playerScore,
           dealerScore,
@@ -515,7 +505,7 @@ class BlackjackHandler {
         }
       );
 
-      // Clean up
+      // Clean up AFTER balance update succeeds
       this.playerGames.delete(game.userId);
       // Keep game for a short time in case client needs to query it
       setTimeout(() => {
@@ -523,7 +513,11 @@ class BlackjackHandler {
       }, 60000); // 1 minute
 
     } catch (error) {
-      console.error('Error ending blackjack game:', error);
+      LoggingService.logGameEvent('blackjack', 'error_end_game', {
+        error: String(error),
+        gameId,
+        userId: game.userId
+      }, game.userId);
     }
   }
 

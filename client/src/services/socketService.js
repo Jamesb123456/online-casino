@@ -13,26 +13,21 @@ const eventHandlers = new Map();
  * Initialize Socket.IO connection
  * @param {Object} authData - Optional auth data to include with connection
  */
-export const initializeSocket = (authData = null) => {
+export const initializeSocket = () => {
   const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
   // Close any existing socket
   if (socket) {
     socket.close();
   }
-  
-  // Get any existing token from local storage as fallback
-  const token = localStorage.getItem('authToken');
-  
-  // Create new socket instance with cookie-based auth
-  // Also include auth data in socket handshake as fallback authentication method
+
+  // Create new socket instance - cookies handle authentication automatically
   socket = io(SOCKET_URL, {
-    withCredentials: true, // Send cookies with socket requests
+    withCredentials: true,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: Infinity,
-    auth: authData || (token ? { token } : {})
   });
   
   // Setup default event listeners

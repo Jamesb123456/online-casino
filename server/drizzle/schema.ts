@@ -2,19 +2,30 @@ import { mysqlTable, varchar, text, int, boolean, timestamp, json, decimal, inde
 import { relations, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // Enums (MySQL uses ENUM differently than PostgreSQL)
-export const userRoleEnum = mysqlEnum('user_role', ['user', 'admin']);
 export const transactionTypeEnum = mysqlEnum('transaction_type', ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus', 'login_reward']);
 export const transactionStatusEnum = mysqlEnum('transaction_status', ['pending', 'completed', 'failed', 'voided', 'processing']);
-export const gameTypeEnum = mysqlEnum('game_type', ['crash', 'plinko', 'wheel', 'roulette', 'blackjack']);
+export const gameTypeEnum = mysqlEnum('game_type', ['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines']);
 export const balanceTypeEnum = mysqlEnum('balance_type', ['deposit', 'withdrawal', 'win', 'loss', 'admin_adjustment', 'login_reward']);
 export const eventTypeEnum = mysqlEnum('event_type', ['session_start', 'bet_placed', 'bet_updated', 'game_result', 'win', 'loss', 'cashout', 'error', 'game_state_change']);
 
-// Users table
+// Users table (extended for Better Auth with username + admin plugins)
 export const users = mysqlTable('users', {
   id: int('id').primaryKey().autoincrement(),
+  // Better Auth core fields
+  name: varchar('name', { length: 255 }).notNull().default(''),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  emailVerified: boolean('email_verified').default(false).notNull(),
+  image: text('image'),
+  // Better Auth username plugin fields
   username: varchar('username', { length: 30 }).notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  role: userRoleEnum.default('user').notNull(),
+  displayUsername: varchar('display_username', { length: 30 }),
+  // Better Auth admin plugin fields
+  role: varchar('role', { length: 20 }).default('user'),
+  banned: boolean('banned').default(false),
+  banReason: text('ban_reason'),
+  banExpires: timestamp('ban_expires'),
+  // Casino custom fields
+  passwordHash: text('password_hash'),
   balance: decimal('balance', { precision: 15, scale: 2 }).default('0').notNull(),
   avatar: text('avatar').default(''),
   isActive: boolean('is_active').default(true).notNull(),
@@ -23,8 +34,55 @@ export const users = mysqlTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   usernameIdx: index('users_username_idx').on(table.username),
+  emailIdx: index('users_email_idx').on(table.email),
   roleIdx: index('users_role_idx').on(table.role),
 }));
+
+// Better Auth session table
+export const session = mysqlTable('session', {
+  id: int('id').primaryKey().autoincrement(),
+  token: varchar('token', { length: 255 }).notNull().unique(),
+  userId: int('user_id').notNull().references(() => users.id),
+  expiresAt: timestamp('expires_at').notNull(),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  impersonatedBy: varchar('impersonated_by', { length: 255 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  tokenIdx: index('session_token_idx').on(table.token),
+  userIdIdx: index('session_user_id_idx').on(table.userId),
+}));
+
+// Better Auth account table
+export const account = mysqlTable('account', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').notNull().references(() => users.id),
+  accountId: varchar('account_id', { length: 255 }).notNull(),
+  providerId: varchar('provider_id', { length: 255 }).notNull(),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at'),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
+  scope: text('scope'),
+  idToken: text('id_token'),
+  password: text('password'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('account_user_id_idx').on(table.userId),
+  accountIdIdx: index('account_account_id_idx').on(table.accountId),
+}));
+
+// Better Auth verification table
+export const verification = mysqlTable('verification', {
+  id: int('id').primaryKey().autoincrement(),
+  identifier: varchar('identifier', { length: 255 }).notNull(),
+  value: varchar('value', { length: 255 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
 
 // Transactions table
 export const transactions = mysqlTable('transactions', {
@@ -82,12 +140,14 @@ export const gameSessions = mysqlTable('game_sessions', {
 }));
 
 // Game Logs table
+// gameType and eventType use varchar instead of enum because LoggingService
+// writes system/admin events (not just game events) to this table
 export const gameLogs = mysqlTable('game_logs', {
   id: int('id').primaryKey().autoincrement(),
   sessionId: int('session_id').references(() => gameSessions.id),
   userId: int('user_id').references(() => users.id),
-  gameType: gameTypeEnum.notNull(),
-  eventType: eventTypeEnum.notNull(),
+  gameType: varchar('game_type', { length: 50 }).notNull(),
+  eventType: varchar('event_type', { length: 100 }).notNull(),
   eventDetails: json('event_details').notNull(),
   amount: decimal('amount', { precision: 15, scale: 2 }),
   timestamp: timestamp('timestamp').defaultNow().notNull(),
@@ -166,12 +226,28 @@ export const loginRewards = mysqlTable('login_rewards', {
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
   transactions: many(transactions),
   gameSessions: many(gameSessions),
   gameLogs: many(gameLogs),
   balances: many(balances),
   messages: many(messages),
   loginRewards: many(loginRewards),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(users, {
+    fields: [session.userId],
+    references: [users.id],
+  }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(users, {
+    fields: [account.userId],
+    references: [users.id],
+  }),
 }));
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
@@ -268,3 +344,9 @@ export type Message = InferSelectModel<typeof messages>;
 export type NewMessage = InferInsertModel<typeof messages>;
 export type LoginReward = InferSelectModel<typeof loginRewards>;
 export type NewLoginReward = InferInsertModel<typeof loginRewards>;
+export type Session = InferSelectModel<typeof session>;
+export type NewSession = InferInsertModel<typeof session>;
+export type Account = InferSelectModel<typeof account>;
+export type NewAccount = InferInsertModel<typeof account>;
+export type Verification = InferSelectModel<typeof verification>;
+export type NewVerification = InferInsertModel<typeof verification>;

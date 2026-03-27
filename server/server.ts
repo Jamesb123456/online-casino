@@ -18,8 +18,11 @@ import { socketAuth, getAuthenticatedUser } from './middleware/socket/socketAuth
 // Drizzle Database Connection
 import { connectDB, closeDB } from './drizzle/db.js';
 
+// Better Auth
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './lib/auth.js';
+
 // Routes
-import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import gameRoutes from './routes/games.js';
 import adminRoutes from './routes/admin.js';
@@ -50,13 +53,18 @@ const io = new SocketIOServer(server, {
   }
 });
 
-// Middleware
-app.use(express.json());
-app.use(cookieParser());
+// CORS must be before Better Auth handler
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true
 }));
+
+// Better Auth handler - must be before express.json()
+app.all("/api/auth/*", toNodeHandler(auth));
+
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
 app.use(helmet());
 app.use(morgan('dev'));
 
@@ -69,8 +77,7 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// Routes
-app.use('/api/auth', authRoutes);
+// Routes (auth is handled by Better Auth above)
 app.use('/api/users', userRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/admin', adminRoutes);
@@ -171,13 +178,12 @@ landminesNamespace.on('connection', (socket) => {
   LoggingService.logGameEvent('landmines', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize landmines handlers
-  // TODO: Temporarily disabled - needs ESM conversion
-  // import('./src/socket/landminesHandler.js')
-  //   .then((mod: any) => {
-  //     const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers;
-  //     if (typeof init === 'function') init(io, socket, user);
-  //   })
-  //   .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
+  import('./src/socket/landminesHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers || mod?.default;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
   
   // Handle disconnection
   socket.on('disconnect', () => {
@@ -205,8 +211,16 @@ blackjackNamespace.on('connection', (socket) => {
   LoggingService.logGameEvent('blackjack', 'namespace_authenticated', { username: user.username, userId: user.userId });
   
   // Initialize blackjack handlers
-  // TODO: Wire Blackjack when handler is ready
-  
+  import('./src/socket/blackjackHandler.js')
+    .then((mod: any) => {
+      const HandlerClass = mod?.default || mod?.BlackjackHandler;
+      if (HandlerClass && typeof HandlerClass === 'function') {
+        const handler = new HandlerClass(blackjackNamespace);
+        handler.handleConnection(socket);
+      }
+    })
+    .catch((err) => LoggingService.logSystemEvent('blackjack_handler_init_failed', { error: String(err) }, 'error'));
+
   // Handle disconnection
   socket.on('disconnect', () => {
     LoggingService.logGameEvent('blackjack', 'namespace_disconnected', { username: user.username, userId: user.userId });
@@ -226,13 +240,12 @@ plinkoNamespace.on('connection', (socket) => {
   }
   LoggingService.logGameEvent('plinko', 'namespace_authenticated', { username: user.username, userId: user.userId });
   // Initialize plinko handlers per-connection
-  // TODO: Temporarily disabled - needs ESM conversion
-  // import('./src/socket/plinkoHandler.js')
-  //   .then((mod: any) => {
-  //     const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers;
-  //     if (typeof init === 'function') init(io, socket, user);
-  //   })
-  //   .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
+  import('./src/socket/plinkoHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers || mod?.default;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
   socket.on('disconnect', () => {
     LoggingService.logGameEvent('plinko', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
@@ -251,13 +264,12 @@ wheelNamespace.on('connection', (socket) => {
   }
   LoggingService.logGameEvent('wheel', 'namespace_authenticated', { username: user.username, userId: user.userId });
   // Initialize wheel handlers per-connection
-  // TODO: Temporarily disabled - needs ESM conversion
-  // import('./src/socket/wheelHandler.js')
-  //   .then((mod: any) => {
-  //     const init = mod?.initWheelHandlers || mod?.default?.initWheelHandlers;
-  //     if (typeof init === 'function') init(io, socket, user);
-  //   })
-  //   .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'));
+  import('./src/socket/wheelHandler.js')
+    .then((mod: any) => {
+      const init = mod?.initWheelHandlers || mod?.default?.initWheelHandlers || mod?.default;
+      if (typeof init === 'function') init(io, socket, user);
+    })
+    .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'));
   socket.on('disconnect', () => {
     LoggingService.logGameEvent('wheel', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
@@ -303,10 +315,20 @@ io.on('connection', (socket: Socket) => {
 });
 
 // Initialize chat handlers
-// initChatHandlers(io);
+import('./src/socket/chatHandler.js')
+  .then((mod: any) => {
+    const init = mod?.default || mod?.initChatHandlers;
+    if (typeof init === 'function') init(io);
+  })
+  .catch((err) => LoggingService.logSystemEvent('chat_handler_init_failed', { error: String(err) }, 'error'));
 
 // Initialize live games handlers
-// initLiveGamesHandlers(io);
+import('./src/socket/liveGamesHandler.js')
+  .then((mod: any) => {
+    const init = mod?.default || mod?.initLiveGamesHandlers;
+    if (typeof init === 'function') init(io);
+  })
+  .catch((err) => LoggingService.logSystemEvent('live_games_handler_init_failed', { error: String(err) }, 'error'));
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

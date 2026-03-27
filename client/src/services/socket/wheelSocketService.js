@@ -34,11 +34,7 @@ class WheelSocketService {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        auth: {
-          userId: user.userId,
-          username: user.username,
-          avatar: user.avatar
-        }
+        withCredentials: true,
       });
 
       // Socket connection event listeners

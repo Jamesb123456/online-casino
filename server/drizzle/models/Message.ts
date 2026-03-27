@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, and, gte, lte } from 'drizzle-orm';
 import { db } from '../db.js';
 import { messages, users } from '../schema.js';

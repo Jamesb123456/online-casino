@@ -1,11 +1,11 @@
-// @ts-nocheck
+// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 
 // Import Drizzle database and schema
 import { db, closeDB } from '../drizzle/db.js';
-import { users, balances, gameStats } from '../drizzle/schema.js';
+import { users, balances, gameStats, account } from '../drizzle/schema.js';
 
 dotenv.config();
 
@@ -22,12 +22,16 @@ async function seedDatabase() {
       // Hash the password
       const hashedPassword = await bcrypt.hash('admin123', 12);
       
-      // Create admin user (ID will auto-increment)
+      // Create admin user with Better Auth fields
       await db.insert(users).values({
         username: 'admin',
+        name: 'admin',
+        email: 'admin@platinum.local',
+        emailVerified: true,
+        displayUsername: 'admin',
         passwordHash: hashedPassword,
         role: 'admin',
-        balance: '100000', // Admin starts with 100k
+        balance: '100000',
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -36,6 +40,16 @@ async function seedDatabase() {
       // Get the created admin user
       const createdAdmin = await db.select().from(users).where(eq(users.username, 'admin')).limit(1);
       const adminId = createdAdmin[0].id;
+
+      // Create Better Auth account record
+      await db.insert(account).values({
+        userId: adminId,
+        accountId: String(adminId),
+        providerId: 'credential',
+        password: hashedPassword,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
 
       // Create admin balance record
       await db.insert(balances).values({
@@ -70,12 +84,16 @@ async function seedDatabase() {
         // Hash the password
         const hashedPassword = await bcrypt.hash('password123', 12);
         
-        // Create player user (ID will auto-increment)
+        // Create player user with Better Auth fields
         await db.insert(users).values({
           username: playerData.username,
+          name: playerData.username,
+          email: `${playerData.username}@platinum.local`,
+          emailVerified: true,
+          displayUsername: playerData.username,
           passwordHash: hashedPassword,
           role: 'user',
-          balance: '1000', // Players start with 1k
+          balance: '1000',
           isActive: true,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -84,6 +102,16 @@ async function seedDatabase() {
         // Get the created player user
         const createdPlayer = await db.select().from(users).where(eq(users.username, playerData.username)).limit(1);
         const playerId = createdPlayer[0].id;
+
+        // Create Better Auth account record
+        await db.insert(account).values({
+          userId: playerId,
+          accountId: String(playerId),
+          providerId: 'credential',
+          password: hashedPassword,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
 
         // Create player balance record
         await db.insert(balances).values({

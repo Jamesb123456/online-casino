@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Roulette Game Socket Handler
  * Handles all socket.io events for the Roulette game
@@ -6,6 +5,7 @@
  */
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
+import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
@@ -172,24 +172,11 @@ const calculateWinnings = (betType, betAmount, isWinner) => {
  * @param {String} serverSeed - Server generated seed for fairness
  * @returns {Object} - Result with winning number and color
  */
-const generateSpinResult = (serverSeed = '') => {
-  // In a real implementation, this would use a cryptographic hash function
-  // Here we're using a simplified approach for demonstration
-  
-  // Create a deterministic but seemingly random value from the seeds
-  const seedString = `${serverSeed}-${Date.now()}`;
-  let hash = 0;
-  
-  for (let i = 0; i < seedString.length; i++) {
-    const char = seedString.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-
-  // Use the hash to select a number
-  const index = Math.abs(hash) % ROULETTE_NUMBERS.length;
+const generateSpinResult = () => {
+  // Use cryptographically secure random number for game-critical result
+  const index = crypto.randomInt(ROULETTE_NUMBERS.length);
   const result = ROULETTE_NUMBERS[index];
-  
+
   return {
     number: result.number,
     color: result.color,
@@ -248,12 +235,18 @@ const calculateRotationAngles = (index) => {
  * @param {Object} user - Authenticated user information
  */
 function initRouletteHandlers(io, socket, user) {
-  // Extract user info from socket auth or fallback to user object or socket.id
-  const userId = socket.handshake.auth.userId || user?._id || socket.id;
-  const username = socket.handshake.auth.username || user?.username || `Player_${userId.substring(0, 5)}`;
-  const avatar = socket.handshake.auth.avatar || user?.avatar || null;
-  
-  console.log(`Roulette: User connected - ${username} (${userId})`);
+  // Read user identity from server-side authenticated user (set by auth middleware)
+  const authenticatedUser = (socket as any).user;
+  if (!authenticatedUser) {
+    socket.emit('roulette:error', { message: 'Authentication required' });
+    socket.disconnect();
+    return;
+  }
+  const userId = authenticatedUser.userId;
+  const username = authenticatedUser.username;
+  const avatar = user?.avatar || null;
+
+  LoggingService.logGameEvent('roulette', 'player_connected', { userId, username });
   
   // Join the roulette namespace/room
   socket.join('roulette');
@@ -269,7 +262,7 @@ function initRouletteHandlers(io, socket, user) {
     });
     
     // Log session initialization
-    loggingService.logGameEvent('roulette', 'session_start', {
+    LoggingService.logGameEvent('roulette', 'session_start', {
       userId,
       initialBalance: user?.balance || 1000,
       timestamp: new Date()
@@ -319,8 +312,8 @@ function initRouletteHandlers(io, socket, user) {
       if (callback) callback(response);
       
     } catch (error) {
-      console.error('Error joining Roulette game:', error);
-      if (callback) callback({ success: false, error: error.message });
+      LoggingService.logGameEvent('roulette', 'error_join', { error: (error as any).message, userId });
+      if (callback) callback({ success: false, error: (error as any).message });
     }
   });
 
@@ -373,14 +366,14 @@ function initRouletteHandlers(io, socket, user) {
       io.to('roulette').emit('roulette:playerBet', bet);
       
       // Use balanceService to record the bet transaction
-      await balanceService.placeBet(userId, amount, 'roulette', {
+      await BalanceService.placeBet(userId, amount, 'roulette', {
         betType: type, 
         betValue: value,
         rouletteSessionId: bet.id
       });
       
       // Log bet placement
-      loggingService.logBetPlaced('roulette', bet.id, userId, amount, {
+      LoggingService.logBetPlaced('roulette', bet.id, userId, amount, {
         betType: type,
         betValue: value,
         timestamp: new Date()
@@ -397,8 +390,8 @@ function initRouletteHandlers(io, socket, user) {
       if (callback) callback(response);
       
     } catch (error) {
-      console.error('Error placing bet:', error);
-      if (callback) callback({ success: false, error: error.message });
+      LoggingService.logGameEvent('roulette', 'error_place_bet', { error: (error as any).message, userId });
+      if (callback) callback({ success: false, error: (error as any).message });
     }
   });
 
@@ -424,8 +417,7 @@ function initRouletteHandlers(io, socket, user) {
       session.isSpinning = true;
       
       // Generate spin result but don't reveal it to the client yet
-      const serverSeed = Math.random().toString(36).substring(2, 15);
-      const result = generateSpinResult(serverSeed);
+      const result = generateSpinResult();
       
       // Store result in session for later use
       session.pendingResult = result;
@@ -482,7 +474,7 @@ function initRouletteHandlers(io, socket, user) {
       if (callback) callback(initialResponse);
       
       // Emit to all players that the wheel is spinning
-      console.log(`[Roulette] Emitting spin_started event for user ${userId}, gameId ${gameId}`);
+      LoggingService.logGameEvent('roulette', 'spin_started', { userId, gameId });
       io.to('roulette').emit('roulette:spin_started', {
         userId,
         gameId,
@@ -492,14 +484,14 @@ function initRouletteHandlers(io, socket, user) {
       
       // After initial spin phase, reveal the result
       const resultTimeoutMs = spinAngles.durations.total - 1000; // Reveal result 1 second before animation ends
-      console.log(`[Roulette] Setting timeout for spin_result event: ${resultTimeoutMs}ms`);
+      LoggingService.logGameEvent('roulette', 'spin_result_timeout_set', { userId, resultTimeoutMs });
       
       setTimeout(() => {
-        console.log(`[Roulette] Result timeout triggered for user ${userId}`);
+        LoggingService.logGameEvent('roulette', 'result_timeout_triggered', { userId });
         
         // Only proceed if session still exists
         if (!activeSessions.has(userId)) {
-          console.error(`[Roulette] Session for user ${userId} no longer exists, cannot send result`);
+          LoggingService.logGameEvent('roulette', 'error_session_missing', { userId, phase: 'result' });
           return;
         }
         
@@ -510,7 +502,8 @@ function initRouletteHandlers(io, socket, user) {
         const totalProfit = session.pendingProfit;
         const gameId = session.pendingGameId;
         
-        console.log(`[Roulette] Retrieved spin data for user ${userId}:`, { 
+        LoggingService.logGameEvent('roulette', 'spin_data_retrieved', {
+          userId,
           winningNumber: result?.number,
           totalWinnings,
           totalProfit,
@@ -522,7 +515,7 @@ function initRouletteHandlers(io, socket, user) {
         
         // Use balanceService to record win transaction if there are any winnings
         if (totalWinnings > 0) {
-          balanceService.recordWin(userId, 
+          BalanceService.recordWin(userId, 
             processedBets.reduce((sum, bet) => sum + bet.amount, 0), // total bet amount
             totalWinnings, 
             'roulette',
@@ -536,7 +529,7 @@ function initRouletteHandlers(io, socket, user) {
                 isWinner: bet.isWinner
               }))
             }
-          ).catch(err => console.error('Error recording win:', err));
+          ).catch(err => LoggingService.logGameEvent('roulette', 'error_recording_win', { error: String(err), userId }));
         }
         
         // Create game result
@@ -553,10 +546,9 @@ function initRouletteHandlers(io, socket, user) {
         };
         
         // Log game end and results
-        loggingService.logGameEnd('roulette', gameResult.id, {
+        LoggingService.logGameEnd('roulette', gameResult.id, {
           winningNumber: result.number,
-          winningColor: result.color
-        }, {
+          winningColor: result.color,
           totalBets: processedBets.length,
           totalBetAmount: processedBets.reduce((sum, bet) => sum + bet.amount, 0),
           totalWinnings,
@@ -587,7 +579,8 @@ function initRouletteHandlers(io, socket, user) {
           timestamp: new Date()
         };
         
-        console.log(`[Roulette] Emitting spin_result event for gameId ${gameId}:`, { 
+        LoggingService.logGameEvent('roulette', 'spin_result_emitted', {
+          gameId,
           winningNumber: result.number,
           winningColor: result.color,
           totalWinnings,
@@ -598,28 +591,28 @@ function initRouletteHandlers(io, socket, user) {
         
         // After all animations are complete, reset spinning state
         setTimeout(() => {
-          console.log(`[Roulette] Round completion timeout triggered for user ${userId}`);
+          LoggingService.logGameEvent('roulette', 'round_completion_triggered', { userId });
           
           if (activeSessions.has(userId)) {
             const updatedSession = activeSessions.get(userId);
             updatedSession.isSpinning = false;
             
             // Notify clients that a new round can begin
-            console.log(`[Roulette] Emitting round_complete event for user ${userId}`);
+            LoggingService.logGameEvent('roulette', 'round_complete_emitted', { userId });
             io.to('roulette').emit('roulette:round_complete', {
               message: 'Ready for new bets',
               timestamp: new Date()
             });
           } else {
-            console.error(`[Roulette] Session for user ${userId} no longer exists for round completion`);
+            LoggingService.logGameEvent('roulette', 'error_session_missing', { userId, phase: 'round_completion' });
           }
         }, 3000); // 3 more seconds after result is shown
         
       }, resultTimeoutMs);
       
     } catch (error) {
-      console.error('Error spinning wheel:', error);
-      if (callback) callback({ success: false, error: error.message });
+      LoggingService.logGameEvent('roulette', 'error_spinning_wheel', { error: (error as any).message, userId });
+      if (callback) callback({ success: false, error: (error as any).message });
       
       // Reset spinning state in case of error
       if (activeSessions.has(userId)) {
@@ -653,8 +646,8 @@ function initRouletteHandlers(io, socket, user) {
       if (callback) callback(response);
       
     } catch (error) {
-      console.error('Error getting Roulette history:', error);
-      if (callback) callback({ success: false, error: error.message });
+      LoggingService.logGameEvent('roulette', 'error_get_history', { error: (error as any).message, userId });
+      if (callback) callback({ success: false, error: (error as any).message });
     }
   });
 
@@ -687,7 +680,7 @@ function initRouletteHandlers(io, socket, user) {
         username: playerInfo.username
       });
       
-      console.log(`Roulette: Player left - ${playerInfo.username} (${userId})`);
+      LoggingService.logGameEvent('roulette', 'player_left', { userId, username: playerInfo.username });
     }
     
     // Remove from connected users

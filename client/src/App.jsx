@@ -62,12 +62,12 @@ const router = createBrowserRouter(
       {/* Public routes */}
       <Route path="/" element={<HomePage />} />
       <Route path="/games" element={<GamesPage />} />
-      <Route path="/games/crash" element={<GameRoute name="Crash"><CrashPage /></GameRoute>} />
-      <Route path="/games/plinko" element={<GameRoute name="Plinko"><PlinkoPage /></GameRoute>} />
-      <Route path="/games/wheel" element={<GameRoute name="Wheel"><WheelPage /></GameRoute>} />
-      <Route path="/games/roulette" element={<GameRoute name="Roulette"><RoulettePage /></GameRoute>} />
-      <Route path="/games/blackjack" element={<GameRoute name="Blackjack"><BlackjackPage /></GameRoute>} />
-      <Route path="/games/landmines" element={<GameRoute name="Landmines"><LandminesPage /></GameRoute>} />
+      <Route path="/games/crash" element={<AuthGuard><GameRoute name="Crash"><CrashPage /></GameRoute></AuthGuard>} />
+      <Route path="/games/plinko" element={<AuthGuard><GameRoute name="Plinko"><PlinkoPage /></GameRoute></AuthGuard>} />
+      <Route path="/games/wheel" element={<AuthGuard><GameRoute name="Wheel"><WheelPage /></GameRoute></AuthGuard>} />
+      <Route path="/games/roulette" element={<AuthGuard><GameRoute name="Roulette"><RoulettePage /></GameRoute></AuthGuard>} />
+      <Route path="/games/blackjack" element={<AuthGuard><GameRoute name="Blackjack"><BlackjackPage /></GameRoute></AuthGuard>} />
+      <Route path="/games/landmines" element={<AuthGuard><GameRoute name="Landmines"><LandminesPage /></GameRoute></AuthGuard>} />
       <Route path="/rewards" element={
         <Suspense fallback={<Loading size="lg" message="Loading rewards..." />}>
           <RewardsPage />

@@ -25,9 +25,16 @@ const ensureSocket = () => {
 
     socket.on('connect', () => {
       isConnected = true;
+      console.log('Connected to landmines socket server');
     });
 
-    socket.on('disconnect', () => {
+    socket.on('connect_error', (error) => {
+      console.error('Landmines socket connection error:', error.message);
+      isConnected = false;
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('Disconnected from landmines socket server:', reason);
       isConnected = false;
     });
   }

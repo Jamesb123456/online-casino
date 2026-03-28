@@ -35,12 +35,30 @@ const GameStatistics = () => {
           gameType: gameFilter !== 'all' ? gameFilter : undefined
         });
 
-        if (response && response.statistics) {
-          // Use the real statistics data from the API
+        if (response && response.games) {
+          // Map server response { games: [{name, played, profit}] } to component format
+          const games = response.games;
+          const totalBets = games.reduce((sum, g) => sum + g.played, 0);
+          const totalProfit = games.reduce((sum, g) => sum + g.profit, 0);
+
+          setStatistics({
+            totalBets,
+            totalWagered: 0,
+            houseProfit: totalProfit,
+            averageBet: totalBets > 0 ? totalProfit / totalBets : 0,
+            gameBreakdown: games.map(g => ({
+              name: g.name,
+              bets: g.played,
+              wagered: 0,
+              profit: g.profit,
+              edge: g.played > 0 ? g.profit / (g.played || 1) : 0
+            })),
+            dailyData: [],
+            topPlayers: []
+          });
+        } else if (response && response.statistics) {
           setStatistics(response.statistics);
         } else {
-          // Return empty data if API response is unexpected
-          console.error('API returned unexpected format for game statistics');
           setStatistics({
             totalBets: 0,
             totalWagered: 0,

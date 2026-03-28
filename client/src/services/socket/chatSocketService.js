@@ -27,9 +27,14 @@ class ChatSocketService {
   connect() {
     return new Promise((resolve, reject) => {
       try {
-        // Close existing connection if any
+        // Return immediately if already connected
+        if (this.connected && this.socket?.connected) {
+          return resolve();
+        }
+
+        // Close existing broken connection if any
         this.disconnect();
-        
+
         const socketUrl = getSocketBaseUrl();
 
         this.socket = io(`${socketUrl}/chat`, {

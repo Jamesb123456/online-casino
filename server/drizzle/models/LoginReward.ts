@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, and, gt, lt, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { loginRewards, type LoginReward, type NewLoginReward } from '../schema.js';

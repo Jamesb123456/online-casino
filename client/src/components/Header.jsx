@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 
 const Header = () => {
@@ -11,17 +11,11 @@ const Header = () => {
 
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 10) {
-        setScrolled(true);
-      } else {
-        setScrolled(false);
-      }
+      setScrolled(window.scrollY > 10);
     };
 
     window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Close mobile menu when changing routes
@@ -30,7 +24,7 @@ const Header = () => {
   }, [location.pathname]);
 
   const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
+    setIsMenuOpen((prev) => !prev);
   };
 
   // Handle logout
@@ -38,50 +32,139 @@ const Header = () => {
     logout();
     navigate('/');
   };
-  
+
   // Get user balance from auth context
-  const userBalance = user?.balance?.toLocaleString() || "0";
+  const userBalance = user?.balance?.toLocaleString() || '0';
+
+  // Desktop nav link style helper
+  const desktopLinkClass = ({ isActive }) =>
+    `px-3 py-2 text-sm font-medium transition-colors duration-200 border-b-2 ${
+      isActive
+        ? 'text-accent-gold border-accent-gold'
+        : 'text-text-secondary hover:text-accent-gold border-transparent'
+    }`;
+
+  // Mobile nav link style helper
+  const mobileLinkClass = ({ isActive }) =>
+    `block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 ${
+      isActive
+        ? 'text-accent-gold bg-accent-gold/10'
+        : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+    }`;
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      scrolled 
-        ? 'bg-bg-elevated bg-opacity-95 backdrop-blur-sm shadow-md py-2' 
-        : 'bg-transparent py-4'
-    }`}>
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center">
-              <div className="text-2xl font-bold bg-gradient-primary text-transparent bg-clip-text mr-1">
-                Virtual
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 glass border-b border-white/10 transition-shadow duration-300 ${
+        scrolled ? 'shadow-card' : ''
+      }`}
+    >
+      <div className="container mx-auto px-4 max-w-7xl">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-1 shrink-0">
+            <span className="text-xl font-bold font-heading text-gold-gradient">
+              Platinum
+            </span>
+            <span className="text-xl font-bold font-heading text-text-primary">
+              Casino
+            </span>
+          </Link>
+
+          {/* Desktop navigation */}
+          <nav className="hidden lg:flex items-center gap-1" aria-label="Main navigation">
+            <NavLink to="/" end className={desktopLinkClass}>
+              Home
+            </NavLink>
+            <NavLink to="/games" className={desktopLinkClass}>
+              Games
+            </NavLink>
+            <NavLink to="/rewards" className={desktopLinkClass}>
+              Rewards
+            </NavLink>
+            <NavLink to="/leaderboard" className={desktopLinkClass}>
+              Leaderboard
+            </NavLink>
+          </nav>
+
+          {/* Right side: balance + auth */}
+          <div className="flex items-center gap-3">
+            {/* Balance display (desktop) */}
+            {isAuthenticated && (
+              <div className="hidden md:flex items-center gap-2 bg-bg-elevated/60 backdrop-blur-sm rounded-full px-4 py-1.5 border border-accent-gold/20">
+                {/* Gold chip icon */}
+                <svg
+                  className="w-5 h-5 text-accent-gold shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
+                  <text
+                    x="12"
+                    y="16"
+                    textAnchor="middle"
+                    fill="currentColor"
+                    fontSize="12"
+                    fontWeight="bold"
+                    fontFamily="sans-serif"
+                  >
+                    $
+                  </text>
+                </svg>
+                <span className="text-accent-gold font-bold font-heading text-sm">
+                  {userBalance}
+                </span>
               </div>
-              <div className="text-2xl font-bold bg-gradient-accent text-transparent bg-clip-text">
-                Casino
-              </div>
-            </Link>
-          </div>
-          
-          {/* Balance indicator (desktop) */}
-          {isAuthenticated && (
-            <div className="hidden md:flex items-center bg-bg-elevated rounded-full px-4 py-1.5 border border-accent border-opacity-30 shadow-glow mr-4">
-              <div className="flex items-center">
-                <span className="text-accent-light font-medium mr-1.5">₵</span>
-                <span className="text-white font-bold">{userBalance}</span>
-              </div>
-              <button className="ml-3 bg-accent hover:bg-accent-dark text-white text-xs font-bold px-2 py-0.5 rounded-md transition-colors">
-                +
-              </button>
+            )}
+
+            {/* Desktop auth buttons */}
+            <div className="hidden lg:flex items-center gap-2">
+              {isAuthenticated ? (
+                <>
+                  <NavLink
+                    to="/profile"
+                    className={desktopLinkClass}
+                  >
+                    {user ? user.username : 'Profile'}
+                  </NavLink>
+                  {user && user.role === 'admin' && (
+                    <NavLink to="/admin/dashboard" className={desktopLinkClass}>
+                      Admin
+                    </NavLink>
+                  )}
+                  <button
+                    onClick={handleLogout}
+                    className="ml-1 px-4 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 transition-colors duration-200"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
-          )}
-          
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <button 
+
+            {/* Mobile hamburger */}
+            <button
               onClick={toggleMenu}
-              className="text-white hover:text-accent focus:outline-none"
-              aria-label="Toggle menu"
+              className="lg:hidden p-2 text-text-secondary hover:text-accent-gold transition-colors duration-200"
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 {isMenuOpen ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 ) : (
@@ -90,130 +173,96 @@ const Header = () => {
               </svg>
             </button>
           </div>
-          
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1">
-            <NavLink to="/" label="Home" />
-            <NavLink to="/games" label="Games" />
-            <NavLink to="/rewards" label="Rewards" />
-            {/* <NavLink to="/leaderboard" label="Leaderboard" /> */}
-            
+        </div>
+      </div>
+
+      {/* Mobile navigation dropdown */}
+      {isMenuOpen && (
+        <nav
+          className="lg:hidden glass border-t border-white/10 animate-slide-up"
+          aria-label="Mobile navigation"
+        >
+          <div className="container mx-auto px-4 py-4 max-w-7xl space-y-1">
+            <NavLink to="/" end className={mobileLinkClass}>
+              Home
+            </NavLink>
+            <NavLink to="/games" className={mobileLinkClass}>
+              Games
+            </NavLink>
+            <NavLink to="/rewards" className={mobileLinkClass}>
+              Rewards
+            </NavLink>
+            <NavLink to="/leaderboard" className={mobileLinkClass}>
+              Leaderboard
+            </NavLink>
+
+            {/* Mobile balance display */}
+            {isAuthenticated && (
+              <div className="flex items-center justify-between bg-bg-elevated/60 rounded-lg px-4 py-2.5 border border-accent-gold/20 my-2">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-5 h-5 text-accent-gold"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
+                    <text
+                      x="12"
+                      y="16"
+                      textAnchor="middle"
+                      fill="currentColor"
+                      fontSize="12"
+                      fontWeight="bold"
+                      fontFamily="sans-serif"
+                    >
+                      $
+                    </text>
+                  </svg>
+                  <span className="text-accent-gold font-bold font-heading text-sm">
+                    {userBalance}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {isAuthenticated ? (
               <>
-                <NavLink to="/profile" label={`Profile${user ? ` (${user.username})` : ''}`} />
+                <NavLink to="/profile" className={mobileLinkClass}>
+                  {user ? `Profile (${user.username})` : 'Profile'}
+                </NavLink>
                 {user && user.role === 'admin' && (
-                  <NavLink to="/admin/dashboard" label="Admin" />
+                  <NavLink to="/admin/dashboard" className={mobileLinkClass}>
+                    Admin Dashboard
+                  </NavLink>
                 )}
-                <button 
+                <button
                   onClick={handleLogout}
-                  className="ml-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors"
+                  className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors duration-200"
                 >
                   Logout
                 </button>
               </>
             ) : (
-              <div className="flex items-center ml-2 space-x-3">
-                <Link to="/login" className="text-white hover:text-accent transition-colors">
+              <div className="flex flex-col gap-2 pt-2">
+                <Link
+                  to="/login"
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200"
+                >
                   Login
                 </Link>
-                <Link to="/register" className="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-md font-medium transition-colors">
-                  Register
+                <Link
+                  to="/register"
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200"
+                >
+                  Sign Up
                 </Link>
               </div>
             )}
-          </nav>
-        </div>
-        
-        {/* Mobile Navigation */}
-        {isMenuOpen && (
-          <div className="mt-4 pt-4 border-t border-gray-700 md:hidden">
-            <div className="flex flex-col space-y-4 pb-4">
-              <MobileNavLink to="/" label="Home" />
-              <MobileNavLink to="/games" label="Games" />
-              <MobileNavLink to="/rewards" label="Rewards" />
-              <MobileNavLink to="/leaderboard" label="Leaderboard" />
-              
-              {/* Mobile balance display */}
-              {isAuthenticated && (
-                <div className="flex items-center justify-between bg-bg-elevated rounded-lg px-3 py-2 border border-accent-light border-opacity-20 my-1">
-                  <div className="flex items-center">
-                    <span className="text-accent font-medium mr-1">Balance:</span>
-                    <span className="text-white font-bold">₵ {userBalance}</span>
-                  </div>
-                  <button className="bg-accent hover:bg-accent-dark text-white text-xs font-bold px-2 py-1 rounded-md transition-colors">
-                    Add Funds
-                  </button>
-                </div>
-              )}
-              
-              {isAuthenticated ? (
-                <>
-                  <MobileNavLink to="/profile" label={`Profile${user ? ` (${user.username})` : ''}`} />
-                  {user && user.role === 'admin' && (
-                    <MobileNavLink to="/admin/dashboard" label="Admin Dashboard" />
-                  )}
-                  <button 
-                    onClick={handleLogout}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-center transition-colors"
-                  >
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <div className="flex flex-col space-y-2">
-                  <Link to="/login" className="bg-bg-elevated hover:bg-bg-card text-white px-4 py-2 rounded-md text-center transition-colors">
-                    Login
-                  </Link>
-                  <Link to="/register" className="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-md text-center font-medium transition-colors">
-                    Register
-                  </Link>
-                </div>
-              )}
-            </div>
           </div>
-        )}
-      </div>
+        </nav>
+      )}
     </header>
-  );
-};
-
-// Desktop nav link with active state
-const NavLink = ({ to, label }) => {
-  const location = useLocation();
-  const isActive = location.pathname === to || 
-    (to !== '/' && location.pathname.startsWith(to));
-  
-  return (
-    <Link 
-      to={to}
-      className={`px-3 py-2 rounded-md transition-colors ${
-        isActive 
-          ? 'bg-primary text-white font-medium' 
-          : 'text-gray-300 hover:bg-bg-elevated hover:text-white'
-      }`}
-    >
-      {label}
-    </Link>
-  );
-};
-
-// Mobile nav link with active state
-const MobileNavLink = ({ to, label }) => {
-  const location = useLocation();
-  const isActive = location.pathname === to || 
-    (to !== '/' && location.pathname.startsWith(to));
-  
-  return (
-    <Link 
-      to={to}
-      className={`px-3 py-2 rounded-md transition-colors ${
-        isActive 
-          ? 'bg-primary text-white font-medium' 
-          : 'text-gray-300 hover:bg-bg-elevated hover:text-white'
-      }`}
-    >
-      {label}
-    </Link>
   );
 };
 

@@ -11,7 +11,7 @@ const GameStatistics = () => {
   const [timeRange, setTimeRange] = useState('week');
   const [gameFilter, setGameFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Statistics data fetched from API
   const [statistics, setStatistics] = useState({
     totalBets: 0,
@@ -22,19 +22,19 @@ const GameStatistics = () => {
     dailyData: [],
     topPlayers: []
   });
-  
+
   useEffect(() => {
     // Fetch game statistics from API
     const fetchGameStatistics = async () => {
       setIsLoading(true);
-      
+
       try {
         // Call the API with timeRange and gameFilter as parameters
         const response = await adminService.getGameStats({
           timeRange: timeRange,
           gameType: gameFilter !== 'all' ? gameFilter : undefined
         });
-        
+
         if (response && response.statistics) {
           // Use the real statistics data from the API
           setStatistics(response.statistics);
@@ -68,10 +68,10 @@ const GameStatistics = () => {
         setIsLoading(false);
       }
     };
-    
+
     fetchGameStatistics();
   }, [timeRange, gameFilter]);
-  
+
   // Format currency
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-US', {
@@ -79,23 +79,24 @@ const GameStatistics = () => {
       currency: 'USD',
     }).format(value);
   };
-  
+
   // Format percentage
   const formatPercentage = (value) => {
     return `${(value * 100).toFixed(2)}%`;
   };
-  
+
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-white">Game Statistics</h1>
-      
+      <h1 className="text-3xl font-bold text-text-primary">Game Statistics</h1>
+
       {/* Filters */}
-      <Card className="bg-gray-800 text-white">
+      <div className="bg-bg-card rounded-xl p-4 border border-border shadow-card">
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center">
-            <span className="mr-2 text-gray-400">📅</span>
+            <label htmlFor="admin-time-range" className="mr-2 text-text-muted" aria-hidden="true">{'\uD83D\uDCC5'}</label>
             <select
-              className="bg-gray-700 border border-gray-600 rounded-md p-2 text-white"
+              id="admin-time-range"
+              className="bg-bg-elevated border border-border-light rounded-lg p-2 text-text-primary cursor-pointer"
               value={timeRange}
               onChange={(e) => setTimeRange(e.target.value)}
             >
@@ -105,11 +106,12 @@ const GameStatistics = () => {
               <option value="year">Last Year</option>
             </select>
           </div>
-          
+
           <div className="flex items-center">
-            <span className="mr-2 text-gray-400">🔍</span>
+            <label htmlFor="admin-game-filter" className="mr-2 text-text-muted" aria-hidden="true">{'\uD83D\uDD0D'}</label>
             <select
-              className="bg-gray-700 border border-gray-600 rounded-md p-2 text-white"
+              id="admin-game-filter"
+              className="bg-bg-elevated border border-border-light rounded-lg p-2 text-text-primary cursor-pointer"
               value={gameFilter}
               onChange={(e) => setGameFilter(e.target.value)}
             >
@@ -121,106 +123,106 @@ const GameStatistics = () => {
             </select>
           </div>
         </div>
-      </Card>
-      
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent-gold"></div>
         </div>
       ) : (
         <>
           {/* Summary Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-gray-800 text-white">
+            <div className="bg-bg-card rounded-xl p-5 border border-border shadow-card">
               <div className="text-center">
-                <h3 className="text-gray-400">Total Bets</h3>
-                <p className="text-3xl font-bold">{statistics.totalBets.toLocaleString()}</p>
+                <h2 className="text-text-muted text-sm">Total Bets</h2>
+                <p className="text-3xl font-bold text-text-primary">{statistics.totalBets.toLocaleString()}</p>
               </div>
-            </Card>
-            
-            <Card className="bg-gray-800 text-white">
-              <div className="text-center">
-                <h3 className="text-gray-400">Total Wagered</h3>
-                <p className="text-3xl font-bold">{formatCurrency(statistics.totalWagered)}</p>
-              </div>
-            </Card>
-            
-            <Card className="bg-gray-800 text-white">
-              <div className="text-center">
-                <h3 className="text-gray-400">House Profit</h3>
-                <p className="text-3xl font-bold text-green-400">{formatCurrency(statistics.houseProfit)}</p>
-              </div>
-            </Card>
-            
-            <Card className="bg-gray-800 text-white">
-              <div className="text-center">
-                <h3 className="text-gray-400">Average Bet</h3>
-                <p className="text-3xl font-bold">{formatCurrency(statistics.averageBet)}</p>
-              </div>
-            </Card>
-          </div>
-          
-          {/* Game Breakdown */}
-          <Card className="bg-gray-800 text-white">
-            <div className="flex items-center mb-4">
-              <span className="mr-2 text-blue-400 text-xl">📊</span>
-              <h2 className="text-xl font-bold">Game Performance</h2>
             </div>
-            
+
+            <div className="bg-bg-card rounded-xl p-5 border border-border shadow-card">
+              <div className="text-center">
+                <h2 className="text-text-muted text-sm">Total Wagered</h2>
+                <p className="text-3xl font-bold text-text-primary">{formatCurrency(statistics.totalWagered)}</p>
+              </div>
+            </div>
+
+            <div className="bg-bg-card rounded-xl p-5 border border-border shadow-card">
+              <div className="text-center">
+                <h2 className="text-text-muted text-sm">House Profit</h2>
+                <p className="text-3xl font-bold text-status-success">{formatCurrency(statistics.houseProfit)}</p>
+              </div>
+            </div>
+
+            <div className="bg-bg-card rounded-xl p-5 border border-border shadow-card">
+              <div className="text-center">
+                <h2 className="text-text-muted text-sm">Average Bet</h2>
+                <p className="text-3xl font-bold text-text-primary">{formatCurrency(statistics.averageBet)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Game Breakdown */}
+          <div className="bg-bg-card rounded-xl p-6 border border-border shadow-card">
+            <div className="flex items-center mb-4">
+              <span className="mr-2 text-accent-gold text-xl" aria-hidden="true">{'\uD83D\uDCCA'}</span>
+              <h2 className="text-xl font-bold text-text-primary">Game Performance</h2>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="py-3 px-4">Game</th>
-                    <th className="py-3 px-4">Bets Placed</th>
-                    <th className="py-3 px-4">Total Wagered</th>
-                    <th className="py-3 px-4">House Profit</th>
-                    <th className="py-3 px-4">Effective Edge</th>
+                  <tr className="border-b border-border">
+                    <th className="py-3 px-4 text-text-secondary font-medium">Game</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Bets Placed</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Total Wagered</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">House Profit</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Effective Edge</th>
                   </tr>
                 </thead>
                 <tbody>
                   {statistics.gameBreakdown.map((game, index) => (
-                    <tr key={index} className="border-b border-gray-700 hover:bg-gray-700">
-                      <td className="py-3 px-4 font-medium">{game.name}</td>
-                      <td className="py-3 px-4">{game.bets.toLocaleString()}</td>
-                      <td className="py-3 px-4">{formatCurrency(game.wagered)}</td>
-                      <td className="py-3 px-4 text-green-400">{formatCurrency(game.profit)}</td>
-                      <td className="py-3 px-4">{formatPercentage(game.edge)}</td>
+                    <tr key={index} className="border-b border-border hover:bg-bg-elevated/50 transition-colors">
+                      <td className="py-3 px-4 font-medium text-text-primary">{game.name}</td>
+                      <td className="py-3 px-4 text-text-secondary">{game.bets.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-text-secondary">{formatCurrency(game.wagered)}</td>
+                      <td className="py-3 px-4 text-status-success">{formatCurrency(game.profit)}</td>
+                      <td className="py-3 px-4 text-text-secondary">{formatPercentage(game.edge)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </Card>
-          
-          {/* Visual Representation - In a real app would use Chart.js or similar */}
+          </div>
+
+          {/* Visual Representation */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-gray-800 text-white">
-              <h2 className="text-xl font-bold mb-4">Daily Activity</h2>
+            <div className="bg-bg-card rounded-xl p-6 border border-border shadow-card">
+              <h2 className="text-xl font-bold mb-4 text-text-primary">Daily Activity</h2>
               <div className="h-64 flex items-end justify-between pt-4 px-2">
                 {statistics.dailyData.slice(-7).map((day, index) => {
                   // Maximum value for scaling
                   const maxBets = Math.max(...statistics.dailyData.slice(-7).map(d => d.bets));
                   const height = `${(day.bets / maxBets) * 100}%`;
-                  
+
                   return (
                     <div key={index} className="flex flex-col items-center">
                       <div className="relative mb-2" style={{ height: "200px" }}>
-                        <div 
-                          className="w-8 bg-blue-600 hover:bg-blue-500 transition-all rounded-t-sm"
+                        <div
+                          className="w-8 bg-accent-gold hover:bg-accent-gold-light transition-all rounded-t-sm"
                           style={{ height, marginTop: `calc(200px - ${height})` }}
                         ></div>
                       </div>
-                      <div className="text-xs text-gray-400">{day.date.split('-')[2]}</div>
+                      <div className="text-xs text-text-muted">{day.date.split('-')[2]}</div>
                     </div>
                   );
                 })}
               </div>
-              <div className="text-center mt-2 text-sm text-gray-400">Daily Bets</div>
-            </Card>
-            
-            <Card className="bg-gray-800 text-white">
-              <h2 className="text-xl font-bold mb-4">Distribution by Game</h2>
+              <div className="text-center mt-2 text-sm text-text-muted">Daily Bets</div>
+            </div>
+
+            <div className="bg-bg-card rounded-xl p-6 border border-border shadow-card">
+              <h2 className="text-xl font-bold mb-4 text-text-primary">Distribution by Game</h2>
               {statistics.gameBreakdown.length > 0 && (
                 <div className="h-64 flex items-center justify-center">
                   <div className="relative h-48 w-48 rounded-full overflow-hidden flex flex-col justify-center items-center">
@@ -230,17 +232,17 @@ const GameStatistics = () => {
                         (sum, g) => sum + g.wagered, 0
                       );
                       const percentage = game.wagered / totalWagered;
-                      
+
                       // Generate colors based on index
                       const colors = [
-                        'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 
+                        'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
                         'bg-purple-500', 'bg-red-500', 'bg-indigo-500'
                       ];
-                      
+
                       return (
-                        <div 
+                        <div
                           key={index}
-                          className="absolute text-xs text-white p-1 text-center"
+                          className="absolute text-xs text-text-primary p-1 text-center"
                           style={{
                             left: `${50 + Math.cos(index * (2 * Math.PI / statistics.gameBreakdown.length)) * 70}px`,
                             top: `${50 + Math.sin(index * (2 * Math.PI / statistics.gameBreakdown.length)) * 70}px`,
@@ -253,37 +255,37 @@ const GameStatistics = () => {
                         </div>
                       );
                     })}
-                    <div className="bg-gray-700 h-24 w-24 rounded-full flex items-center justify-center">
-                      <span className="text-lg font-bold">
+                    <div className="bg-bg-elevated h-24 w-24 rounded-full flex items-center justify-center">
+                      <span className="text-lg font-bold text-text-primary">
                         {formatCurrency(statistics.totalWagered)}
                       </span>
                     </div>
                   </div>
                 </div>
               )}
-            </Card>
+            </div>
           </div>
-          
+
           {/* Top Players */}
-          <Card className="bg-gray-800 text-white">
-            <h2 className="text-xl font-bold mb-4">Top Players by Volume</h2>
+          <div className="bg-bg-card rounded-xl p-6 border border-border shadow-card">
+            <h2 className="text-xl font-bold mb-4 text-text-primary">Top Players by Volume</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="py-3 px-4">Username</th>
-                    <th className="py-3 px-4">Total Wagered</th>
-                    <th className="py-3 px-4">Games Played</th>
-                    <th className="py-3 px-4">Net Profit/Loss</th>
+                  <tr className="border-b border-border">
+                    <th className="py-3 px-4 text-text-secondary font-medium">Username</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Total Wagered</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Games Played</th>
+                    <th className="py-3 px-4 text-text-secondary font-medium">Net Profit/Loss</th>
                   </tr>
                 </thead>
                 <tbody>
                   {statistics.topPlayers.map((player, index) => (
-                    <tr key={index} className="border-b border-gray-700 hover:bg-gray-700">
-                      <td className="py-3 px-4 font-medium">{player.username}</td>
-                      <td className="py-3 px-4">{formatCurrency(player.totalWagered)}</td>
-                      <td className="py-3 px-4">{player.gamesPlayed.toLocaleString()}</td>
-                      <td className={`py-3 px-4 ${player.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <tr key={index} className="border-b border-border hover:bg-bg-elevated/50 transition-colors">
+                      <td className="py-3 px-4 font-medium text-text-primary">{player.username}</td>
+                      <td className="py-3 px-4 text-text-secondary">{formatCurrency(player.totalWagered)}</td>
+                      <td className="py-3 px-4 text-text-secondary">{player.gamesPlayed.toLocaleString()}</td>
+                      <td className={`py-3 px-4 ${player.netProfit >= 0 ? 'text-status-success' : 'text-status-error'}`}>
                         {formatCurrency(player.netProfit)}
                       </td>
                     </tr>
@@ -291,7 +293,7 @@ const GameStatistics = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
         </>
       )}
     </div>

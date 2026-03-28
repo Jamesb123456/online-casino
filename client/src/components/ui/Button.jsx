@@ -1,8 +1,8 @@
 import React from 'react';
 
-const Button = ({ 
-  children, 
-  variant = 'primary', 
+const Button = ({
+  children,
+  variant = 'primary',
   size = 'md',
   fullWidth = false,
   disabled = false,
@@ -14,19 +14,19 @@ const Button = ({
 }) => {
   // Define variant classes
   const variantClasses = {
-    primary: 'bg-primary hover:bg-primary-dark text-white',
-    secondary: 'bg-bg-elevated hover:bg-bg-card text-white',
-    accent: 'bg-accent hover:bg-accent-dark text-white',
-    danger: 'bg-red-600 hover:bg-red-700 text-white',
-    success: 'bg-game-roulette hover:bg-green-700 text-white',
-    outline: 'bg-transparent border border-primary text-primary hover:bg-primary hover:text-white',
-    outlineAccent: 'bg-transparent border border-accent text-accent hover:bg-accent hover:text-white',
-    gradient: 'bg-gradient-to-r from-primary to-primary-light hover:from-primary-dark hover:to-primary text-white',
-    gradientAccent: 'bg-gradient-to-r from-accent-dark to-accent hover:from-accent hover:to-accent-light text-white',
-    subtle: 'bg-bg-card hover:bg-bg-elevated text-gray-300 hover:text-white border border-gray-700',
-    glass: 'bg-white bg-opacity-10 backdrop-filter backdrop-blur-sm hover:bg-opacity-20 text-white border border-white border-opacity-20'
+    primary: 'bg-accent-gold hover:bg-accent-gold-light text-bg-base font-semibold hover:shadow-glow-gold',
+    secondary: 'glass text-text-primary hover:bg-white/10',
+    accent: 'bg-accent-purple hover:bg-accent-purple-light text-white hover:shadow-glow-purple',
+    danger: 'bg-status-error hover:bg-red-600 text-white',
+    success: 'bg-status-success hover:bg-emerald-600 text-white',
+    outline: 'border border-border-light text-text-secondary hover:border-accent-gold hover:text-accent-gold bg-transparent',
+    outlineAccent: 'border border-accent-gold/30 text-accent-gold hover:bg-accent-gold/10 bg-transparent',
+    gradient: 'bg-gradient-to-r from-accent-gold to-accent-gold-light text-bg-base font-semibold hover:shadow-glow-gold',
+    gradientAccent: 'bg-gradient-to-r from-accent-purple to-accent-purple-light text-white',
+    subtle: 'bg-bg-elevated text-text-secondary hover:bg-bg-surface hover:text-text-primary',
+    glass: 'glass text-text-primary hover:bg-white/10'
   };
-  
+
   // Define size classes
   const sizeClasses = {
     xs: 'py-1 px-2 text-xs',
@@ -35,7 +35,7 @@ const Button = ({
     lg: 'py-3 px-6 text-lg',
     xl: 'py-4 px-8 text-xl'
   };
-  
+
   // Define rounded styles
   const roundedStyles = {
     none: 'rounded-none',
@@ -45,19 +45,19 @@ const Button = ({
     xl: 'rounded-xl',
     full: 'rounded-full'
   };
-  
+
   // Combine classes
   const buttonClasses = `
     ${variantClasses[variant] || variantClasses.primary}
     ${sizeClasses[size] || sizeClasses.md}
     ${roundedStyles[rounded] || roundedStyles.md}
     ${fullWidth ? 'w-full' : ''}
-    ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-    ${glow ? 'shadow-glow' : ''}
-    font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg focus:ring-accent
+    ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-[0.98]'}
+    ${glow ? 'shadow-glow-gold' : ''}
+    font-medium transition-all duration-200 ease-out focus-visible:ring-2 focus-visible:ring-accent-gold focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base focus:outline-none
     ${className}
   `;
-  
+
   return (
     <button
       type={type}

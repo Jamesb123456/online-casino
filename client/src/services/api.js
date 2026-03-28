@@ -14,8 +14,22 @@ export const apiRequest = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
+  // Build query string from params option (Axios-style)
+  let url = `${API_URL}${endpoint}`;
+  if (options.params) {
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(options.params)) {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, String(value));
+      }
+    }
+    const qs = searchParams.toString();
+    if (qs) url += `?${qs}`;
+    delete options.params;
+  }
+
   try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const response = await fetch(url, {
       ...options,
       headers,
       credentials: 'include', // Include cookies in requests

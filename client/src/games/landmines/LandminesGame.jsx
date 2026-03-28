@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import LandminesBoard from './LandminesBoard';
 import LandminesBettingPanel from './LandminesBettingPanel';
-import Card from '../../components/ui/Card';
 import { formatCurrency, formatTime, getMultiplierColor } from './landminesUtils';
 import landminesSocketService from '../../services/socket/landminesSocketService';
-
-// For development, toggle between mock and real socket
-const USE_MOCK_SOCKET = true;
 
 const LandminesGame = () => {
   // Game state
@@ -24,20 +20,18 @@ const LandminesGame = () => {
 
   // Connect to socket when component mounts
   useEffect(() => {
-    if (!USE_MOCK_SOCKET) {
-      // Join the Landmines game room
-      landminesSocketService.joinLandminesGame((response) => {
-        if (response.success) {
-          setBalance(response.balance);
-          setGameHistory(response.history || []);
-        }
-      });
-      
-      // Cleanup when component unmounts
-      return () => {
-        landminesSocketService.leaveLandminesGame();
-      };
-    }
+    // Join the Landmines game room
+    landminesSocketService.joinLandminesGame((response) => {
+      if (response.success) {
+        setBalance(response.balance);
+        setGameHistory(response.history || []);
+      }
+    });
+
+    // Cleanup when component unmounts
+    return () => {
+      landminesSocketService.leaveLandminesGame();
+    };
   }, []);
 
   // Handle starting a new game
@@ -53,64 +47,27 @@ const LandminesGame = () => {
     setMines(mines);
     
     try {
-      if (USE_MOCK_SOCKET) {
-        // Clear any previous session storage to avoid conflicts
+      // Send start game request to server via socket
+      landminesSocketService.startGame({ betAmount, mines }, (response) => {
         try {
-          sessionStorage.removeItem('landmines_mock_grid');
-          sessionStorage.removeItem('landmines_mock_revealed');
-        } catch (e) {
-          console.warn('Failed to clear session storage:', e);
+          if (response.success) {
+            setIsGameActive(true);
+            setRevealedCells([]);
+            setGrid(null); // Grid is hidden until game over
+            setPotentialWin(0);
+            setBalance(response.balance);
+            setRemainingSafeCells(25 - mines);
+            setGameResult(null);
+          } else {
+            // Show error
+            console.error('Error starting game:', response.error);
+          }
+        } catch (error) {
+          console.error('Error processing start game response:', error);
+        } finally {
+          setIsLoading(false);
         }
-        
-        // Mock implementation for development
-        landminesSocketService.mockStartGame({ betAmount, mines }, (response) => {
-          try {
-            if (!response || typeof response !== 'object') {
-              console.error('Invalid response from mockStartGame', response);
-              setIsLoading(false);
-              return;
-            }
-            
-            if (response.success) {
-              setIsGameActive(true);
-              setRevealedCells([]);
-              setGrid(null); // Grid is hidden until game over
-              setPotentialWin(0);
-              setBalance(prev => prev - betAmount);
-              setRemainingSafeCells(25 - mines);
-              setGameResult(null);
-            } else {
-              console.error('Failed to start game:', response.error);
-            }
-          } catch (error) {
-            console.error('Error processing start game response:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        });
-      } else {
-        // Real socket implementation
-        landminesSocketService.startGame({ betAmount, mines }, (response) => {
-          try {
-            if (response.success) {
-              setIsGameActive(true);
-              setRevealedCells([]);
-              setGrid(null); // Grid is hidden until game over
-              setPotentialWin(0);
-              setBalance(response.balance);
-              setRemainingSafeCells(25 - mines);
-              setGameResult(null);
-            } else {
-              // Show error
-              console.error('Error starting game:', response.error);
-            }
-          } catch (error) {
-            console.error('Error processing start game response:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        });
-      }
+      });
     } catch (error) {
       console.error('Error in handleStartGame:', error);
       setIsLoading(false);
@@ -134,180 +91,89 @@ const LandminesGame = () => {
     setIsLoading(true);
     
     try {
-      if (USE_MOCK_SOCKET) {
-        // Mock implementation for development
-        landminesSocketService.mockPickCell({ row, col }, (response) => {
-          try {
-            if (!response || typeof response !== 'object') {
-              console.error('Invalid response from mockPickCell', response);
-              setIsLoading(false);
-              return;
-            }
-            
-            if (response.success) {
-              // Add the cell to revealed cells
-              setRevealedCells(prev => [...(prev || []), `${row},${col}`]);
-              
-              if (response.hit) {
-                // Game over - hit a mine
-                // Safety check for grid
+      // Send pick cell request to server via socket
+      landminesSocketService.pickCell({ row, col }, (response) => {
+        try {
+          if (response.success) {
+            // Add the cell to revealed cells
+            setRevealedCells(prev => [...(prev || []), `${row},${col}`]);
+
+            if (response.hit) {
+              // Game over - hit a mine
+              if (response.fullGrid && Array.isArray(response.fullGrid)) {
+                setGrid(response.fullGrid);
+              }
+              setIsGameActive(false);
+              setGameResult({
+                win: false,
+                message: 'Mine Hit!',
+                profit: -(betAmount || 0)
+              });
+              if (typeof response.balance === 'number') {
+                setBalance(response.balance);
+              }
+
+              // Update history
+              const result = {
+                id: Date.now(),
+                timestamp: new Date(),
+                betAmount: betAmount || 0,
+                mines: mines || 5,
+                hit: true,
+                profit: -(betAmount || 0),
+                revealedCount: (revealedCells || []).length + 1
+              };
+              setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
+            } else {
+              // Found a diamond
+              if (typeof response.remainingSafeCells === 'number') {
+                setRemainingSafeCells(response.remainingSafeCells);
+              }
+              if (typeof response.potentialWin === 'number') {
+                setPotentialWin(response.potentialWin);
+              }
+              if (typeof response.balance === 'number') {
+                setBalance(response.balance);
+              }
+
+              // Check if all safe cells have been revealed (auto-cashout)
+              if (response.gameOver) {
                 if (response.fullGrid && Array.isArray(response.fullGrid)) {
                   setGrid(response.fullGrid);
                 }
-                
                 setIsGameActive(false);
                 setGameResult({
-                  win: false,
-                  message: 'Mine Hit!',
-                  profit: -(betAmount || 0)
+                  win: true,
+                  message: 'All Diamonds Found!',
+                  amount: response.potentialWin || 0,
+                  profit: (response.potentialWin || 0) - (betAmount || 0)
                 });
-                
+
                 // Update history
                 const result = {
                   id: Date.now(),
                   timestamp: new Date(),
                   betAmount: betAmount || 0,
                   mines: mines || 5,
-                  hit: true,
-                  profit: -(betAmount || 0),
+                  hit: false,
+                  multiplier: response.multiplier || 1,
+                  winAmount: response.potentialWin || 0,
+                  profit: (response.potentialWin || 0) - (betAmount || 0),
                   revealedCount: (revealedCells || []).length + 1
                 };
                 setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-              } else {
-                // Found a diamond
-                if (typeof response.remainingSafeCells === 'number') {
-                  setRemainingSafeCells(response.remainingSafeCells);
-                }
-                
-                if (typeof response.potentialWin === 'number') {
-                  setPotentialWin(response.potentialWin);
-                }
-                
-                if (response.gameOver) {
-                  // All safe cells found - automatic win!
-                  // Safety check for grid
-                  if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                    setGrid(response.fullGrid);
-                  }
-                  
-                  setIsGameActive(false);
-                  setGameResult({
-                    win: true,
-                    message: 'All Diamonds Found!',
-                    amount: response.potentialWin || 0,
-                    profit: (response.potentialWin || 0) - (betAmount || 0)
-                  });
-                  
-                  // Update history
-                  const result = {
-                    id: Date.now(),
-                    timestamp: new Date(),
-                    betAmount: betAmount || 0,
-                    mines: mines || 5,
-                    cashOut: true,
-                    multiplier: response.multiplier || 1,
-                    winAmount: response.potentialWin || 0,
-                    profit: (response.potentialWin || 0) - (betAmount || 0),
-                    revealedCount: (revealedCells || []).length + 1
-                  };
-                  setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-                }
               }
-            } else {
-              // Handle error
-              console.error('Error picking cell:', response.error);
             }
-          } catch (error) {
-            console.error('Error processing pick cell response:', error);
-          } finally {
-            setIsLoading(false);
+          } else {
+            // Show error
+            console.error('Error picking cell:', response.error);
           }
-        });
-      } else {
-        // Real socket implementation
-        landminesSocketService.pickCell({ row, col }, (response) => {
-          try {
-            if (response.success) {
-              // Add the cell to revealed cells
-              setRevealedCells(prev => [...(prev || []), `${row},${col}`]);
-              
-              if (response.hit) {
-                // Game over - hit a mine
-                if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                  setGrid(response.fullGrid);
-                }
-                setIsGameActive(false);
-                setGameResult({
-                  win: false,
-                  message: 'Mine Hit!',
-                  profit: -(betAmount || 0)
-                });
-                if (typeof response.balance === 'number') {
-                  setBalance(response.balance);
-                }
-                
-                // Update history
-                const result = {
-                  id: Date.now(), 
-                  timestamp: new Date(),
-                  betAmount: betAmount || 0,
-                  mines: mines || 5,
-                  hit: true,
-                  profit: -(betAmount || 0),
-                  revealedCount: (revealedCells || []).length + 1
-                };
-                setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-              } else {
-                // Found a diamond
-                if (typeof response.remainingSafeCells === 'number') {
-                  setRemainingSafeCells(response.remainingSafeCells);
-                }
-                if (typeof response.potentialWin === 'number') {
-                  setPotentialWin(response.potentialWin);
-                }
-                if (typeof response.balance === 'number') {
-                  setBalance(response.balance);
-                }
-                
-                // Check if all safe cells have been revealed (auto-cashout)
-                if (response.gameOver) {
-                  if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                    setGrid(response.fullGrid);
-                  }
-                  setIsGameActive(false);
-                  setGameResult({
-                    win: true,
-                    message: 'All Diamonds Found!',
-                    amount: response.potentialWin || 0,
-                    profit: (response.potentialWin || 0) - (betAmount || 0)
-                  });
-                  
-                  // Update history
-                  const result = {
-                    id: Date.now(),
-                    timestamp: new Date(),
-                    betAmount: betAmount || 0,
-                    mines: mines || 5,
-                    hit: false,
-                    multiplier: response.multiplier || 1,
-                    winAmount: response.potentialWin || 0,
-                    profit: (response.potentialWin || 0) - (betAmount || 0),
-                    revealedCount: (revealedCells || []).length + 1
-                  };
-                  setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-                }
-              }
-            } else {
-              // Show error
-              console.error('Error picking cell:', response.error);
-            }
-          } catch (error) {
-            console.error('Error processing pick cell response:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        });
-      }
+        } catch (error) {
+          console.error('Error processing pick cell response:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      });
     } catch (error) {
       console.error('Error in handleCellClick:', error);
       setIsLoading(false);
@@ -321,101 +187,48 @@ const LandminesGame = () => {
     setIsLoading(true);
     
     try {
-      if (USE_MOCK_SOCKET) {
-        // Mock implementation for development
-        landminesSocketService.mockCashOut((response) => {
-          try {
-            if (!response || typeof response !== 'object') {
-              console.error('Invalid response from mockCashOut', response);
-              setIsLoading(false);
-              return;
+      // Send cash out request to server via socket
+      landminesSocketService.cashOut((response) => {
+        try {
+          if (response.success) {
+            if (response.fullGrid && Array.isArray(response.fullGrid)) {
+              setGrid(response.fullGrid);
             }
-            
-            if (response.success) {
-              // Game over - cashed out successfully
-              // Safety check for grid
-              if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                setGrid(response.fullGrid);
-              }
-              
-              setIsGameActive(false);
-              setGameResult({
-                win: true,
-                message: 'Cashed Out!',
-                amount: response.winAmount || 0,
-                profit: response.profit || 0
-              });
-              
-              // Update history
-              const result = {
-                id: Date.now(),
-                timestamp: new Date(),
-                betAmount: betAmount || 0,
-                mines: mines || 5,
-                cashOut: true,
-                multiplier: response.multiplier || 1,
-                winAmount: response.winAmount || 0,
-                profit: response.profit || 0,
-                revealedCount: (revealedCells || []).length
-              };
-              setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-              
-              // Update balance
-              setBalance(prev => prev + (response.winAmount || 0));
-            } else {
-              // Handle error
-              console.error('Error cashing out:', response.error);
+            setIsGameActive(false);
+            setGameResult({
+              win: true,
+              message: 'Cashed Out!',
+              amount: response.winAmount || 0,
+              profit: response.profit || 0
+            });
+            if (typeof response.balance === 'number') {
+              setBalance(response.balance);
             }
-          } catch (error) {
-            console.error('Error processing cash out response:', error);
-          } finally {
-            setIsLoading(false);
+
+            // Update history
+            const result = {
+              id: Date.now(),
+              timestamp: new Date(),
+              betAmount: betAmount || 0,
+              mines: mines || 5,
+              hit: false,
+              cashOut: true,
+              multiplier: response.multiplier || 1,
+              winAmount: response.winAmount || 0,
+              profit: response.profit || 0,
+              revealedCount: (revealedCells || []).length
+            };
+            setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
+          } else {
+            // Show error
+            console.error('Error cashing out:', response.error);
           }
-        });
-      } else {
-        // Real socket implementation
-        landminesSocketService.cashOut((response) => {
-          try {
-            if (response.success) {
-              if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                setGrid(response.fullGrid);
-              }
-              setIsGameActive(false);
-              setGameResult({
-                win: true,
-                message: 'Cashed Out!',
-                amount: response.winAmount || 0,
-                profit: response.profit || 0
-              });
-              if (typeof response.balance === 'number') {
-                setBalance(response.balance);
-              }
-              
-              // Update history
-              const result = {
-                id: Date.now(),
-                timestamp: new Date(),
-                betAmount: betAmount || 0,
-                mines: mines || 5,
-                hit: false,
-                cashOut: true,
-                multiplier: response.multiplier || 1,
-                winAmount: response.winAmount || 0,
-                profit: response.profit || 0,
-                revealedCount: (revealedCells || []).length
-              };
-              setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-            } else {
-              // Show error
-              console.error('Error cashing out:', response.error);
-            }
-          } catch (error) {
-            console.error('Error processing cash out response:', error);
-          } finally {
-            setIsLoading(false);
-          }
-        });
-      }
+        } catch (error) {
+          console.error('Error processing cash out response:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      });
     } catch (error) {
       console.error('Error in handleCashOut:', error);
       setIsLoading(false);
@@ -426,7 +239,7 @@ const LandminesGame = () => {
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="lg:w-8/12 space-y-4">
         {/* Game board */}
-        <Card title="Landmines" className="relative">
+        <div className="bg-bg-card border border-border rounded-xl overflow-hidden p-5 relative">
           <LandminesBoard
             grid={grid}
             revealedCells={revealedCells}
@@ -440,49 +253,58 @@ const LandminesGame = () => {
           {gameResult && (
             <div className={`
               absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-              px-6 py-3 rounded-lg font-bold text-white text-2xl
-              ${gameResult.win ? 'bg-green-600' : 'bg-red-600'}
+              rounded-xl p-6 shadow-lg backdrop-blur-xl
+              ${gameResult.win
+                ? 'bg-bg-card/95 border border-status-success/30'
+                : 'bg-bg-card/95 border border-status-error/30'}
             `}>
-              {gameResult.win ? 
-                `+${formatCurrency(gameResult.profit)}` : 
-                `${formatCurrency(gameResult.profit)}`
-              }
+              <div className={`text-3xl font-heading font-bold ${
+                gameResult.win ? 'text-status-success' : 'text-status-error'
+              }`}>
+                {gameResult.win ?
+                  `+${formatCurrency(gameResult.profit)}` :
+                  `${formatCurrency(gameResult.profit)}`
+                }
+              </div>
             </div>
           )}
-        </Card>
+        </div>
         
         {/* Game history */}
-        <Card title="Game History">
+        <div className="bg-bg-card border border-border rounded-xl overflow-hidden mt-4">
+          <div className="p-4 pb-0">
+            <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game History</h3>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-400 border-b border-gray-700">
-                  <th className="pb-2">Time</th>
-                  <th className="pb-2">Bet</th>
-                  <th className="pb-2">Mines</th>
-                  <th className="pb-2">Revealed</th>
-                  <th className="pb-2">Result</th>
-                  <th className="pb-2">Profit</th>
+                <tr className="bg-bg-elevated text-text-muted text-xs font-heading uppercase tracking-wider">
+                  <th className="py-2 px-4 text-left">Time</th>
+                  <th className="py-2 px-4 text-left">Bet</th>
+                  <th className="py-2 px-4 text-left">Mines</th>
+                  <th className="py-2 px-4 text-left">Revealed</th>
+                  <th className="py-2 px-4 text-left">Result</th>
+                  <th className="py-2 px-4 text-left">Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {gameHistory.length > 0 ? (
                   gameHistory.map(game => (
-                    <tr key={game.id} className="border-b border-gray-800">
-                      <td className="py-2">{formatTime(game.timestamp)}</td>
-                      <td className="py-2">{formatCurrency(game.betAmount)}</td>
-                      <td className="py-2">{game.mines}</td>
-                      <td className="py-2">{game.revealedCount}</td>
-                      <td className="py-2">
-                        {game.hit ? 
-                          <span className="text-red-500">Mine Hit</span> : 
+                    <tr key={game.id} className="border-b border-border">
+                      <td className="py-2 px-4 text-text-secondary">{formatTime(game.timestamp)}</td>
+                      <td className="py-2 px-4 text-text-secondary">{formatCurrency(game.betAmount)}</td>
+                      <td className="py-2 px-4 text-text-secondary">{game.mines}</td>
+                      <td className="py-2 px-4 text-text-secondary">{game.revealedCount}</td>
+                      <td className="py-2 px-4">
+                        {game.hit ?
+                          <span className="text-status-error">Mine Hit</span> :
                           <span className={getMultiplierColor(game.multiplier)}>
                             {game.multiplier?.toFixed(2)}x {game.cashOut ? '(Cash Out)' : ''}
                           </span>
                         }
                       </td>
-                      <td className={`py-2 font-bold ${
-                        game.profit >= 0 ? 'text-green-500' : 'text-red-500'
+                      <td className={`py-2 px-4 font-bold ${
+                        game.profit >= 0 ? 'text-status-success' : 'text-status-error'
                       }`}>
                         {game.profit >= 0 ? '+' : ''}{formatCurrency(game.profit)}
                       </td>
@@ -490,7 +312,7 @@ const LandminesGame = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-gray-400">
+                    <td colSpan="6" className="text-center py-4 text-text-muted">
                       No games played yet
                     </td>
                   </tr>
@@ -498,7 +320,7 @@ const LandminesGame = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </div>
       
       <div className="lg:w-4/12">
@@ -514,31 +336,32 @@ const LandminesGame = () => {
         />
         
         {/* Game statistics */}
-        <Card title="Game Stats" className="mt-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Games Played</div>
-              <div className="text-lg font-bold">{gameHistory.length}</div>
+        <div className="bg-bg-card border border-border rounded-xl p-5 mt-4">
+          <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game Stats</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Games Played</div>
+              <div className="text-lg font-heading font-bold text-text-primary">{gameHistory.length}</div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Total Wagered</div>
-              <div className="text-lg font-bold">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Total Wagered</div>
+              <div className="text-lg font-heading font-bold text-text-primary">
                 {formatCurrency(gameHistory.reduce((sum, game) => sum + game.betAmount, 0))}
               </div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Total Profit</div>
-              <div className={`text-lg font-bold ${
-                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0 
-                  ? 'text-green-500' 
-                  : 'text-red-500'
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Total Profit</div>
+              <div className={`text-lg font-heading font-bold ${
+                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0
+                  ? 'text-status-success'
+                  : 'text-status-error'
               }`}>
                 {formatCurrency(gameHistory.reduce((sum, game) => sum + game.profit, 0))}
               </div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Best Win</div>
-              <div className="text-lg font-bold text-green-500">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Best Win</div>
+              <div className="text-lg font-heading font-bold text-status-success">
                 {gameHistory.length > 0
                   ? formatCurrency(Math.max(0, ...gameHistory.map(g => g.profit)))
                   : formatCurrency(0)
@@ -546,14 +369,14 @@ const LandminesGame = () => {
               </div>
             </div>
           </div>
-          
-          <div className="mt-4 bg-gray-800 p-3 rounded">
+
+          <div className="mt-4 bg-bg-elevated rounded-lg p-3">
             <div className="flex justify-between">
-              <span className="text-gray-400">Balance</span>
-              <span className="font-bold">{formatCurrency(balance)}</span>
+              <span className="text-text-muted">Balance</span>
+              <span className="font-heading font-bold text-text-primary">{formatCurrency(balance)}</span>
             </div>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

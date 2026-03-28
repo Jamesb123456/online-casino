@@ -9,50 +9,44 @@ import Badge from '../ui/Badge';
 const AdminNav = () => {
   // Navigation items with paths and text icons
   const navItems = [
-    { 
-      name: 'Dashboard', 
+    {
+      name: 'Dashboard',
       path: '/admin/dashboard',
-      icon: '📊',
+      icon: '\uD83D\uDCCA',
       badge: null
     },
-    { 
-      name: 'Players', 
+    {
+      name: 'Players',
       path: '/admin/players',
-      icon: '👥',
-      badge: null 
+      icon: '\uD83D\uDC65',
+      badge: null
     },
-    { 
-      name: 'Game Statistics', 
+    {
+      name: 'Game Statistics',
       path: '/admin/game-stats',
-      icon: '📈',
-      badge: null 
+      icon: '\uD83D\uDCC8',
+      badge: null
     },
-    { 
-      name: 'Transactions', 
+    {
+      name: 'Transactions',
       path: '/admin/transactions',
-      icon: '💰',
+      icon: '\uD83D\uDCB0',
       badge: { text: 'New', variant: 'primary' }
-    },
-    { 
-      name: 'Settings', 
-      path: '/admin/settings',
-      icon: '⚙️',
-      badge: null 
     }
   ];
 
   return (
-    <nav className="text-gray-300 py-4 px-2 flex flex-col h-full">
+    <nav className="text-text-secondary py-4 px-2 flex flex-col h-full" aria-label="Admin navigation">
       <ul className="space-y-1 mt-4">
         {navItems.map((item, index) => (
           <li key={index}>
-            <NavLink 
+            <NavLink
               to={item.path}
-              className={({ isActive }) => 
+              className={({ isActive }) =>
                 `flex items-center py-3.5 px-4 rounded-lg transition-all duration-200 ${
-                  isActive 
-                    ? 'bg-blue-600/20 text-blue-400 font-medium' 
-                    : 'hover:bg-gray-700/50 hover:text-white'
+                  isActive
+                    ? 'bg-accent-gold/20 text-accent-gold font-medium'
+                    : 'hover:bg-bg-elevated hover:text-text-primary'
                 }`
               }
             >
@@ -62,8 +56,8 @@ const AdminNav = () => {
               <span>{item.name}</span>
               {item.badge && (
                 <div className="ml-auto">
-                  <Badge 
-                    variant={item.badge.variant} 
+                  <Badge
+                    variant={item.badge.variant}
                     size="xs"
                     pill={true}
                     glow={item.badge.variant === 'primary'}
@@ -76,17 +70,17 @@ const AdminNav = () => {
           </li>
         ))}
       </ul>
-      
-      <div className="mt-auto border-t border-gray-700 pt-6 px-4">
-        <NavLink 
-          to="/" 
-          className={({isActive}) => 
+
+      <div className="mt-auto border-t border-border pt-6 px-4">
+        <NavLink
+          to="/"
+          className={({isActive}) =>
             `flex items-center py-2.5 px-3 rounded-lg text-sm transition-colors ${
-              isActive ? 'bg-yellow-600/20 text-yellow-400' : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              isActive ? 'bg-accent-gold/20 text-accent-gold' : 'text-text-muted hover:text-text-primary hover:bg-bg-elevated'
             }`
           }
         >
-          <span className="mr-2">🏠</span>
+          <span className="mr-2">{'\uD83C\uDFE0'}</span>
           Return to Casino
         </NavLink>
       </div>

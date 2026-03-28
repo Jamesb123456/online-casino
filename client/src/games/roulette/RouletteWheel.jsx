@@ -321,15 +321,15 @@ const RouletteWheel = ({
         ref={canvasRef}
         width={dimensions.width}
         height={dimensions.height}
-        className="mx-auto bg-gray-900 rounded-full shadow-lg"
+        className="mx-auto bg-bg-base rounded-full shadow-card"
       />
       {winningNumber !== null && showResult && !spinning && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-opacity-90 bg-gray-800 px-6 py-3 rounded-lg shadow-lg">
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-bg-card/95 backdrop-blur-xl border border-border rounded-xl px-6 py-4 shadow-card">
           <div className="text-center">
-            <span className="text-lg text-gray-300">Number</span>
-            <div className={`text-3xl font-bold ${
-              ROULETTE_NUMBERS.find(n => n.number === winningNumber)?.color === 'red' ? 'text-red-500' : 
-              ROULETTE_NUMBERS.find(n => n.number === winningNumber)?.color === 'black' ? 'text-gray-200' : 'text-green-500'
+            <span className="text-sm text-text-muted">Number</span>
+            <div className={`text-3xl font-heading font-bold ${
+              ROULETTE_NUMBERS.find(n => n.number === winningNumber)?.color === 'red' ? 'text-status-error' :
+              ROULETTE_NUMBERS.find(n => n.number === winningNumber)?.color === 'black' ? 'text-text-primary' : 'text-status-success'
             }`}>
               {winningNumber}
             </div>

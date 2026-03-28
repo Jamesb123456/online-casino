@@ -19,25 +19,22 @@ const Table = ({
       wrapper: 'bg-bg-card',
       header: 'bg-bg-elevated',
       row: 'bg-bg-card',
-      rowAlt: 'bg-bg-elevated bg-opacity-50',
-      hover: 'bg-primary bg-opacity-10',
-      border: 'border-gray-800'
+      rowAlt: 'bg-bg-base',
+      border: 'border-border'
     },
     primary: {
       wrapper: 'bg-bg-card',
-      header: 'bg-primary bg-opacity-20',
+      header: 'bg-accent-gold/10',
       row: 'bg-bg-card',
-      rowAlt: 'bg-primary bg-opacity-5',
-      hover: 'bg-primary bg-opacity-10',
-      border: 'border-primary border-opacity-20'
+      rowAlt: 'bg-accent-gold/5',
+      border: 'border-accent-gold/20'
     },
     accent: {
       wrapper: 'bg-bg-card',
-      header: 'bg-accent bg-opacity-20',
+      header: 'bg-accent-purple/10',
       row: 'bg-bg-card',
-      rowAlt: 'bg-accent bg-opacity-5',
-      hover: 'bg-accent bg-opacity-10',
-      border: 'border-accent border-opacity-20'
+      rowAlt: 'bg-accent-purple/5',
+      border: 'border-accent-purple/20'
     }
   };
 
@@ -45,7 +42,7 @@ const Table = ({
 
   // Define conditional classes
   const tableClasses = `
-    min-w-full text-white
+    min-w-full text-text-primary
     ${bordered ? `border ${selectedVariant.border}` : ''}
     ${className}
   `;
@@ -69,8 +66,8 @@ const Table = ({
               <th
                 key={index}
                 className={`
-                  py-4 px-6 font-semibold border-b ${selectedVariant.border} text-white
-                  ${compact ? 'py-3 px-4 text-sm' : ''}
+                  py-4 px-6 font-heading font-semibold text-sm uppercase tracking-wider text-text-secondary border-b ${selectedVariant.border}
+                  ${compact ? 'py-3 px-4 text-xs' : ''}
                 `}
               >
                 {column.header || column.accessor || ''}
@@ -84,7 +81,7 @@ const Table = ({
               key={rowIndex}
               className={`
                 ${striped && rowIndex % 2 === 0 ? selectedVariant.rowAlt : ''}
-                ${hoverable ? `hover:${selectedVariant.hover}` : ''}
+                ${hoverable ? 'hover:bg-bg-elevated/50' : ''}
                 transition-colors
                 ${rowClassName}
               `}
@@ -93,7 +90,7 @@ const Table = ({
                 const cellValue = column.render
                   ? column.render(row)
                   : row[column.accessor] || '';
-                  
+
                 return (
                   <td
                     key={colIndex}
@@ -113,7 +110,7 @@ const Table = ({
             <tr>
               <td
                 colSpan={columns.length}
-                className="py-8 px-6 text-center text-gray-400"
+                className="py-8 px-6 text-center text-text-muted"
               >
                 No data available
               </td>

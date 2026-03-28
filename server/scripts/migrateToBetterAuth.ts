@@ -14,9 +14,12 @@ dotenv.config();
 import { db } from '../drizzle/db.js';
 import { users, account } from '../drizzle/schema.js';
 import { sql } from 'drizzle-orm';
+import LoggingService from '../src/services/loggingService.js';
+
+const logger = LoggingService.logger;
 
 async function migrate() {
-  console.log('Starting Better Auth migration...');
+  logger.info('Starting Better Auth migration...');
 
   // Step 1: Add new columns to users table (ignore errors if they already exist)
   const alterStatements = [
@@ -37,13 +40,13 @@ async function migrate() {
   for (const stmt of alterStatements) {
     try {
       await db.execute(sql.raw(stmt));
-      console.log(`  OK: ${stmt.substring(0, 60)}...`);
+      logger.info(`OK: ${stmt.substring(0, 60)}...`);
     } catch (err: any) {
       // Ignore "duplicate column" or similar errors
       if (err.code === 'ER_DUP_FIELDNAME' || err.message?.includes('Duplicate column')) {
-        console.log(`  SKIP (already exists): ${stmt.substring(0, 60)}...`);
+        logger.info(`SKIP (already exists): ${stmt.substring(0, 60)}...`);
       } else {
-        console.warn(`  WARN: ${err.message}`);
+        logger.warn(`WARN: ${err.message}`);
       }
     }
   }
@@ -51,9 +54,9 @@ async function migrate() {
   // Add unique index on email (ignore if exists)
   try {
     await db.execute(sql.raw(`ALTER TABLE users ADD UNIQUE INDEX users_email_idx (email)`));
-    console.log('  OK: Added unique email index');
+    logger.info('OK: Added unique email index');
   } catch (err: any) {
-    console.log('  SKIP: email index may already exist');
+    logger.info('SKIP: email index may already exist');
   }
 
   // Step 2: Create session table
@@ -74,9 +77,9 @@ async function migrate() {
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `));
-    console.log('  OK: Created session table');
+    logger.info('OK: Created session table');
   } catch (err: any) {
-    console.log(`  SKIP: session table - ${err.message}`);
+    logger.info(`SKIP: session table - ${err.message}`);
   }
 
   // Step 3: Create account table
@@ -101,9 +104,9 @@ async function migrate() {
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `));
-    console.log('  OK: Created account table');
+    logger.info('OK: Created account table');
   } catch (err: any) {
-    console.log(`  SKIP: account table - ${err.message}`);
+    logger.info(`SKIP: account table - ${err.message}`);
   }
 
   // Step 4: Create verification table
@@ -118,15 +121,15 @@ async function migrate() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `));
-    console.log('  OK: Created verification table');
+    logger.info('OK: Created verification table');
   } catch (err: any) {
-    console.log(`  SKIP: verification table - ${err.message}`);
+    logger.info(`SKIP: verification table - ${err.message}`);
   }
 
   // Step 5: Migrate existing users
-  console.log('\nMigrating existing users...');
+  logger.info('Migrating existing users...');
   const existingUsers = await db.select().from(users);
-  console.log(`Found ${existingUsers.length} users to migrate`);
+  logger.info(`Found ${existingUsers.length} users to migrate`);
 
   for (const user of existingUsers) {
     // Update user with Better Auth fields
@@ -142,7 +145,7 @@ async function migrate() {
         sql`UPDATE users SET name = ${user.username}, email = ${email}, email_verified = TRUE, display_username = ${user.username} WHERE id = ${user.id} AND (email IS NULL OR email = '')`,
       );
     } catch (err: any) {
-      console.warn(`  WARN: Could not update user ${user.id}: ${err.message}`);
+      logger.warn(`WARN: Could not update user ${user.id}: ${err.message}`);
     }
 
     // Create account record if one doesn't exist
@@ -161,20 +164,20 @@ async function migrate() {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
-        console.log(`  OK: Created account record for user ${user.id} (${user.username})`);
+        logger.info(`OK: Created account record for user ${user.id} (${user.username})`);
       } else {
-        console.log(`  SKIP: Account already exists for user ${user.id}`);
+        logger.info(`SKIP: Account already exists for user ${user.id}`);
       }
     } catch (err: any) {
-      console.warn(`  WARN: Could not create account for user ${user.id}: ${err.message}`);
+      logger.warn(`WARN: Could not create account for user ${user.id}: ${err.message}`);
     }
   }
 
-  console.log('\nMigration complete!');
+  logger.info('Migration complete!');
   process.exit(0);
 }
 
 migrate().catch((err) => {
-  console.error('Migration failed:', err);
+  LoggingService.logger.error('Migration failed', { error: String(err) });
   process.exit(1);
 });

@@ -1,4 +1,4 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
+import Decimal from 'decimal.js';
 import UserModel from '../../drizzle/models/User.js';
 import TransactionModel from '../../drizzle/models/Transaction.js';
 import BalanceModel from '../../drizzle/models/Balance.js';
@@ -6,10 +6,15 @@ import { db } from '../../drizzle/db.js';
 import { users, transactions } from '../../drizzle/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import LoggingService from './loggingService.js';
+import RedisService from './redisService.js';
+
+// Configure Decimal.js for financial precision
+Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 /**
  * Balance Service
- * Centralized service for handling balance operations across all games
+ * Centralized service for handling balance operations across all games.
+ * All financial arithmetic uses Decimal.js to avoid floating-point errors.
  */
 class BalanceService {
   /**
@@ -24,47 +29,64 @@ class BalanceService {
   async updateBalance(userId, amount, type, gameType = null, metadata = {}) {
     try {
       const result = await db.transaction(async (tx) => {
-        // Find user and check balance inside the transaction
-        const [user] = await tx.select().from(users).where(eq(users.id, userId));
+        let currentBalance: Decimal;
+        let newBalance: Decimal;
+        const changeAmount = new Decimal(amount);
 
-        if (!user) {
-          throw new Error('User not found');
-        }
-
-        const currentBalance = parseFloat(user.balance);
-
-        // Check if user has enough balance for deductions
-        if (amount < 0 && currentBalance + amount < 0) {
-          throw new Error('Insufficient balance');
-        }
-
-        const newBalance = currentBalance + amount;
-
-        // Atomically update user balance with a conditional check to prevent race conditions.
-        // For deductions, ensure balance hasn't changed since we read it (optimistic lock).
-        if (amount < 0) {
-          const updateResult = await tx.execute(
-            sql`UPDATE users SET balance = ${newBalance.toString()}, updated_at = NOW() WHERE id = ${userId} AND balance >= ${Math.abs(amount).toString()}`
+        if (changeAmount.isNegative()) {
+          // For deductions, use SELECT FOR UPDATE to acquire a row-level lock
+          // preventing race conditions from concurrent balance operations.
+          // This is stronger than the optimistic WHERE balance >= X approach
+          // because it serializes concurrent deduction attempts for the same user.
+          const lockResult = await tx.execute(
+            sql`SELECT balance FROM users WHERE id = ${userId} FOR UPDATE`
           );
-          if ((updateResult as any)[0]?.affectedRows === 0) {
+          const row = (lockResult as any)[0]?.[0];
+          if (!row) {
+            throw new Error('User not found');
+          }
+
+          currentBalance = new Decimal(String(row.balance || '0'));
+          const deduction = changeAmount.abs();
+
+          if (currentBalance.lt(deduction)) {
             throw new Error('Insufficient balance');
           }
+
+          newBalance = currentBalance.minus(deduction);
+          await tx.execute(
+            sql`UPDATE users SET balance = ${newBalance.toFixed(2)}, updated_at = NOW() WHERE id = ${userId}`
+          );
         } else {
+          // For credits, a simple read + update within the transaction is sufficient
+          const [user] = await tx.select().from(users).where(eq(users.id, userId));
+
+          if (!user) {
+            throw new Error('User not found');
+          }
+
+          currentBalance = new Decimal(user.balance || '0');
+          newBalance = currentBalance.plus(changeAmount);
+
           await tx
             .update(users)
-            .set({ balance: newBalance.toString(), updatedAt: new Date() })
+            .set({ balance: newBalance.toFixed(2), updatedAt: new Date() })
             .where(eq(users.id, userId));
         }
 
+        const newBalanceStr = newBalance.toFixed(2);
+        const currentBalanceStr = currentBalance.toFixed(2);
+        const changeAmountStr = changeAmount.toFixed(2);
+
         // Create transaction record
         const insertTxResult = await tx.execute(
-          sql`INSERT INTO transactions (user_id, amount, type, game_type, balance_before, balance_after, status, metadata, created_at, updated_at) VALUES (${userId}, ${amount.toString()}, ${type}, ${gameType}, ${currentBalance.toString()}, ${newBalance.toString()}, 'completed', ${JSON.stringify(metadata)}, NOW(), NOW())`
+          sql`INSERT INTO transactions (user_id, amount, type, game_type, balance_before, balance_after, status, metadata, created_at, updated_at) VALUES (${userId}, ${changeAmountStr}, ${type}, ${gameType}, ${currentBalanceStr}, ${newBalanceStr}, 'completed', ${JSON.stringify(metadata)}, NOW(), NOW())`
         );
         const transactionId = (insertTxResult as any)[0]?.insertId;
 
         // Create balance history record
         await tx.execute(
-          sql`INSERT INTO balances (user_id, amount, previous_balance, change_amount, type, game_type, transaction_id, created_at, updated_at) VALUES (${userId}, ${newBalance.toString()}, ${currentBalance.toString()}, ${amount.toString()}, ${this._mapTransactionTypeToBalanceType(type)}, ${gameType}, ${transactionId}, NOW(), NOW())`
+          sql`INSERT INTO balances (user_id, amount, previous_balance, change_amount, type, game_type, transaction_id, created_at, updated_at) VALUES (${userId}, ${newBalanceStr}, ${currentBalanceStr}, ${changeAmountStr}, ${this._mapTransactionTypeToBalanceType(type)}, ${gameType}, ${transactionId}, NOW(), NOW())`
         );
 
         // Fetch the updated user and transaction to return
@@ -75,6 +97,9 @@ class BalanceService {
 
         return { user: updatedUser, transaction };
       });
+
+      // Invalidate balance cache after successful update
+      await RedisService.invalidateBalance(userId);
 
       return result;
     } catch (error) {
@@ -98,9 +123,11 @@ class BalanceService {
    * @returns {Promise<Object>} Updated user and transaction
    */
   async placeBet(userId, betAmount, gameType, metadata = {}) {
+    // Use Decimal to negate the bet amount precisely
+    const negativeBet = new Decimal(betAmount).abs().neg().toNumber();
     return this.updateBalance(
       userId,
-      -Math.abs(betAmount),
+      negativeBet,
       'game_loss',
       gameType,
       metadata
@@ -150,13 +177,24 @@ class BalanceService {
    * @returns {Promise<Number>} User balance
    */
   async getBalance(userId) {
+    // Check cache first
+    const cached = await RedisService.getCachedBalance(userId);
+    if (cached !== null) {
+      return cached;
+    }
+
     const user = await UserModel.findById(userId);
-    
+
     if (!user) {
       throw new Error('User not found');
     }
-    
-    return parseFloat(user.balance);
+
+    const balance = new Decimal(user.balance || '0').toNumber();
+
+    // Cache the balance for subsequent reads
+    await RedisService.cacheBalance(userId, balance);
+
+    return balance;
   }
   
   /**
@@ -232,8 +270,17 @@ class BalanceService {
    */
   async hasSufficientBalance(userId, amount) {
     try {
+      const requiredAmount = new Decimal(amount);
+
+      // Check cache first for quick rejection
+      const cached = await RedisService.getCachedBalance(userId);
+      if (cached !== null && new Decimal(cached).gte(requiredAmount)) {
+        return true;
+      }
+
+      // Fall through to DB for authoritative check
       const balance = await this.getBalance(userId);
-      return balance >= amount;
+      return new Decimal(balance).gte(requiredAmount);
     } catch (error) {
       LoggingService.logSystemEvent('sufficient_balance_check_error', {
         userId,

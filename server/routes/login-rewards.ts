@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express, { Request, Response } from 'express';
 import { db } from '../drizzle/db.js';
 import { transactions } from '../drizzle/schema.js';

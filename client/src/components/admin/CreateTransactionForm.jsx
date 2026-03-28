@@ -10,20 +10,21 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
   const [formData, setFormData] = useState({
     userId: '',
     type: 'deposit',
     amount: '',
     reference: ''
   });
-  
+
   // Load users for dropdown
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const userData = await adminService.getUsers();
+        const response = await adminService.getPlayers();
+        const userData = response.players || response;
         setUsers(userData);
       } catch (err) {
         setError('Failed to load users');
@@ -32,10 +33,10 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
         setLoading(false);
       }
     };
-    
+
     fetchUsers();
   }, []);
-  
+
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -44,22 +45,22 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
       [name]: value
     });
   };
-  
+
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!formData.userId || !formData.type || !formData.amount) {
       setError('Please fill all required fields');
       return;
     }
-    
+
     try {
       setLoading(true);
       setError('');
       setSuccess('');
-      
+
       // Create the transaction
       const result = await transactionService.createTransaction({
         userId: formData.userId,
@@ -67,7 +68,7 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
         amount: parseFloat(formData.amount),
         reference: formData.reference || 'Admin manual transaction'
       });
-      
+
       // Reset form
       setFormData({
         userId: '',
@@ -75,9 +76,9 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
         amount: '',
         reference: ''
       });
-      
+
       setSuccess('Transaction created successfully');
-      
+
       // Notify parent component
       if (onTransactionCreated) {
         onTransactionCreated(result.transaction);
@@ -89,27 +90,27 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
       setLoading(false);
     }
   };
-  
+
   return (
-    <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
-      <h2 className="text-xl font-semibold text-white mb-4">Create Transaction</h2>
-      
+    <div className="bg-bg-card rounded-xl p-6 shadow-card border border-border">
+      <h2 className="text-xl font-semibold text-text-primary mb-4">Create Transaction</h2>
+
       {error && (
-        <div className="bg-red-900 text-white p-3 rounded-md mb-4">
+        <div className="bg-status-error/10 border border-status-error/20 text-status-error p-3 rounded-lg mb-4">
           {error}
         </div>
       )}
-      
+
       {success && (
-        <div className="bg-green-900 text-white p-3 rounded-md mb-4">
+        <div className="bg-status-success/10 border border-status-success/20 text-status-success p-3 rounded-lg mb-4">
           {success}
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="mb-4">
-            <label className="block text-gray-300 mb-2" htmlFor="userId">
+            <label className="block text-text-secondary mb-2" htmlFor="userId">
               User
             </label>
             <select
@@ -117,21 +118,21 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
               name="userId"
               value={formData.userId}
               onChange={handleChange}
-              className="w-full bg-gray-700 text-white rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-bg-elevated text-text-primary rounded-lg p-2 border border-border-light focus:outline-none focus:ring-2 focus:ring-accent-gold/50 cursor-pointer"
               disabled={loading}
               required
             >
               <option value="">Select User</option>
               {users.map((user) => (
-                <option key={user._id} value={user._id}>
-                  {user.username} ({user.email})
+                <option key={user.id} value={user.id}>
+                  {user.username} ({user.email || user.role})
                 </option>
               ))}
             </select>
           </div>
-          
+
           <div className="mb-4">
-            <label className="block text-gray-300 mb-2" htmlFor="type">
+            <label className="block text-text-secondary mb-2" htmlFor="type">
               Transaction Type
             </label>
             <select
@@ -139,7 +140,7 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
               name="type"
               value={formData.type}
               onChange={handleChange}
-              className="w-full bg-gray-700 text-white rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-bg-elevated text-text-primary rounded-lg p-2 border border-border-light focus:outline-none focus:ring-2 focus:ring-accent-gold/50 cursor-pointer"
               disabled={loading}
               required
             >
@@ -148,9 +149,9 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
               <option value="admin_adjustment">Balance Adjustment</option>
             </select>
           </div>
-          
+
           <div className="mb-4">
-            <label className="block text-gray-300 mb-2" htmlFor="amount">
+            <label className="block text-text-secondary mb-2" htmlFor="amount">
               Amount
             </label>
             <input
@@ -161,17 +162,17 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
               value={formData.amount}
               onChange={handleChange}
               placeholder="Enter amount"
-              className="w-full bg-gray-700 text-white rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-bg-elevated text-text-primary rounded-lg p-2 border border-border-light focus:outline-none focus:ring-2 focus:ring-accent-gold/50"
               disabled={loading}
               required
             />
-            <small className="text-gray-400 mt-1 block">
+            <small className="text-text-muted mt-1 block">
               Use negative values for withdrawals
             </small>
           </div>
-          
+
           <div className="mb-4">
-            <label className="block text-gray-300 mb-2" htmlFor="reference">
+            <label className="block text-text-secondary mb-2" htmlFor="reference">
               Reference/Note
             </label>
             <input
@@ -181,16 +182,16 @@ const CreateTransactionForm = ({ onTransactionCreated }) => {
               value={formData.reference}
               onChange={handleChange}
               placeholder="Enter reference or note"
-              className="w-full bg-gray-700 text-white rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full bg-bg-elevated text-text-primary rounded-lg p-2 border border-border-light focus:outline-none focus:ring-2 focus:ring-accent-gold/50"
               disabled={loading}
             />
           </div>
         </div>
-        
+
         <div className="mt-4">
           <button
             type="submit"
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md disabled:opacity-50"
+            className="px-4 py-2 bg-accent-purple hover:bg-violet-600 text-white rounded-lg disabled:opacity-50 cursor-pointer transition-colors"
             disabled={loading}
           >
             {loading ? 'Processing...' : 'Create Transaction'}

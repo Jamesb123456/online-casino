@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Crash game socket handler
  * This module handles the Crash game socket events and integrates with the balanceService
@@ -14,6 +13,7 @@
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import { calculateHouseEdge } from '../utils/gameUtils.js';
+import { validateSocketData, crashPlaceBetSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 // Namespace crash-specific variables to avoid conflicts
@@ -143,12 +143,9 @@ export default function initCrashHandlers(namespace) {
           return;
         }
 
-        const { amount, autoCashoutAt } = data;
-        
-        // Validate bet
-        if (!amount || amount <= 0) {
-          return callback({ success: false, error: 'Invalid bet amount' });
-        }
+        // Validate input with Zod
+        const validated = validateSocketData(crashPlaceBetSchema, data);
+        const { amount, autoCashoutAt } = validated;
         
         if (gameState.isGameRunning) {
           return callback({ success: false, error: 'Cannot bet while game is running' });
@@ -390,8 +387,10 @@ export default function initCrashHandlers(namespace) {
     // This formula can be adjusted for game balance
     gameState.currentMultiplier = Math.pow(Math.E, 0.06 * elapsed);
     
-    // Check for auto-cashouts
-    processAutoCashouts();
+    // Check for auto-cashouts (async, catch errors to prevent crashing the server)
+    processAutoCashouts().catch(err => {
+      LoggingService.logSystemEvent('crash_auto_cashout_error', { error: String(err) }, 'error');
+    });
     
     // Check if game should crash
     if (gameState.currentMultiplier >= gameState.crashPoint) {
@@ -491,8 +490,7 @@ export default function initCrashHandlers(namespace) {
     // Log game ended
     LoggingService.logGameEnd('crash', gameState.gameId, {
       finalMultiplier: gameState.currentMultiplier,
-      gameLength: (Date.now() - gameState.startTime) / 1000
-    }, {
+      gameLength: (Date.now() - gameState.startTime) / 1000,
       crashPoint: gameState.crashPoint
     });
     

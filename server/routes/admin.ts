@@ -1,9 +1,9 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate as auth, adminOnly } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import LoggingService from '../src/services/loggingService.js';
+import { adminCreateUserSchema, adminUpdateUserSchema, adminTransactionSchema } from '../src/validation/schemas.js';
 
 // Import Drizzle models
 import UserModel from '../drizzle/models/User.js';
@@ -49,32 +49,17 @@ router.get('/users', auth, adminOnly, async (req: Request, res: Response) => {
 // Create new user (admin only)
 router.post('/users', auth, adminOnly, async (req: Request, res: Response) => {
   try {
-    const { username, password, role, isActive } = req.body;
-
-    // Validate username
-    if (typeof username !== 'string' || username.trim().length < 3) {
-      res.status(400).json({ message: 'Username must be a string with at least 3 characters' });
+    // Validate request body with Zod
+    const parseResult = adminCreateUserSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map((e: any) => e.message).join(', ');
+      res.status(400).json({ message: errors });
       return;
     }
-
-    // Validate password (required for POST)
-    if (typeof password !== 'string' || password.length < 6) {
-      res.status(400).json({ message: 'Password must be a string with at least 6 characters' });
-      return;
-    }
-
-    // Validate role if provided
-    const validRoles = ['user', 'admin'];
-    const safeRole = role && validRoles.includes(role) ? role : 'user';
-
-    // Validate isActive if provided
-    if (isActive !== undefined && typeof isActive !== 'boolean') {
-      res.status(400).json({ message: 'isActive must be a boolean' });
-      return;
-    }
+    const { username, password, role, isActive } = parseResult.data;
 
     // Check if user already exists
-    const existingUser = await UserModel.findOne({ username: username.trim() });
+    const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
       res.status(400).json({ message: 'User already exists' });
       return;
@@ -85,9 +70,9 @@ router.post('/users', auth, adminOnly, async (req: Request, res: Response) => {
 
     // Create user
     const user = await UserModel.create({
-      username: username.trim(),
+      username,
       passwordHash,
-      role: safeRole,
+      role,
       isActive: isActive !== undefined ? isActive : true,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -109,33 +94,16 @@ router.post('/users', auth, adminOnly, async (req: Request, res: Response) => {
 // Update user (admin only)
 router.put('/users/:id', auth, adminOnly, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const { username, password, role, isActive } = req.body;
+    const id = req.params.id as string;
 
-    // Validate username if provided
-    if (username !== undefined && (typeof username !== 'string' || username.trim().length < 3)) {
-      res.status(400).json({ message: 'Username must be a string with at least 3 characters' });
+    // Validate request body with Zod
+    const parseResult = adminUpdateUserSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map((e: any) => e.message).join(', ');
+      res.status(400).json({ message: errors });
       return;
     }
-
-    // Validate password if provided (optional for PUT)
-    if (password !== undefined && (typeof password !== 'string' || password.length < 6)) {
-      res.status(400).json({ message: 'Password must be a string with at least 6 characters' });
-      return;
-    }
-
-    // Validate role if provided
-    const validRoles = ['user', 'admin'];
-    if (role !== undefined && !validRoles.includes(role)) {
-      res.status(400).json({ message: 'Role must be one of: user, admin' });
-      return;
-    }
-
-    // Validate isActive if provided
-    if (isActive !== undefined && typeof isActive !== 'boolean') {
-      res.status(400).json({ message: 'isActive must be a boolean' });
-      return;
-    }
+    const { username, password, role, isActive } = parseResult.data;
 
     // Check if user exists
     const user = await UserModel.findById(parseInt(id));
@@ -145,7 +113,7 @@ router.put('/users/:id', auth, adminOnly, async (req: Request, res: Response) =>
 
     // Prepare update data
     const updateData: any = {
-      username: username ? username.trim() : user.username,
+      username: username ? username : user.username,
       role: role || user.role,
       isActive: isActive !== undefined ? isActive : user.isActive,
       updatedAt: new Date()
@@ -172,10 +140,10 @@ router.put('/users/:id', auth, adminOnly, async (req: Request, res: Response) =>
   }
 });
 
-// Delete user (admin only)
+// Delete user (admin only) - soft delete: deactivates the user instead of removing the row
 router.delete('/users/:id', auth, adminOnly, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     // Check if user exists
     const user = await UserModel.findById(parseInt(id));
@@ -183,13 +151,85 @@ router.delete('/users/:id', auth, adminOnly, async (req: Request, res: Response)
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Delete user
-    await UserModel.delete(parseInt(id));
+    // Prevent double-deletion of already deactivated users
+    if (!user.isActive) {
+      return res.status(400).json({ message: 'User is already deactivated' });
+    }
 
-    res.json({ message: 'User deleted successfully' });
+    // Soft delete: set isActive to false instead of removing the row
+    await UserModel.updateById(parseInt(id), {
+      isActive: false,
+      updatedAt: new Date(),
+    });
+
+    LoggingService.logSystemEvent('admin_soft_delete_user', {
+      userId: parseInt(id),
+      deletedBy: (req as AuthenticatedRequest).user.userId,
+    });
+
+    res.json({ message: 'User deactivated successfully' });
   } catch (error) {
     LoggingService.logSystemEvent('admin_delete_user_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error deleting user' });
+  }
+});
+
+// Adjust user balance (admin only)
+router.post('/users/:id/balance', auth, adminOnly, async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const { amount, reason } = req.body;
+
+    const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (typeof parsedAmount !== 'number' || !Number.isFinite(parsedAmount) || parsedAmount === 0) {
+      return res.status(400).json({ message: 'Amount must be a non-zero finite number' });
+    }
+
+    const user = await UserModel.findById(parseInt(id));
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const currentBalance = parseFloat(String(user.balance || 0));
+    const newBalance = currentBalance + parsedAmount;
+
+    if (newBalance < 0) {
+      return res.status(400).json({ message: 'Insufficient balance' });
+    }
+
+    const transactionType = parsedAmount > 0 ? 'admin_adjustment' : 'withdrawal';
+    const balType = parsedAmount > 0 ? 'admin_adjustment' : 'withdrawal';
+
+    const transaction = await Transaction.create({
+      userId: parseInt(id),
+      type: transactionType,
+      amount: Math.abs(parsedAmount),
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      status: 'completed',
+      description: reason || 'Admin balance adjustment',
+      createdBy: (req as AuthenticatedRequest).user.userId,
+      createdAt: new Date()
+    });
+
+    await Balance.create({
+      userId: parseInt(id),
+      amount: newBalance,
+      previousBalance: currentBalance,
+      changeAmount: parsedAmount,
+      type: balType,
+      note: reason || 'Admin balance adjustment',
+      adminId: (req as AuthenticatedRequest).user.userId,
+      transactionId: transaction.id,
+      createdAt: new Date()
+    });
+
+    await UserModel.updateById(parseInt(id), { balance: newBalance });
+
+    res.json({ message: 'Balance updated', newBalance });
+  } catch (error) {
+    LoggingService.logSystemEvent('admin_balance_adjust_error', { error: (error as Error)?.message }, 'error');
+    res.status(500).json({ message: 'Error adjusting balance' });
   }
 });
 
@@ -215,17 +255,18 @@ router.get('/dashboard', auth, adminOnly, async (req: Request, res: Response) =>
     const activeUsers = allUsers.filter(u => u.isActive).length;
     const totalGames = gameStats.reduce((sum, s) => sum + Number(s.totalGamesPlayed || 0), 0);
     const houseProfit = gameStats.reduce((sum, s) => sum + Number(s.houseProfit || 0), 0);
-    const totalStats = {
-      totalUsers,
-      activeUsers,
-      totalGames,
-      houseProfit
-    };
+    const totalBalance = allUsers.reduce((sum, u) => {
+      const bal = Number(u.balance);
+      return sum + (isNaN(bal) ? 0 : bal);
+    }, 0);
 
     res.json({
+      totalPlayers: totalUsers,
+      activePlayers: activeUsers,
+      totalBalance,
+      totalGames,
       recentTransactions,
-      gameStats,
-      totalStats
+      alerts: []
     });
   } catch (error) {
     LoggingService.logSystemEvent('admin_dashboard_error', { error: (error as Error)?.message }, 'error');
@@ -241,7 +282,13 @@ router.get('/games', auth, adminOnly, async (req: Request, res: Response) => {
 
     // Sort the results manually if needed
     gameStats.sort((a, b) => Number(b.totalGamesPlayed) - Number(a.totalGamesPlayed));
-    res.json(gameStats);
+    res.json({
+      games: gameStats.map(g => ({
+        name: g.name || g.gameType,
+        played: Number(g.totalGamesPlayed || 0),
+        profit: Number(g.houseProfit || 0),
+      }))
+    });
   } catch (error) {
     LoggingService.logSystemEvent('admin_fetch_game_stats_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching game stats' });
@@ -294,11 +341,21 @@ router.get('/transactions', auth, adminOnly, async (req: Request, res: Response)
     const sortByStr = typeof sortBy === 'string' ? sortBy : 'createdAt';
     const sortOrderStr = typeof sortOrder === 'string' ? sortOrder : 'desc';
 
-    const transactions = await Transaction.find(filter, {
-      limit: safeLimit
-    });
+    const skip = (pageNumber - 1) * safeLimit;
+    const transactions = await Transaction.find(filter as any, {
+      limit: safeLimit,
+      sort: { createdAt: sortOrderStr === 'asc' ? 1 : -1 }
+    } as any);
 
-    res.json(transactions);
+    const total = await Transaction.count(filter as any);
+
+    res.json({
+      transactions,
+      total,
+      page: pageNumber,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit)
+    });
   } catch (error) {
     LoggingService.logSystemEvent('admin_fetch_transactions_error', { error: (error as Error)?.message }, 'error');
     res.status(500).json({ message: 'Error fetching transactions' });
@@ -308,36 +365,24 @@ router.get('/transactions', auth, adminOnly, async (req: Request, res: Response)
 // Manual transaction (admin only)
 router.post('/transactions', auth, adminOnly, async (req: Request, res: Response) => {
   try {
-    const { userId, type, amount, description } = req.body;
+    // Validate request body with Zod
+    const parseResult = adminTransactionSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map((e: any) => e.message).join(', ');
+      res.status(400).json({ message: errors });
+      return;
+    }
+    const { userId: rawUserId, type, amount, description } = parseResult.data;
 
-    // Validate userId
-    const parsedUserId = typeof userId === 'string' ? parseInt(userId) : userId;
-    if (typeof parsedUserId !== 'number' || !Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+    // userId comes back as a string from the schema transform
+    const parsedUserId = parseInt(rawUserId);
+    if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
       res.status(400).json({ message: 'userId must be a positive integer' });
       return;
     }
 
-    // Validate type
-    if (!type || !['credit', 'debit'].includes(type)) {
-      res.status(400).json({ message: 'Type must be one of: credit, debit' });
-      return;
-    }
-
-    // Validate amount
-    if (typeof amount !== 'number' || !Number.isFinite(amount)) {
-      res.status(400).json({ message: 'Amount must be a finite number' });
-      return;
-    }
-    if (amount <= 0) {
-      res.status(400).json({ message: 'Amount must be a positive number' });
-      return;
-    }
-
-    // Validate description
-    if (typeof description !== 'string' || description.trim().length === 0) {
-      res.status(400).json({ message: 'Description must be a non-empty string' });
-      return;
-    }
+    const transactionType = type === 'credit' ? 'admin_adjustment' : 'withdrawal';
+    const balanceType = type === 'credit' ? 'admin_adjustment' : 'withdrawal';
 
     // Check if user exists
     const user = await UserModel.findById(parsedUserId);
@@ -348,7 +393,7 @@ router.post('/transactions', auth, adminOnly, async (req: Request, res: Response
 
     // Get current balance
     const currentBalance = await Balance.getLatestBalance(parsedUserId);
-    const prevAmount = currentBalance ? currentBalance.amount : 0;
+    const prevAmount = currentBalance ? parseFloat(String(currentBalance.amount)) : 0;
 
     // Calculate new balance
     const changeAmount = type === 'credit' ? amount : -amount;
@@ -359,31 +404,34 @@ router.post('/transactions', auth, adminOnly, async (req: Request, res: Response
       return;
     }
 
-    // Create transaction
+    // Create transaction with valid enum type
     const transaction = await Transaction.create({
       userId: parsedUserId,
-      type,
+      type: transactionType,
       amount,
+      balanceBefore: prevAmount,
+      balanceAfter: newAmount,
       status: 'completed',
-      description: description.trim(),
+      description,
       createdBy: (req as AuthenticatedRequest).user.userId,
-      processedAt: new Date(),
       createdAt: new Date()
     });
 
-    // Create balance record
+    // Create balance record with correct column names
     await Balance.create({
       userId: parsedUserId,
       amount: newAmount,
-      prevAmount,
+      previousBalance: prevAmount,
       changeAmount,
-      changeType: type,
-      reason: 'admin_adjustment',
-      description: description.trim(),
+      type: balanceType,
+      note: description,
       adminId: (req as AuthenticatedRequest).user.userId,
       transactionId: transaction.id,
       createdAt: new Date()
     });
+
+    // Update user's balance
+    await UserModel.updateById(parsedUserId, { balance: newAmount });
 
     res.status(201).json({
       message: 'Transaction created successfully',
@@ -399,7 +447,7 @@ router.post('/transactions', auth, adminOnly, async (req: Request, res: Response
 // Void transaction (admin only)
 router.put('/transactions/:id/void', auth, adminOnly, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { reason } = req.body;
 
     // Find transaction
@@ -417,7 +465,7 @@ router.put('/transactions/:id/void', auth, adminOnly, async (req: Request, res: 
     // Update transaction status
     const voidedTransaction = await Transaction.updateById(parseInt(id), {
       status: 'voided',
-      voidReason: reason,
+      voidedReason: reason,
       voidedBy: (req as AuthenticatedRequest).user.userId,
       voidedAt: new Date()
     });

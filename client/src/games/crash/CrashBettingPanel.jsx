@@ -1,6 +1,4 @@
 import React from 'react';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { formatMultiplier } from './crashUtils';
 
@@ -42,14 +40,16 @@ const CrashBettingPanel = ({
   };
 
   return (
-    <Card title="Place Your Bet" className="sticky top-4">
+    <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
+      <h3 className="text-lg font-heading font-bold text-text-primary mb-4">Place Your Bet</h3>
       <div className="space-y-6">
         {/* Bet amount section */}
         <div>
-          <label className="block text-gray-300 mb-2 font-bold">Bet Amount</label>
+          <label htmlFor="crash-bet-amount" className="block text-sm font-medium text-text-secondary mb-2">Bet Amount</label>
           <Input
             type="number"
             name="amount"
+            id="crash-bet-amount"
             value={bet.amount}
             onChange={handleChange}
             disabled={!!activeBet}
@@ -62,25 +62,30 @@ const CrashBettingPanel = ({
           {/* Preset amounts */}
           <div className="grid grid-cols-4 gap-2">
             {presetAmounts.map((amount) => (
-              <Button
+              <button
                 key={amount}
-                size="sm"
-                variant={bet.amount === amount ? "primary" : "secondary"}
+                type="button"
                 disabled={!!activeBet}
                 onClick={() => setBet(prev => ({ ...prev, amount }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  bet.amount === amount
+                    ? 'bg-accent-gold text-bg-base'
+                    : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
+                }`}
               >
                 {amount}
-              </Button>
+              </button>
             ))}
           </div>
         </div>
         
         {/* Auto cashout section */}
         <div>
-          <label className="block text-gray-300 mb-2 font-bold">Auto Cashout at</label>
+          <label htmlFor="crash-auto-cashout" className="block text-sm font-medium text-text-secondary mb-2">Auto Cashout at</label>
           <Input
             type="number"
             name="autoCashout"
+            id="crash-auto-cashout"
             value={bet.autoCashout}
             onChange={handleChange}
             disabled={!!activeBet}
@@ -93,41 +98,44 @@ const CrashBettingPanel = ({
           {/* Preset multipliers */}
           <div className="grid grid-cols-4 gap-2">
             {presetMultipliers.map((multiplier) => (
-              <Button
+              <button
                 key={multiplier}
-                size="sm"
-                variant={bet.autoCashout === multiplier ? "primary" : "secondary"}
+                type="button"
                 disabled={!!activeBet}
                 onClick={() => setBet(prev => ({ ...prev, autoCashout: multiplier }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  bet.autoCashout === multiplier
+                    ? 'bg-accent-gold text-bg-base'
+                    : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
+                }`}
               >
                 {multiplier}x
-              </Button>
+              </button>
             ))}
           </div>
         </div>
         
         {/* Profit calculation */}
-        <div className="bg-gray-700 p-3 rounded">
+        <div className="bg-bg-elevated rounded-lg p-3">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-300">Potential Profit:</span>
-            <span className="text-green-400 font-bold">
+            <span className="text-text-secondary">Potential Profit:</span>
+            <span className="text-status-success font-bold">
               +{calculateProfit().toFixed(2)}
             </span>
           </div>
-          
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-300">Auto Cashout:</span>
-            <span className="text-amber-400 font-bold">
+
+          <div className="flex justify-between text-sm mt-1">
+            <span className="text-text-secondary">Auto Cashout:</span>
+            <span className="text-accent-gold font-heading font-bold">
               {formatMultiplier(bet.autoCashout)}
             </span>
           </div>
-          
+
           {activeBet && gameStatus === 'running' && (
-            <div className="flex justify-between text-sm mt-2 pt-2 border-t border-gray-600">
-              <span className="text-gray-300">Current Multiplier:</span>
-              <span 
-                className="font-bold"
-                style={{ color: currentMultiplier >= 2 ? '#f59e0b' : '#fff' }}
+            <div className="flex justify-between text-sm mt-2 pt-2 border-t border-border">
+              <span className="text-text-secondary">Current Multiplier:</span>
+              <span
+                className={`font-heading font-bold ${currentMultiplier >= 2 ? 'text-accent-gold' : 'text-text-primary'}`}
               >
                 {formatMultiplier(currentMultiplier)}
               </span>
@@ -138,46 +146,48 @@ const CrashBettingPanel = ({
         {/* Action buttons */}
         <div className="flex gap-3">
           {canBet && (
-            <Button
-              fullWidth
+            <button
               type="button"
               onClick={onPlaceBet}
               disabled={!canBet}
+              className="bg-game-crash hover:bg-red-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Place Bet
-            </Button>
+            </button>
           )}
-          
+
           {canCashout && (
-            <Button
-              fullWidth
-              variant="success"
+            <button
               type="button"
               onClick={onCashout}
               disabled={!canCashout}
+              className="bg-status-success hover:bg-emerald-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cash Out ({formatMultiplier(currentMultiplier)})
-            </Button>
+            </button>
           )}
-          
+
           {activeBet && !canCashout && gameStatus !== 'waiting' && (
-            <Button
-              fullWidth
-              variant={activeBet.status === 'cashed_out' ? 'success' : 'danger'}
+            <button
               type="button"
               disabled
+              className={`font-bold rounded-lg py-3 px-6 w-full disabled:opacity-50 disabled:cursor-not-allowed ${
+                activeBet.status === 'cashed_out'
+                  ? 'bg-status-success text-white'
+                  : 'bg-status-error text-white'
+              }`}
             >
-              {activeBet.status === 'cashed_out' 
-                ? `Cashed Out @ ${formatMultiplier(activeBet.cashedOutAt)}` 
+              {activeBet.status === 'cashed_out'
+                ? `Cashed Out @ ${formatMultiplier(activeBet.cashedOutAt)}`
                 : activeBet.status === 'lost'
                 ? 'Busted!'
                 : 'Placing Bet...'
               }
-            </Button>
+            </button>
           )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

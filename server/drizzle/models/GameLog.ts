@@ -1,11 +1,10 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, and, like } from 'drizzle-orm';
 import db from '../db.js';
 import { gameLogs, users, gameSessions } from '../schema.js';
 
 class GameLogModel {
   // Create a new game log
-  static async create(logData) {
+  static async create(logData: any) {
     try {
       const result = await db.insert(gameLogs).values({
         ...logData,
@@ -16,22 +15,22 @@ class GameLogModel {
       const [log] = await db.select().from(gameLogs).where(eq(gameLogs.id, (result as any).insertId));
       return log;
     } catch (error) {
-      throw new Error(`Error creating game log: ${error.message}`);
+      throw new Error(`Error creating game log: ${(error as Error).message}`);
     }
   }
 
   // Find log by ID
-  static async findById(id) {
+  static async findById(id: any) {
     try {
       const [log] = await db.select().from(gameLogs).where(eq(gameLogs.id, id));
       return log || null;
     } catch (error) {
-      throw new Error(`Error finding game log by ID: ${error.message}`);
+      throw new Error(`Error finding game log by ID: ${(error as Error).message}`);
     }
   }
 
   // Get recent logs for a user
-  static async getRecentUserLogs(userId, limit = 100) {
+  static async getRecentUserLogs(userId: any, limit = 100) {
     try {
       const userLogs = await db
         .select({
@@ -56,12 +55,12 @@ class GameLogModel {
 
       return userLogs;
     } catch (error) {
-      throw new Error(`Error getting recent user logs: ${error.message}`);
+      throw new Error(`Error getting recent user logs: ${(error as Error).message}`);
     }
   }
 
   // Get logs by game type
-  static async getLogsByGameType(gameType, limit = 100) {
+  static async getLogsByGameType(gameType: any, limit = 100) {
     try {
       const logs = await db
         .select({
@@ -85,15 +84,15 @@ class GameLogModel {
 
       return logs;
     } catch (error) {
-      throw new Error(`Error getting logs by game type: ${error.message}`);
+      throw new Error(`Error getting logs by game type: ${(error as Error).message}`);
     }
   }
 
   // Search logs by date range
-  static async searchByDateRange(startDate, endDate, gameType = null, eventType = null, limit = 1000) {
+  static async searchByDateRange(startDate: any, endDate: any, gameType: any = null, eventType: any = null, limit = 1000) {
     try {
-      const conditions = [];
-      
+      const conditions: any[] = [];
+
       if (startDate) {
         conditions.push(gte(gameLogs.timestamp, new Date(startDate)));
       }
@@ -107,7 +106,7 @@ class GameLogModel {
         conditions.push(eq(gameLogs.eventType, eventType));
       }
 
-      let query = db
+      let query: any = db
         .select({
           id: gameLogs.id,
           sessionId: gameLogs.sessionId,
@@ -136,12 +135,12 @@ class GameLogModel {
 
       return logs;
     } catch (error) {
-      throw new Error(`Error searching logs by date range: ${error.message}`);
+      throw new Error(`Error searching logs by date range: ${(error as Error).message}`);
     }
   }
 
   // Find logs by session ID
-  static async findBySessionId(sessionId, limit = 100) {
+  static async findBySessionId(sessionId: any, limit = 100) {
     try {
       const logs = await db
         .select()
@@ -152,12 +151,12 @@ class GameLogModel {
 
       return logs;
     } catch (error) {
-      throw new Error(`Error finding logs by session ID: ${error.message}`);
+      throw new Error(`Error finding logs by session ID: ${(error as Error).message}`);
     }
   }
 
   // Find logs by event type
-  static async findByEventType(eventType, limit = 100, offset = 0) {
+  static async findByEventType(eventType: any, limit = 100, offset = 0) {
     try {
       const logs = await db
         .select()
@@ -169,12 +168,12 @@ class GameLogModel {
 
       return logs;
     } catch (error) {
-      throw new Error(`Error finding logs by event type: ${error.message}`);
+      throw new Error(`Error finding logs by event type: ${(error as Error).message}`);
     }
   }
 
   // Update log
-  static async update(id, updateData) {
+  static async update(id: any, updateData: any) {
     try {
       await db
         .update(gameLogs)
@@ -184,19 +183,19 @@ class GameLogModel {
       const [updatedLog] = await db.select().from(gameLogs).where(eq(gameLogs.id, id));
       return updatedLog;
     } catch (error) {
-      throw new Error(`Error updating game log: ${error.message}`);
+      throw new Error(`Error updating game log: ${(error as Error).message}`);
     }
   }
 
   // Delete log
-  static async delete(id) {
+  static async delete(id: any) {
     try {
       const [deletedLog] = await db.select().from(gameLogs).where(eq(gameLogs.id, id));
       await db.delete(gameLogs).where(eq(gameLogs.id, id));
 
       return deletedLog;
     } catch (error) {
-      throw new Error(`Error deleting game log: ${error.message}`);
+      throw new Error(`Error deleting game log: ${(error as Error).message}`);
     }
   }
 
@@ -229,15 +228,15 @@ class GameLogModel {
 
       return logs;
     } catch (error) {
-      throw new Error(`Error finding logs with details: ${error.message}`);
+      throw new Error(`Error finding logs with details: ${(error as Error).message}`);
     }
   }
 
   // Get log count by criteria
-  static async getLogCount(gameType = null, eventType = null, userId = null) {
+  static async getLogCount(gameType: any = null, eventType: any = null, userId: any = null) {
     try {
-      const conditions = [];
-      
+      const conditions: any[] = [];
+
       if (gameType) {
         conditions.push(eq(gameLogs.gameType, gameType));
       }
@@ -248,7 +247,7 @@ class GameLogModel {
         conditions.push(eq(gameLogs.userId, userId));
       }
 
-      let query = db.select({ count: gameLogs.id }).from(gameLogs);
+      let query: any = db.select({ count: gameLogs.id }).from(gameLogs);
 
       if (conditions.length > 0) {
         query = query.where(conditions.length > 1 ? and(...conditions) : conditions[0]);
@@ -257,14 +256,14 @@ class GameLogModel {
       const result = await query;
       return result.length;
     } catch (error) {
-      throw new Error(`Error getting log count: ${error.message}`);
+      throw new Error(`Error getting log count: ${(error as Error).message}`);
     }
   }
 
   // Get event statistics
-  static async getEventStats(gameType = null) {
+  static async getEventStats(gameType: any = null) {
     try {
-      let query = db
+      let query: any = db
         .select({
           eventType: gameLogs.eventType,
           gameType: gameLogs.gameType,
@@ -279,7 +278,7 @@ class GameLogModel {
       const logs = await query;
 
       // Group by event type manually
-      const eventStats = logs.reduce((acc, log) => {
+      const eventStats: any = logs.reduce((acc: any, log: any) => {
         const key = log.eventType;
         if (!acc[key]) {
           acc[key] = { eventType: key, count: 0, totalAmount: 0 };
@@ -293,18 +292,18 @@ class GameLogModel {
 
       return Object.values(eventStats);
     } catch (error) {
-      throw new Error(`Error getting event stats: ${error.message}`);
+      throw new Error(`Error getting event stats: ${(error as Error).message}`);
     }
   }
 
-  static async getUserLogs(userId) {
+  static async getUserLogs(userId: any) {
     return await db
       .select({
         id: gameLogs.id,
         userId: gameLogs.userId,
         gameType: gameLogs.gameType,
-        action: gameLogs.action,
-        gameData: gameLogs.gameData,
+        eventType: gameLogs.eventType,
+        eventDetails: gameLogs.eventDetails,
         timestamp: gameLogs.timestamp,
         sessionId: gameLogs.sessionId
       })
@@ -314,14 +313,14 @@ class GameLogModel {
       .orderBy(desc(gameLogs.timestamp));
   }
 
-  static async getGameTypeLogs(gameType) {
+  static async getGameTypeLogs(gameType: any) {
     return await db
       .select({
         id: gameLogs.id,
         userId: gameLogs.userId,
         gameType: gameLogs.gameType,
-        action: gameLogs.action,
-        gameData: gameLogs.gameData,
+        eventType: gameLogs.eventType,
+        eventDetails: gameLogs.eventDetails,
         timestamp: gameLogs.timestamp,
         username: users.username
       })
@@ -331,14 +330,14 @@ class GameLogModel {
       .orderBy(desc(gameLogs.timestamp));
   }
 
-  static async getLogsWithFilters(filters = {}) {
-    let query = db
+  static async getLogsWithFilters(filters: any = {}) {
+    let query: any = db
       .select({
         id: gameLogs.id,
         userId: gameLogs.userId,
         gameType: gameLogs.gameType,
-        action: gameLogs.action,
-        gameData: gameLogs.gameData,
+        eventType: gameLogs.eventType,
+        eventDetails: gameLogs.eventDetails,
         timestamp: gameLogs.timestamp,
         username: users.username,
         sessionId: gameLogs.sessionId
@@ -347,9 +346,8 @@ class GameLogModel {
       .leftJoin(users, eq(gameLogs.userId, users.id))
       .leftJoin(gameSessions, eq(gameLogs.sessionId, gameSessions.id));
 
-    const whereConditions = [];
+    const whereConditions: any[] = [];
 
-    // Handle different filter types
     if (filters.userId) {
       whereConditions.push(eq(gameLogs.userId, filters.userId));
     }
@@ -358,11 +356,11 @@ class GameLogModel {
       whereConditions.push(eq(gameLogs.gameType, filters.gameType));
     }
 
-    if (filters.action) {
-      if (typeof filters.action === 'object' && filters.action.$regex) {
-        whereConditions.push(like(gameLogs.action, `%${filters.action.$regex}%`));
+    if (filters.eventType) {
+      if (typeof filters.eventType === 'object' && filters.eventType.$regex) {
+        whereConditions.push(like(gameLogs.eventType, `%${filters.eventType.$regex}%`));
       } else {
-        whereConditions.push(eq(gameLogs.action, filters.action));
+        whereConditions.push(eq(gameLogs.eventType, filters.eventType));
       }
     }
 
@@ -371,7 +369,7 @@ class GameLogModel {
         whereConditions.push(and(
           gte(gameLogs.timestamp, filters.timestamp.$gte),
           lte(gameLogs.timestamp, filters.timestamp.$lte)
-        ));
+        ) as any);
       } else if (filters.timestamp.$gte) {
         whereConditions.push(gte(gameLogs.timestamp, filters.timestamp.$gte));
       } else if (filters.timestamp.$lte) {
@@ -386,11 +384,11 @@ class GameLogModel {
     return await query.orderBy(desc(gameLogs.timestamp));
   }
 
-  static async findOne(conditions) {
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
-      whereConditions.push(eq(gameLogs[key], value));
+  static async findOne(conditions: any) {
+    const whereConditions: any[] = [];
+
+    Object.entries(conditions).forEach(([key, value]: [string, any]) => {
+      whereConditions.push(eq((gameLogs as any)[key], value));
     });
 
     const result = await db
@@ -398,21 +396,21 @@ class GameLogModel {
       .from(gameLogs)
       .where(and(...whereConditions))
       .limit(1);
-    
+
     return result[0] || null;
   }
 
-  static async find(conditions = {}) {
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
+  static async find(conditions: any = {}) {
+    const whereConditions: any[] = [];
+
+    Object.entries(conditions).forEach(([key, value]: [string, any]) => {
       if (typeof value === 'object' && value.$gte && value.$lte) {
         whereConditions.push(and(
-          gte(gameLogs[key], value.$gte),
-          lte(gameLogs[key], value.$lte)
+          gte((gameLogs as any)[key], value.$gte),
+          lte((gameLogs as any)[key], value.$lte)
         ));
       } else {
-        whereConditions.push(eq(gameLogs[key], value));
+        whereConditions.push(eq((gameLogs as any)[key], value));
       }
     });
 
@@ -429,17 +427,18 @@ class GameLogModel {
 
   // Instance method for save functionality
   async save() {
-    if (this.id) {
+    const self = this as any;
+    if (self.id) {
       await db
         .update(gameLogs)
-        .set(this)
-        .where(eq(gameLogs.id, this.id));
+        .set(self)
+        .where(eq(gameLogs.id, self.id));
 
-      const [updated] = await db.select().from(gameLogs).where(eq(gameLogs.id, this.id));
+      const [updated] = await db.select().from(gameLogs).where(eq(gameLogs.id, self.id));
       Object.assign(this, updated);
       return this;
     } else {
-      const result = await db.insert(gameLogs).values(this);
+      const result = await db.insert(gameLogs).values(self);
       const [inserted] = await db.select().from(gameLogs).where(eq(gameLogs.id, (result as any).insertId));
       Object.assign(this, inserted);
       return this;
@@ -447,4 +446,4 @@ class GameLogModel {
   }
 }
 
-export default GameLogModel; 
+export default GameLogModel;

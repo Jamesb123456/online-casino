@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import * as readline from 'readline';
@@ -8,6 +7,9 @@ import UserModel from '../drizzle/models/User.js';
 import BalanceModel from '../drizzle/models/Balance.js';
 import { db } from '../drizzle/db.js';
 import { account } from '../drizzle/schema.js';
+import LoggingService from '../src/services/loggingService.js';
+
+const logger = LoggingService.logger;
 
 dotenv.config();
 
@@ -16,7 +18,7 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
-function askQuestion(question) {
+function askQuestion(question: string): Promise<string> {
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       resolve(answer);
@@ -26,39 +28,39 @@ function askQuestion(question) {
 
 async function createAdmin() {
   try {
-    console.log('Creating new admin user...\n');
+    logger.info('Creating new admin user...');
 
     const username = await askQuestion('Enter admin username: ');
     const password = await askQuestion('Enter admin password: ');
 
     if (!username || !password) {
-      console.log('Username and password are required!');
+      logger.warn('Username and password are required!');
       process.exit(1);
     }
 
     // Check if user already exists
     const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
-      console.log(`User with username '${username}' already exists!`);
+      logger.warn(`User with username '${username}' already exists!`);
       process.exit(1);
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password as string, 12);
 
     // Create admin user with Better Auth required fields
     const newAdmin = await UserModel.create({
-      username,
+      username: username as string,
       passwordHash: hashedPassword,
-      name: username,
+      name: username as string,
       email: `${username}@platinum.local`,
       emailVerified: true,
-      displayUsername: username,
+      displayUsername: username as string,
       role: 'admin',
       balance: '100000',
       isActive: true,
       createdAt: new Date()
-    });
+    } as any);
 
     // Create Better Auth account record
     await db.insert(account).values({
@@ -68,14 +70,13 @@ async function createAdmin() {
       password: hashedPassword,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    } as any);
 
-    console.log('\nAdmin user created successfully!');
-    console.log('Admin Details:');
-    console.log(`Username: ${username}`);
+    logger.info('Admin user created successfully!');
+    logger.info('Admin Details:', { username });
 
   } catch (error) {
-    console.error('Error creating admin user:', error.message);
+    logger.error('Error creating admin user', { error: error.message });
   } finally {
     // Close readline interface and database connection
     rl.close();
@@ -86,7 +87,7 @@ async function createAdmin() {
 
 // Handle process termination
 process.on('SIGINT', async () => {
-  console.log('\nOperation cancelled.');
+  logger.info('Operation cancelled.');
   rl.close();
   await db.$client.end();
   process.exit(0);

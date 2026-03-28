@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * liveGamesHandler.ts
  * Handles events related to live games listing and status

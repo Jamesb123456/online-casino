@@ -98,7 +98,7 @@ const PlayerManagement = () => {
   
   // Get sort icon for column
   const getSortIcon = (field) => {
-    if (sortField !== field) return <FaSort className="text-gray-400" />;
+    if (sortField !== field) return <FaSort className="text-text-muted" />;
     return sortDirection === 'asc' ? <FaSortUp /> : <FaSortDown />;
   };
   
@@ -266,19 +266,23 @@ const PlayerManagement = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           {/* Search */}
           <div className="md:col-span-2">
+            <label htmlFor="player-search" className="sr-only">Search by username</label>
             <input
               type="text"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              id="player-search"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               placeholder="Search by username..."
               value={searchTerm}
               onChange={handleSearchChange}
             />
           </div>
-          
+
           {/* Status Filter */}
           <div>
+            <label htmlFor="player-status-filter" className="sr-only">Filter by status</label>
             <select
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              id="player-status-filter"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
               value={activeFilter}
               onChange={(e) => handleFilterChange('active', e.target.value)}
             >
@@ -287,11 +291,13 @@ const PlayerManagement = () => {
               <option value="inactive">Inactive Only</option>
             </select>
           </div>
-          
+
           {/* Role Filter */}
           <div>
+            <label htmlFor="player-role-filter" className="sr-only">Filter by role</label>
             <select
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              id="player-role-filter"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
               value={roleFilter}
               onChange={(e) => handleFilterChange('role', e.target.value)}
             >
@@ -315,38 +321,38 @@ const PlayerManagement = () => {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-800 text-left">
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('id')}>
+                  <tr className="bg-bg-elevated text-left">
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('id')}>
                       ID {getSortIcon('id')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('username')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('username')}>
                       Username {getSortIcon('username')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('isActive')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('isActive')}>
                       Status {getSortIcon('isActive')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('role')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('role')}>
                       Role {getSortIcon('role')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('balance')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('balance')}>
                       Balance {getSortIcon('balance')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('createdAt')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('createdAt')}>
                       Created {getSortIcon('createdAt')}
                     </th>
-                    <th className="p-3 border-b border-gray-700 cursor-pointer" onClick={() => handleSortChange('lastLogin')}>
+                    <th className="p-3 border-b border-border cursor-pointer" onClick={() => handleSortChange('lastLogin')}>
                       Last Login {getSortIcon('lastLogin')}
                     </th>
-                    <th className="p-3 border-b border-gray-700">Actions</th>
+                    <th className="p-3 border-b border-border">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {players.map(player => (
-                    <tr key={player.id} className="border-b border-gray-700 hover:bg-gray-800">
+                    <tr key={player.id} className="border-b border-border hover:bg-bg-elevated/50">
                       <td className="p-3">{player.id}</td>
                       <td className="p-3">{player.username}</td>
                       <td className="p-3">
-                        <span className={`px-2 py-1 rounded-full text-xs ${player.isActive ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs ${player.isActive ? 'bg-status-success/15 text-status-success' : 'bg-status-error/15 text-status-error'}`}>
                           {player.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
@@ -374,8 +380,10 @@ const PlayerManagement = () => {
             {/* Pagination controls */}
             <div className="mt-4 flex flex-col sm:flex-row justify-between items-center">
               <div className="mb-3 sm:mb-0">
-                <select 
-                  className="p-2 bg-gray-700 border border-gray-600 rounded-md"
+                <label htmlFor="rows-per-page" className="sr-only">Rows per page</label>
+                <select
+                  id="rows-per-page"
+                  className="p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
                   value={rowsPerPage}
                   onChange={handleRowsPerPageChange}
                 >
@@ -402,7 +410,7 @@ const PlayerManagement = () => {
                 >
                   Previous
                 </Button>
-                <span className="px-3 py-1 border border-gray-600 rounded-md bg-gray-800">
+                <span className="px-3 py-1 border border-border-light rounded-lg bg-bg-elevated text-text-primary">
                   {currentPage} / {totalPages}
                 </span>
                 <Button 
@@ -436,43 +444,47 @@ const PlayerManagement = () => {
       >
         <form className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
+            <label htmlFor="add-username" className="block text-sm font-medium text-text-secondary mb-1">Username</label>
             <input
               type="text"
+              id="add-username"
               name="username"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               value={formData.username}
               onChange={handleInputChange}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <label htmlFor="add-email" className="block text-sm font-medium text-text-secondary mb-1">Email</label>
             <input
               type="email"
+              id="add-email"
               name="email"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               value={formData.email || ''}
               onChange={handleInputChange}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Initial Balance</label>
+            <label htmlFor="add-balance" className="block text-sm font-medium text-text-secondary mb-1">Initial Balance</label>
             <input
               type="number"
+              id="add-balance"
               name="balance"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               value={formData.balance}
               onChange={handleInputChange}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Role</label>
+            <label htmlFor="add-role" className="block text-sm font-medium text-text-secondary mb-1">Role</label>
             <select
+              id="add-role"
               name="role"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
               value={formData.role}
               onChange={handleInputChange}
             >
@@ -480,7 +492,7 @@ const PlayerManagement = () => {
               <option value="admin">Admin</option>
             </select>
           </div>
-          
+
           <div className="flex items-center">
             <input
               type="checkbox"
@@ -490,12 +502,12 @@ const PlayerManagement = () => {
               checked={formData.isActive}
               onChange={handleInputChange}
             />
-            <label htmlFor="isActive" className="text-sm font-medium text-gray-300">Active Account</label>
+            <label htmlFor="isActive" className="text-sm font-medium text-text-secondary">Active Account</label>
           </div>
-          
+
           <div className="flex justify-end space-x-3">
-            <Button 
-              color="secondary" 
+            <Button
+              color="secondary"
               onClick={() => {
                 setShowAddModal(false);
                 resetForm();
@@ -507,7 +519,7 @@ const PlayerManagement = () => {
           </div>
         </form>
       </Modal>
-      
+
       {/* Edit Player Modal */}
       <Modal
         isOpen={showEditModal}
@@ -519,32 +531,35 @@ const PlayerManagement = () => {
       >
         <form className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Username</label>
+            <label htmlFor="edit-username" className="block text-sm font-medium text-text-secondary mb-1">Username</label>
             <input
               type="text"
+              id="edit-username"
               name="username"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               value={formData.username}
               onChange={handleInputChange}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <label htmlFor="edit-email" className="block text-sm font-medium text-text-secondary mb-1">Email</label>
             <input
               type="email"
+              id="edit-email"
               name="email"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               value={formData.email || ''}
               onChange={handleInputChange}
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Role</label>
+            <label htmlFor="edit-role" className="block text-sm font-medium text-text-secondary mb-1">Role</label>
             <select
+              id="edit-role"
               name="role"
-              className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
               value={formData.role}
               onChange={handleInputChange}
             >
@@ -552,7 +567,7 @@ const PlayerManagement = () => {
               <option value="admin">Admin</option>
             </select>
           </div>
-          
+
           <div className="flex items-center">
             <input
               type="checkbox"
@@ -562,7 +577,7 @@ const PlayerManagement = () => {
               checked={formData.isActive}
               onChange={handleInputChange}
             />
-            <label htmlFor="editIsActive" className="text-sm font-medium text-gray-300">Active Account</label>
+            <label htmlFor="editIsActive" className="text-sm font-medium text-text-secondary">Active Account</label>
           </div>
           
           <div className="flex justify-end space-x-3">
@@ -592,16 +607,17 @@ const PlayerManagement = () => {
         {currentPlayer && (
           <div className="space-y-4">
             <div className="text-center">
-              <p className="text-gray-400">Current Balance</p>
+              <p className="text-text-muted">Current Balance</p>
               <p className="text-2xl font-bold">{formatCurrency(currentPlayer.balance)}</p>
-              <p className="text-sm text-gray-400">Player: {currentPlayer.username}</p>
+              <p className="text-sm text-text-muted">Player: {currentPlayer.username}</p>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Amount</label>
+              <label htmlFor="fund-amount" className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
               <input
                 type="number"
-                className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+                id="fund-amount"
+                className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
                 value={fundAmount}
                 onChange={(e) => setFundAmount(e.target.value)}
                 min="0"
@@ -632,7 +648,7 @@ const PlayerManagement = () => {
             <p className="text-center">
               Are you sure you want to delete the player <span className="font-bold">{currentPlayer.username}</span>?
             </p>
-            <p className="text-center text-sm text-gray-400">
+            <p className="text-center text-sm text-text-muted">
               This action cannot be undone. All player data will be permanently removed.
             </p>
             

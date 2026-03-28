@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Button from '../../components/ui/Button';
 
 /**
  * Component for placing bets and controlling the blackjack game actions
@@ -39,46 +38,49 @@ const BlackjackBettingPanel = ({
   const renderGameControls = () => {
     if (gamePhase === 'betting') {
       return (
-        <div className="betting-controls">
+        <div>
           <div className="mb-4">
-            <div className="font-bold mb-1">Select bet amount:</div>
+            <div className="text-sm font-medium text-text-secondary mb-2">Select bet amount:</div>
             <div className="flex flex-wrap gap-2 justify-center">
               {betOptions.map(amount => (
-                <Button
+                <button
                   key={amount}
                   onClick={() => handleBetChange(amount)}
                   disabled={amount > userBalance || disabled}
-                  variant={betAmount === amount ? "primary" : "secondary"}
-                  className={`px-2 py-1 ${betAmount === amount ? 'ring-2 ring-blue-500' : ''}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer
+                    ${betAmount === amount
+                      ? 'bg-accent-gold text-bg-base'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  `}
                 >
                   ${amount}
-                </Button>
+                </button>
               ))}
             </div>
           </div>
-          
-          <Button
+
+          <button
             onClick={handlePlaceBet}
             disabled={disabled || betAmount > userBalance}
-            variant="success"
-            className="w-full"
+            className="bg-game-blackjack hover:bg-blue-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Place Bet
-          </Button>
+          </button>
         </div>
       );
     } else if (gamePhase === 'playerTurn') {
       return (
-        <div className="action-controls flex flex-col gap-2">
-          <Button onClick={onHit} disabled={disabled} variant="primary" className="w-full">
+        <div className="flex flex-col gap-2">
+          <button onClick={onHit} disabled={disabled} className="bg-game-blackjack hover:bg-blue-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
             Hit
-          </Button>
-          <Button onClick={onStand} disabled={disabled} variant="warning" className="w-full">
+          </button>
+          <button onClick={onStand} disabled={disabled} className="bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
             Stand
-          </Button>
-          <Button onClick={onDoubleDown} disabled={disabled} variant="info" className="w-full">
+          </button>
+          <button onClick={onDoubleDown} disabled={disabled} className="bg-accent-purple hover:bg-violet-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
             Double Down
-          </Button>
+          </button>
         </div>
       );
     }
@@ -88,14 +90,15 @@ const BlackjackBettingPanel = ({
   };
 
   return (
-    <div className="blackjack-betting-panel border border-gray-300 rounded-lg p-4 bg-gray-100">
+    <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
+      <h3 className="text-lg font-heading font-bold text-text-primary mb-1">Blackjack</h3>
       <div className="mb-4">
-        <div className="text-lg font-bold">Balance: ${userBalance.toFixed(2)}</div>
+        <div className="text-sm text-text-muted">Balance: <span className="font-heading font-bold text-status-success">${userBalance.toFixed(2)}</span></div>
         {gamePhase === 'betting' && (
-          <div className="text-md">Bet Amount: ${betAmount.toFixed(2)}</div>
+          <div className="text-sm text-text-muted mt-1">Bet Amount: <span className="font-heading font-bold text-accent-gold">${betAmount.toFixed(2)}</span></div>
         )}
       </div>
-      
+
       {renderGameControls()}
     </div>
   );

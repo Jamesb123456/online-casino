@@ -114,6 +114,10 @@ export const transactions = mysqlTable('transactions', {
   createdByIdx: index('transactions_created_by_idx').on(table.createdBy),
   gameSessionIdIdx: index('transactions_game_session_id_idx').on(table.gameSessionId),
   createdAtIdx: index('transactions_created_at_idx').on(table.createdAt),
+  // Compound indexes for common query patterns
+  userTypeIdx: index('idx_transactions_user_type').on(table.userId, table.type),
+  userCreatedIdx: index('idx_transactions_user_created').on(table.userId, table.createdAt),
+  statusCreatedIdx: index('idx_transactions_status_created').on(table.status, table.createdAt),
 }));
 
 // Game Sessions table
@@ -137,6 +141,9 @@ export const gameSessions = mysqlTable('game_sessions', {
   gameTypeIdx: index('game_sessions_game_type_idx').on(table.gameType),
   startTimeIdx: index('game_sessions_start_time_idx').on(table.startTime),
   isCompletedIdx: index('game_sessions_is_completed_idx').on(table.isCompleted),
+  // Compound indexes for common query patterns
+  userGameIdx: index('idx_sessions_user_game').on(table.userId, table.gameType),
+  gameCompletedIdx: index('idx_sessions_game_completed').on(table.gameType, table.isCompleted),
 }));
 
 // Game Logs table
@@ -160,6 +167,9 @@ export const gameLogs = mysqlTable('game_logs', {
   gameTypeIdx: index('game_logs_game_type_idx').on(table.gameType),
   eventTypeIdx: index('game_logs_event_type_idx').on(table.eventType),
   timestampIdx: index('game_logs_timestamp_idx').on(table.timestamp),
+  // Compound indexes for common query patterns
+  userEventIdx: index('idx_logs_user_event').on(table.userId, table.eventType),
+  gameCreatedIdx: index('idx_logs_game_created').on(table.gameType, table.createdAt),
 }));
 
 // Balance History table
@@ -183,6 +193,8 @@ export const balances = mysqlTable('balances', {
   gameTypeIdx: index('balances_game_type_idx').on(table.gameType),
   relatedSessionIdIdx: index('balances_related_session_id_idx').on(table.relatedSessionId),
   transactionIdIdx: index('balances_transaction_id_idx').on(table.transactionId),
+  // Compound index for user balance history queries
+  userCreatedIdx: index('idx_balances_user_created').on(table.userId, table.createdAt),
 }));
 
 // Game Stats table

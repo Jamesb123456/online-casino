@@ -1,9 +1,10 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import LoggingService from '../src/services/loggingService.js';
+import BalanceService from '../src/services/balanceService.js';
+import GameSessionModel from '../drizzle/models/GameSession.js';
 
 const router = express.Router();
 
@@ -50,6 +51,14 @@ router.get('/', authenticate, (req, res) => {
       minBet: 10,
       maxBet: 5000,
       thumbnail: '/images/games/blackjack.jpg'
+    },
+    {
+      id: 'landmines',
+      name: 'Landmines',
+      description: 'Reveal safe tiles to increase your multiplier. Avoid the mines!',
+      minBet: 10,
+      maxBet: 5000,
+      thumbnail: '/images/games/landmines.jpg'
     }
   ];
   
@@ -65,7 +74,7 @@ const betSchema = z.object({
 });
 
 const gameParamSchema = z.object({
-  gameId: z.enum(['crash', 'plinko', 'wheel', 'roulette', 'blackjack'])
+  gameId: z.enum(['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines'])
 });
 
 router.post('/:gameId/bet', authenticate, betLimiter, async (req, res) => {
@@ -84,15 +93,30 @@ router.post('/:gameId/bet', authenticate, betLimiter, async (req, res) => {
     }
     const { betAmount } = bodyParse.data;
     const userId = req.user.userId;
-    
-    // Later we will implement the actual game logic and session tracking
-    // For now, return a placeholder response
-    
+
+    // Check balance and deduct bet
+    const hasFunds = await BalanceService.hasSufficientBalance(userId, betAmount);
+    if (!hasFunds) {
+      return res.status(400).json({ message: 'Insufficient balance' });
+    }
+
+    // Create game session
+    const session = await GameSessionModel.create({
+      userId,
+      gameType: gameId,
+      initialBet: betAmount,
+      totalBet: betAmount,
+      isCompleted: false
+    });
+
+    // Deduct balance
+    await BalanceService.placeBet(userId, betAmount, gameId, { sessionId: session.id });
+
     res.status(200).json({
       message: 'Bet placed successfully',
       gameId,
       betAmount,
-      sessionId: `${gameId}-${Date.now()}`
+      sessionId: session.id
     });
   } catch (error) {
     LoggingService.logSystemEvent('place_bet_error', { error: (error as any)?.message }, 'error');

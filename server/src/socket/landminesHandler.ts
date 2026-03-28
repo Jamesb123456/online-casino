@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Landmines Game Socket Handler
  * Handles all socket.io events for the Landmines game
@@ -6,13 +5,15 @@
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import GameStat from '../../drizzle/models/GameStat.js';
+import { validateSocketData, landminesStartSchema, landminesPickSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
 
-// Store game history (in-memory for now, would be DB in production)
+// Store game history (in-memory, capped to prevent unbounded growth)
 const gameHistory = [];
+const MAX_HISTORY = 100;
 
 /**
  * Game constants
@@ -145,16 +146,9 @@ function initLandminesHandlers(io, socket, user) {
    */
   socket.on('landmines:start', async (data, callback) => {
     try {
-      // Validate game data
-      const { betAmount, mines } = data;
-
-      if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
-        throw new Error('Invalid bet amount');
-      }
-
-      if (!mines || isNaN(mines) || mines < MIN_MINES || mines > MAX_MINES) {
-        throw new Error(`Number of mines must be between ${MIN_MINES} and ${MAX_MINES}`);
-      }
+      // Validate game data with Zod
+      const validated = validateSocketData(landminesStartSchema, data);
+      const { betAmount, mines } = validated;
 
       // Get user session
       const session = activeSessions.get(userId);
@@ -231,12 +225,9 @@ function initLandminesHandlers(io, socket, user) {
    */
   socket.on('landmines:pick', async (data, callback) => {
     try {
-      // Validate selection data
-      const { row, col } = data;
-
-      if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) {
-        throw new Error('Invalid cell selection');
-      }
+      // Validate selection data with Zod
+      const validated = validateSocketData(landminesPickSchema, data);
+      const { row, col } = validated;
 
       // Get user session
       const session = activeSessions.get(userId);
@@ -297,9 +288,11 @@ function initLandminesHandlers(io, socket, user) {
           }
         );
 
-        // Add to history
+        // Add to history (capped)
         gameHistory.push(gameResult);
+        if (gameHistory.length > MAX_HISTORY) gameHistory.splice(0, gameHistory.length - MAX_HISTORY);
         session.history.push(gameResult);
+        if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
         session.currentGame = null;
 
         // Update game statistics (loss)
@@ -503,9 +496,11 @@ function initLandminesHandlers(io, socket, user) {
       }
     );
 
-    // Add to history
+    // Add to history (capped)
     gameHistory.push(gameResult);
+    if (gameHistory.length > MAX_HISTORY) gameHistory.splice(0, gameHistory.length - MAX_HISTORY);
     session.history.push(gameResult);
+    if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
     session.currentGame = null;
 
     // Update game statistics (win)

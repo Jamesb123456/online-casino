@@ -182,60 +182,75 @@ const ChatBox = () => {
   }
 
   return (
-    <div className={`fixed bottom-0 right-4 z-50 flex flex-col rounded-t-lg shadow-lg transition-all duration-300 ${isOpen ? 'h-96' : 'h-12'}`}>
-      {/* Chat Header */}
-      <div 
-        className="bg-gray-800 text-white px-4 py-2 flex justify-between items-center rounded-t-lg cursor-pointer"
-        onClick={toggleChat}
-      >
-        <div className="flex items-center">
-          <h3 className="font-medium">Global Chat</h3>
-          {!isOpen && messages.length > 0 && (
-            <span className="ml-2 bg-amber-500 text-xs px-2 py-1 rounded-full">
-              {messages.length}
+    <>
+      {/* Chat toggle button */}
+      {!isOpen && (
+        <button
+          onClick={toggleChat}
+          className="fixed bottom-20 right-4 lg:bottom-4 z-40 bg-accent-gold text-bg-base rounded-full w-12 h-12 shadow-glow-gold cursor-pointer flex items-center justify-center hover:bg-accent-gold-light transition-colors duration-200"
+          aria-label="Open chat"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+          </svg>
+          {messages.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-status-error text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+              {messages.length > 99 ? '99+' : messages.length}
             </span>
           )}
-        </div>
-        <button className="text-gray-300 hover:text-white">
-          {isOpen ? '▼' : '▲'}
         </button>
-      </div>
+      )}
 
-      {/* Chat Messages */}
+      {/* Chat panel */}
       {isOpen && (
-        <>
-          <div className="bg-gray-900 flex-1 p-4 overflow-y-auto">
+        <div className="fixed bottom-36 right-4 lg:bottom-20 z-40 w-80 bg-bg-card border border-border rounded-xl shadow-card overflow-hidden flex flex-col" style={{ height: '384px' }}>
+          {/* Header */}
+          <div
+            className="bg-bg-elevated p-3 border-b border-border flex justify-between items-center cursor-pointer"
+            onClick={toggleChat}
+          >
+            <div className="flex items-center gap-2">
+              <h3 className="font-heading font-bold text-text-primary text-sm">Global Chat</h3>
+              <span className="w-2 h-2 rounded-full bg-status-success"></span>
+            </div>
+            <button className="text-text-muted hover:text-text-primary transition-colors" aria-label="Close chat">
+              &#10005;
+            </button>
+          </div>
+
+          {/* Messages area */}
+          <div className="bg-bg-base p-3 overflow-y-auto flex-1">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
+              <div className="text-center text-text-muted py-8 text-sm">
                 No messages yet. Start the conversation!
               </div>
             ) : (
               <div className="space-y-3">
                 {messages.map((message) => (
-                  <div 
+                  <div
                     key={message.id || message._id || `msg-${Date.now()}-${Math.random()}`}
                     className={`flex ${message.system ? 'justify-center' : 'items-start'}`}
                   >
                     {!message.system && (
                       <div className="mr-2 flex-shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-white uppercase">
+                        <div className="w-7 h-7 rounded-full bg-bg-elevated flex items-center justify-center text-text-secondary text-xs uppercase font-bold">
                           {message.username?.[0] || '?'}
                         </div>
                       </div>
                     )}
-                    
-                    <div className={`${message.system ? 'text-center text-gray-500 text-sm italic' : 'bg-gray-800 rounded-lg p-3 max-w-[75%]'}`}>
+
+                    <div className={`${message.system ? 'text-center text-text-muted text-xs italic' : 'bg-bg-elevated rounded-lg p-2.5 max-w-[75%]'}`}>
                       {!message.system && (
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-medium text-amber-400">
+                          <span className="font-medium text-accent-gold text-xs">
                             {message.username || 'Unknown User'}
                           </span>
-                          <span className="text-xs text-gray-500 ml-2">
+                          <span className="text-xs text-text-muted ml-2">
                             {formatTime(message.createdAt)}
                           </span>
                         </div>
                       )}
-                      <p className={`${message.system ? '' : 'text-white'}`}>
+                      <p className={`text-sm ${message.system ? '' : 'text-text-primary'}`}>
                         {message.content}
                       </p>
                     </div>
@@ -248,37 +263,37 @@ const ChatBox = () => {
 
           {/* Typing Indicator */}
           {typingUsers.length > 0 && (
-            <div className="bg-gray-900 px-4 py-1 text-xs text-gray-400">
+            <div className="bg-bg-base px-3 py-1 text-xs text-text-muted border-t border-border">
               {typingUsers.length === 1
                 ? `${typingUsers[0]} is typing...`
                 : `${typingUsers.length} people are typing...`}
             </div>
           )}
 
-          {/* Message Input */}
-          <form 
+          {/* Input area */}
+          <form
             onSubmit={handleSubmit}
-            className="bg-gray-800 p-2 flex items-center"
+            className="bg-bg-elevated p-3 border-t border-border flex items-center gap-2"
           >
             <input
               type="text"
               value={messageInput}
               onChange={handleInputChange}
               placeholder="Type a message..."
-              className="bg-gray-700 text-white rounded-lg px-3 py-2 flex-1 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="bg-bg-surface border border-border text-text-primary rounded-lg px-3 py-2 flex-1 text-sm focus:outline-none focus:ring-2 focus:ring-accent-gold/50 focus:border-accent-gold"
               disabled={!isConnected}
             />
             <button
               type="submit"
               disabled={!messageInput.trim() || !isConnected}
-              className="ml-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-600 disabled:opacity-50 text-white rounded-lg p-2"
+              className="bg-accent-gold text-bg-base rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-gold-light transition-colors duration-200 cursor-pointer"
             >
               Send
             </button>
           </form>
-        </>
+        </div>
       )}
-    </div>
+    </>
   );
 };
 

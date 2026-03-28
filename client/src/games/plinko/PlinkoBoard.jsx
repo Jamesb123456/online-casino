@@ -450,7 +450,7 @@ const PlinkoBoard = ({
       ref={canvasRef}
       width={600}
       height={500}
-      className="w-full bg-gray-900 rounded-lg"
+      className="w-full bg-bg-base rounded-lg overflow-hidden"
     />
   );
 };

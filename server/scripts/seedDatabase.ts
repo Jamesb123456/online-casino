@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
@@ -6,22 +5,25 @@ import { eq } from 'drizzle-orm';
 // Import Drizzle database and schema
 import { db, closeDB } from '../drizzle/db.js';
 import { users, balances, gameStats, account } from '../drizzle/schema.js';
+import LoggingService from '../src/services/loggingService.js';
+
+const logger = LoggingService.logger;
 
 dotenv.config();
 
 async function seedDatabase() {
   try {
-    console.log('Starting database seeding...');
+    logger.info('Starting database seeding...');
 
     // Check if admin user already exists
     const existingAdmin = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
-    
+
     if (existingAdmin.length === 0) {
-      console.log('Creating admin user...');
-      
+      logger.info('Creating admin user...');
+
       // Hash the password
       const hashedPassword = await bcrypt.hash('admin123', 12);
-      
+
       // Create admin user with Better Auth fields
       await db.insert(users).values({
         username: 'admin',
@@ -63,9 +65,9 @@ async function seedDatabase() {
         updatedAt: new Date()
       });
 
-      console.log('Admin user created successfully');
+      logger.info('Admin user created successfully');
     } else {
-      console.log('Admin user already exists');
+      logger.info('Admin user already exists');
     }
 
     // Create some test player accounts
@@ -77,13 +79,13 @@ async function seedDatabase() {
 
     for (const playerData of testPlayers) {
       const existingPlayer = await db.select().from(users).where(eq(users.username, playerData.username)).limit(1);
-      
+
       if (existingPlayer.length === 0) {
-        console.log(`Creating test player: ${playerData.username}...`);
-        
+        logger.info(`Creating test player: ${playerData.username}...`);
+
         // Hash the password
         const hashedPassword = await bcrypt.hash('password123', 12);
-        
+
         // Create player user with Better Auth fields
         await db.insert(users).values({
           username: playerData.username,
@@ -125,15 +127,15 @@ async function seedDatabase() {
           updatedAt: new Date()
         });
 
-        console.log(`Test player ${playerData.username} created successfully`);
+        logger.info(`Test player ${playerData.username} created successfully`);
       } else {
-        console.log(`Test player ${playerData.username} already exists`);
+        logger.info(`Test player ${playerData.username} already exists`);
       }
     }
 
     // Initialize game statistics
-    console.log('Initializing game statistics...');
-    
+    logger.info('Initializing game statistics...');
+
     const gameTypes = [
       { type: 'roulette', name: 'Roulette' },
       { type: 'blackjack', name: 'Blackjack' },
@@ -144,7 +146,7 @@ async function seedDatabase() {
 
     for (const game of gameTypes) {
       const existingStat = await db.select().from(gameStats).where(eq(gameStats.gameType, game.type)).limit(1);
-      
+
       if (existingStat.length === 0) {
         await db.insert(gameStats).values({
           gameType: game.type,
@@ -157,17 +159,17 @@ async function seedDatabase() {
           createdAt: new Date(),
           updatedAt: new Date()
         });
-        
-        console.log(`Created game stats for ${game.name}`);
+
+        logger.info(`Created game stats for ${game.name}`);
       } else {
-        console.log(`Game stats for ${game.name} already exist`);
+        logger.info(`Game stats for ${game.name} already exist`);
       }
     }
 
-    console.log('Database seeding completed successfully!');
-    
+    logger.info('Database seeding completed successfully!');
+
   } catch (error) {
-    console.error('Error seeding database:', error);
+    logger.error('Error seeding database', { error: String(error) });
     process.exit(1);
   } finally {
     // Close database connection

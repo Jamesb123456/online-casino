@@ -1,17 +1,18 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Wheel Game Socket Handler
  * Handles all socket.io events for the Wheel of Fortune game
  */
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
+import { validateSocketData, wheelPlaceBetSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
 
-// Store game history (in-memory for now, would be DB in production)
+// Store game history (in-memory, capped to prevent unbounded growth)
 const gameHistory = [];
+const MAX_HISTORY = 100;
 
 // Multiplayer data structures
 const connectedUsers = new Map(); // Map of userId -> socket info
@@ -183,12 +184,9 @@ function initWheelHandlers(io, socket, user) {
    */
   socket.on('wheel:place_bet', async (data, callback) => {
     try {
-      // Validate bet data
-      const { betAmount, difficulty = 'medium' } = data;
-
-      if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
-        throw new Error('Invalid bet amount');
-      }
+      // Validate bet data with Zod
+      const validated = validateSocketData(wheelPlaceBetSchema, data);
+      const { betAmount, difficulty } = validated;
 
       // Get user session
       const session = activeSessions.get(userId);
@@ -289,9 +287,12 @@ function initWheelHandlers(io, socket, user) {
         }
       );
 
-      // Add to history
+      // Add to history (capped)
       gameHistory.push(gameResult);
+      if (gameHistory.length > MAX_HISTORY) gameHistory.splice(0, gameHistory.length - MAX_HISTORY);
       session.history.push(gameResult);
+      if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
+      currentBets.length = 0;
 
       // Calculate target angle for animation
       const segmentAngle = 360 / segments.length;

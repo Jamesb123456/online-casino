@@ -1,9 +1,9 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 // Import Drizzle models
 import UserModel from '../../drizzle/models/User.js';
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import GameStat from '../../drizzle/models/GameStat.js';
+import { validateSocketData, blackjackStartSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 interface Card {
@@ -51,12 +51,15 @@ class BlackjackHandler {
     // Start new game
     socket.on('blackjack_start', async (data) => {
       try {
-        const { betAmount } = data;
-
-        if (!betAmount || betAmount <= 0) {
-          socket.emit('blackjack_error', { message: 'Invalid game parameters' });
+        // Validate input with Zod
+        let validated;
+        try {
+          validated = validateSocketData(blackjackStartSchema, data);
+        } catch (validationError) {
+          socket.emit('blackjack_error', { message: (validationError as Error).message });
           return;
         }
+        const { betAmount } = validated;
 
         // Check if user exists
         const user = await UserModel.findById(userIdNum);
@@ -161,10 +164,10 @@ class BlackjackHandler {
         this.io.to(`blackjack_${gameId}`).emit('blackjack_game_state', {
           gameId,
           playerHand: game.playerHand,
-          dealerHand: game.status === 'completed' ? game.dealerHand : [game.dealerHand[0]],
+          dealerHand: (game.status as string) === 'completed' ? game.dealerHand : [game.dealerHand[0]],
           playerScore,
           // Only show dealer score after game is completed
-          dealerScore: game.status === 'completed' ? this.calculateScore(game.dealerHand) : null,
+          dealerScore: (game.status as string) === 'completed' ? this.calculateScore(game.dealerHand) : null,
           betAmount: game.betAmount,
           status: game.status,
           result: game.result,
@@ -471,28 +474,30 @@ class BlackjackHandler {
     }
 
     try {
-      // Update user balance
-      await BalanceService.updateGameBalance(
-        game.userId.toString(), // Convert to string for balance service
-        game.betAmount,
-        game.winAmount || 0,
-        'blackjack' as any, // Type cast to work with service
-        {
-          gameId,
-          playerScore,
-          dealerScore,
-          result: game.result,
-          playerHand: game.playerHand,
-          dealerHand: game.dealerHand
-        }
-      );
+      // Credit winnings if player won (bet was already deducted on placement)
+      if (game.winAmount > 0) {
+        await BalanceService.recordWin(
+          game.userId,
+          game.betAmount,
+          game.winAmount,
+          'blackjack',
+          {
+            gameId,
+            playerScore,
+            dealerScore,
+            result: game.result,
+            playerHand: game.playerHand,
+            dealerHand: game.dealerHand
+          }
+        );
+      }
 
       // Update game statistics
       await GameStat.updateStats('blackjack', game.betAmount.toString(), game.winAmount || 0);
 
       // Log game end
       await LoggingService.logGameAction(
-        game.userId,
+        String(game.userId),
         'blackjack',
         'game_ended',
         {

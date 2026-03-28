@@ -1,20 +1,38 @@
 import React, { useState, useEffect } from 'react';
 
-const Toast = ({ 
-  message, 
-  type = 'info', 
+const Toast = ({
+  message,
+  type = 'info',
   duration = 5000,
-  onClose 
+  onClose
 }) => {
   const [isVisible, setIsVisible] = useState(true);
 
-  // Define color schemes based on message type
+  // Define type styles with left border colors and icon colors
   const typeStyles = {
-    success: 'bg-green-100 border-green-400 text-green-800',
-    error: 'bg-red-100 border-red-400 text-red-800',
-    warning: 'bg-yellow-100 border-yellow-400 text-yellow-800',
-    info: 'bg-blue-100 border-blue-400 text-blue-800'
+    success: {
+      border: 'border-l-status-success',
+      icon: 'text-status-success',
+      iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+    },
+    error: {
+      border: 'border-l-status-error',
+      icon: 'text-status-error',
+      iconPath: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z'
+    },
+    warning: {
+      border: 'border-l-status-warning',
+      icon: 'text-status-warning',
+      iconPath: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z'
+    },
+    info: {
+      border: 'border-l-status-info',
+      icon: 'text-status-info',
+      iconPath: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+    }
   };
+
+  const currentType = typeStyles[type] || typeStyles.info;
 
   // Auto-dismiss after duration
   useEffect(() => {
@@ -38,27 +56,32 @@ const Toast = ({
 
   return (
     <div className={`
-      fixed top-4 right-4 max-w-md p-4 mb-4 
-      border-l-4 rounded-md shadow-md
-      transition-all duration-300 ease-in-out
+      fixed top-4 right-4 max-w-md z-50
+      bg-bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-card
+      border-l-4 ${currentType.border}
+      transition-all duration-300 ease-out
       transform ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
-      ${typeStyles[type]}
+      animate-slide-right
     `}>
-      <div className="flex items-center justify-between">
-        <div className="flex-1 mr-3">
-          <p className="font-medium">{message}</p>
+      <div className="flex items-start gap-3 p-4">
+        {/* Icon */}
+        <svg className={`w-5 h-5 mt-0.5 shrink-0 ${currentType.icon}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d={currentType.iconPath} />
+        </svg>
+
+        {/* Message */}
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-text-primary">{message}</p>
         </div>
-        <button 
-          onClick={handleClose} 
-          className={`focus:outline-none focus:ring-2 focus:ring-${type}-500`}
+
+        {/* Close button */}
+        <button
+          onClick={handleClose}
+          className="text-text-muted hover:text-text-primary transition-colors shrink-0 cursor-pointer focus:outline-none"
           aria-label="Close"
         >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path 
-              fillRule="evenodd" 
-              clipRule="evenodd" 
-              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-            />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>

@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/mysql2';
 import mysql from 'mysql2/promise';
 import * as schema from './schema.js';
 import dotenv from 'dotenv';
+import LoggingService from '../src/services/loggingService.js';
 
 dotenv.config();
 
@@ -26,7 +27,7 @@ function parseDBConfig() {
       keepAliveInitialDelay: 0
     };
   } catch (error) {
-    console.error('Error parsing DATABASE_URL:', error);
+    LoggingService.logger.error('Error parsing DATABASE_URL', { error: String(error) });
     throw new Error('Invalid DATABASE_URL format');
   }
 }
@@ -44,11 +45,11 @@ export const db = drizzle(poolConnection, {
 export const connectDB = async () => {
   try {
     const connection = await poolConnection.getConnection();
-    console.log('MySQL connected successfully');
+    LoggingService.logger.info('MySQL connected successfully');
     connection.release();
     return true;
   } catch (error) {
-    console.error('MySQL connection error:', error instanceof Error ? error.message : String(error));
+    LoggingService.logger.error('MySQL connection error', { error: error instanceof Error ? error.message : String(error) });
     process.exit(1);
   }
 };
@@ -56,7 +57,7 @@ export const connectDB = async () => {
 // Graceful shutdown
 export const closeDB = async () => {
   await poolConnection.end();
-  console.log('MySQL connection pool closed');
+  LoggingService.logger.info('MySQL connection pool closed');
 };
 
 export default db; 

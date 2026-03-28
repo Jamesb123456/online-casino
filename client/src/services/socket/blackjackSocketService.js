@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
+import { getSocketBaseUrl } from './socketUtils';
 
 class BlackjackSocketService {
   constructor() {
     this.socket = null;
     this.isConnected = false;
     this.namespace = '/blackjack';
-    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    this.apiUrl = getSocketBaseUrl();
   }
 
   /**
@@ -13,8 +14,6 @@ class BlackjackSocketService {
    */
   connect() {
     if (!this.socket) {
-      console.log(`Connecting to blackjack socket at ${this.apiUrl}${this.namespace}`);
-      
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
         autoConnect: true,
@@ -26,17 +25,11 @@ class BlackjackSocketService {
 
       // Socket connection event listeners
       this.socket.on('connect', () => {
-        console.log('Connected to blackjack socket server');
         this.isConnected = true;
       });
 
       this.socket.on('disconnect', () => {
-        console.log('Disconnected from blackjack socket server');
         this.isConnected = false;
-      });
-
-      this.socket.on('error', (error) => {
-        console.error('Blackjack socket error:', error);
       });
     }
   }

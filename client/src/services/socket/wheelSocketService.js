@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
+import { getSocketBaseUrl } from './socketUtils';
 
 class WheelSocketService {
   constructor() {
     this.socket = null;
     this.isConnected = false;
     this.namespace = '/wheel';
-    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    this.apiUrl = getSocketBaseUrl();
     this.user = null;
   }
   
@@ -23,8 +24,6 @@ class WheelSocketService {
    */
   connect(userInfo = null) {
     if (!this.socket) {
-      console.log(`Connecting to wheel socket at ${this.apiUrl}${this.namespace}`);
-      
       // Use provided userInfo or fallback to this.user
       const user = userInfo || this.user || {};
       
@@ -39,17 +38,11 @@ class WheelSocketService {
 
       // Socket connection event listeners
       this.socket.on('connect', () => {
-        console.log('Connected to wheel socket server');
         this.isConnected = true;
       });
 
       this.socket.on('disconnect', () => {
-        console.log('Disconnected from wheel socket server');
         this.isConnected = false;
-      });
-
-      this.socket.on('error', (error) => {
-        console.error('Wheel socket error:', error);
       });
     }
   }
@@ -66,13 +59,24 @@ class WheelSocketService {
   }
 
   /**
-   * Place a bet on the wheel
-   * @param {number} amount - Bet amount
-   * @param {string} segment - Segment color or type to bet on
+   * Place a bet on the wheel and spin
+   * @param {Object} betData - Bet data including amount, difficulty, and segments
+   * @returns {Promise} Promise that resolves with the server spin result
    */
-  placeBet(amount, segment) {
-    if (!this.socket || !this.isConnected) return;
-    this.socket.emit('placeBet', { amount, segment });
+  placeBet(betData) {
+    return new Promise((resolve, reject) => {
+      if (!this.socket || !this.isConnected) {
+        return reject(new Error('Socket not connected'));
+      }
+
+      this.socket.emit('wheel:placeBet', betData, (response) => {
+        if (response && response.success) {
+          resolve(response);
+        } else {
+          reject(new Error(response?.error || 'Failed to place bet'));
+        }
+      });
+    });
   }
 
   /**

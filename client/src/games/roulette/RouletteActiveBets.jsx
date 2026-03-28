@@ -1,5 +1,4 @@
 import React from 'react';
-import Card from '../../components/ui/Card';
 import { FaUser } from 'react-icons/fa';
 
 /**
@@ -35,46 +34,48 @@ const RouletteActiveBets = ({ bets = [] }) => {
   };
 
   return (
-    <Card>
-      <h3 className="text-lg font-bold mb-4">Active Bets</h3>
-      
+    <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
+      <div className="p-4 pb-0">
+        <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Active Bets</h3>
+      </div>
+
       {bets.length === 0 ? (
-        <div className="text-center text-gray-500 py-4">
+        <div className="text-center text-text-muted py-4">
           No active bets
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-sm text-gray-600 border-b">
-                <th className="pb-2">Player</th>
-                <th className="pb-2">Bet</th>
-                <th className="pb-2 text-right">Amount</th>
+              <tr className="bg-bg-elevated text-text-muted text-xs font-heading uppercase tracking-wider">
+                <th className="py-2 px-4 text-left">Player</th>
+                <th className="py-2 px-4 text-left">Bet</th>
+                <th className="py-2 px-4 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {bets.map((bet) => (
-                <tr key={bet.id} className="border-b last:border-b-0">
-                  <td className="py-2">
+                <tr key={bet.id} className="border-b border-border last:border-b-0">
+                  <td className="py-2 px-4">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                      <div className="w-6 h-6 bg-bg-elevated rounded-full flex items-center justify-center overflow-hidden">
                         {bet.avatar ? (
-                          <img 
-                            src={bet.avatar} 
-                            alt={bet.username} 
+                          <img
+                            src={bet.avatar}
+                            alt={bet.username}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <FaUser className="text-gray-400 text-xs" />
+                          <FaUser className="text-text-muted text-xs" />
                         )}
                       </div>
-                      <span className="text-sm font-medium">{bet.username}</span>
+                      <span className="text-text-primary text-sm font-medium">{bet.username}</span>
                     </div>
                   </td>
-                  <td className="py-2 text-sm">
+                  <td className="py-2 px-4 text-text-secondary">
                     {formatBetType(bet.type, bet.value)}
                   </td>
-                  <td className="py-2 text-sm text-right font-medium">
+                  <td className="py-2 px-4 text-text-secondary text-right font-medium">
                     ${bet.amount.toFixed(2)}
                   </td>
                 </tr>
@@ -83,7 +84,7 @@ const RouletteActiveBets = ({ bets = [] }) => {
           </table>
         </div>
       )}
-    </Card>
+    </div>
   );
 };
 

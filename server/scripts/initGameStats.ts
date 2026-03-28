@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Initialize game statistics in the database
  * This script creates default entries for all game types
@@ -9,6 +8,9 @@ import dotenv from 'dotenv';
 // Import Drizzle models
 import GameStatModel from '../drizzle/models/GameStat.js';
 import { db } from '../drizzle/db.js';
+import LoggingService from '../src/services/loggingService.js';
+
+const logger = LoggingService.logger;
 
 dotenv.config();
 
@@ -17,7 +19,7 @@ dotenv.config();
  */
 async function initializeGameStats() {
   try {
-    console.log('Initializing game statistics...');
+    logger.info('Initializing game statistics...');
 
     const gameTypes = [
       { type: 'roulette', name: 'Roulette' },
@@ -49,39 +51,39 @@ async function initializeGameStats() {
           updatedAt: new Date()
         });
 
-        console.log(`Created game stats for ${game.name}`);
+        logger.info(`Created game stats for ${game.name}`);
         created++;
       } else {
-        console.log(`Game stats for ${game.name} already exist`);
+        logger.info(`Game stats for ${game.name} already exist`);
         existing++;
       }
     }
 
-    console.log('\n=== Summary ===');
-    console.log(`Created: ${created} new game stat records`);
-    console.log(`Existing: ${existing} game stat records`);
-    console.log(`Total games: ${gameTypes.length}`);
+    logger.info('=== Summary ===');
+    logger.info(`Created: ${created} new game stat records`);
+    logger.info(`Existing: ${existing} game stat records`);
+    logger.info(`Total games: ${gameTypes.length}`);
 
     if (created > 0) {
-      console.log('\nGame statistics initialization completed successfully!');
+      logger.info('Game statistics initialization completed successfully!');
     } else {
-      console.log('\nAll game statistics were already initialized.');
+      logger.info('All game statistics were already initialized.');
     }
 
   } catch (error) {
-    console.error('Error initializing game statistics:', error);
+    logger.error('Error initializing game statistics', { error: String(error) });
     process.exit(1);
   } finally {
     // Close database connection
     await db.$client.end();
-    console.log('\nDatabase connection closed.');
+    logger.info('Database connection closed.');
     process.exit(0);
   }
 }
 
 // Handle process termination
 process.on('SIGINT', async () => {
-  console.log('\nOperation cancelled.');
+  logger.info('Operation cancelled.');
   await db.$client.end();
   process.exit(0);
 });

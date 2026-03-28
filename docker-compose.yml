@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-casino_root_pass}
+      MYSQL_DATABASE: ${DB_NAME:-platinum_casino}
+      MYSQL_USER: ${DB_USER:-casino_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-casino_pass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      CLIENT_URL: http://localhost
+      DATABASE_URL: mysql://${DB_USER:-casino_user}:${DB_PASSWORD:-casino_pass}@db:3306/${DB_NAME:-platinum_casino}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-this-to-a-secure-secret-in-production}
+      BETTER_AUTH_URL: http://localhost:5000
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  mysql_data:

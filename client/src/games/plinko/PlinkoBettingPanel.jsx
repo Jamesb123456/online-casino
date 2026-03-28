@@ -1,6 +1,4 @@
 import React from 'react';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { getPlinkoMultipliers } from './plinkoUtils';
 
@@ -17,16 +15,16 @@ const PlinkoBettingPanel = ({
     const multipliers = getPlinkoMultipliers(risk);
     const maxMultiplier = Math.max(...multipliers);
     const minMultiplier = Math.min(...multipliers);
-    
+
     return (
       <div className="flex justify-between text-sm">
         <div>
-          <div className="text-gray-400">Min Multiplier</div>
-          <div className="font-bold text-blue-400">{minMultiplier.toFixed(2)}x</div>
+          <div className="text-text-muted">Min Multiplier</div>
+          <div className="font-heading font-bold text-accent-purple-light">{minMultiplier.toFixed(2)}x</div>
         </div>
         <div>
-          <div className="text-gray-400">Max Multiplier</div>
-          <div className="font-bold text-pink-500">{maxMultiplier.toFixed(2)}x</div>
+          <div className="text-text-muted">Max Multiplier</div>
+          <div className="font-heading font-bold text-accent-gold">{maxMultiplier.toFixed(2)}x</div>
         </div>
       </div>
     );
@@ -42,15 +40,18 @@ const PlinkoBettingPanel = ({
   const betPresets = [10, 25, 50, 100, 200];
   
   return (
-    <Card title="Place Your Bet">
+    <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
+      <h3 className="text-lg font-heading font-bold text-text-primary mb-4">Place Your Bet</h3>
       <div className="space-y-5">
         {/* Amount section */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label htmlFor="plinko-bet-amount" className="block text-sm font-medium text-text-secondary mb-2">
             Bet Amount
           </label>
           <Input
             type="number"
+            id="plinko-bet-amount"
+            name="plinko-bet-amount"
             min="1"
             value={betAmount}
             onChange={handleAmountChange}
@@ -64,10 +65,10 @@ const PlinkoBettingPanel = ({
                 key={preset}
                 onClick={() => setBetAmount(preset)}
                 className={`
-                  px-2 py-1 rounded text-xs font-medium
+                  px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer
                   ${betAmount === preset
-                    ? 'bg-amber-500 text-gray-900'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
+                    ? 'bg-accent-gold text-bg-base'
+                    : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
                 `}
               >
                 {preset}
@@ -78,19 +79,19 @@ const PlinkoBettingPanel = ({
         
         {/* Risk selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             Risk Level
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="flex gap-2">
             {['low', 'medium', 'high'].map((riskLevel) => (
               <button
                 key={riskLevel}
                 onClick={() => setRisk(riskLevel)}
                 className={`
-                  px-3 py-2 rounded text-sm font-medium uppercase
+                  px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 uppercase flex-1 cursor-pointer
                   ${risk === riskLevel
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
+                    ? 'bg-game-plinko text-white'
+                    : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
                 `}
               >
                 {riskLevel}
@@ -106,36 +107,35 @@ const PlinkoBettingPanel = ({
         
         {/* Game prediction */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             Potential Win
           </label>
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div className="bg-gray-800 p-2 rounded">
-              <div className="text-xs text-gray-400">Min Win</div>
-              <div className="font-bold text-blue-400">
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Min Win</div>
+              <div className="font-heading font-bold text-accent-purple-light">
                 {(betAmount * Math.min(...getPlinkoMultipliers(risk))).toFixed(2)}
               </div>
             </div>
-            <div className="bg-gray-800 p-2 rounded">
-              <div className="text-xs text-gray-400">Max Win</div>
-              <div className="font-bold text-pink-500">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Max Win</div>
+              <div className="font-heading font-bold text-accent-gold">
                 {(betAmount * Math.max(...getPlinkoMultipliers(risk))).toFixed(2)}
               </div>
             </div>
           </div>
         </div>
-        
+
         {/* Play button */}
-        <Button
-          variant="primary"
-          className="w-full"
+        <button
           onClick={onPlaceBet}
           disabled={isAnimating || betAmount <= 0}
+          className="bg-game-plinko hover:bg-violet-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isAnimating ? 'Ball Dropping...' : 'Drop Ball'}
-        </Button>
+        </button>
       </div>
-    </Card>
+    </div>
   );
 };
 

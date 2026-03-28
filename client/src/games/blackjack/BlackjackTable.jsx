@@ -20,18 +20,18 @@ const BlackjackTable = ({
 
     let resultStyle = '';
     let resultText = '';
-    
+
     switch (result) {
       case 'player':
-        resultStyle = 'text-green-600';
+        resultStyle = 'text-status-success';
         resultText = `You Win $${winAmount ? winAmount.toFixed(2) : '0.00'}!`;
         break;
       case 'dealer':
-        resultStyle = 'text-red-600';
+        resultStyle = 'text-status-error';
         resultText = 'Dealer Wins!';
         break;
       case 'push':
-        resultStyle = 'text-blue-600';
+        resultStyle = 'text-accent-gold';
         resultText = 'Push!';
         break;
       default:
@@ -39,17 +39,21 @@ const BlackjackTable = ({
     }
 
     return (
-      <div className={`game-result text-center my-4 text-2xl font-bold ${resultStyle}`}>
-        {resultText}
+      <div className={`text-center my-4 rounded-xl p-4 backdrop-blur-xl bg-bg-card/95 border ${
+        result === 'player' ? 'border-status-success/30' : result === 'dealer' ? 'border-status-error/30' : 'border-accent-gold/30'
+      }`}>
+        <div className={`text-3xl font-heading font-bold ${resultStyle}`}>
+          {resultText}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="blackjack-table bg-green-800 rounded-3xl p-6 shadow-lg border-8 border-brown-700">
-      <div className="table-inner flex flex-col">
+    <div className="bg-bg-card border border-border rounded-xl p-6 shadow-card" style={{ background: 'linear-gradient(135deg, #141827, #1a2a1a)' }}>
+      <div className="flex flex-col">
         {/* Dealer's area */}
-        <div className="dealer-area mb-8">
+        <div className="mb-8">
           <BlackjackHand 
             hand={dealerHand} 
             isDealer={true}
@@ -61,7 +65,7 @@ const BlackjackTable = ({
         {renderResult()}
         
         {/* Player's area */}
-        <div className="player-area">
+        <div>
           <BlackjackHand 
             hand={playerHand}
             isDealer={false}

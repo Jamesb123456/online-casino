@@ -1,7 +1,7 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import BlackjackGame from '../../games/blackjack/BlackjackGame';
-import { AuthContext } from '../../contexts/AuthContext'; // Assuming you have an auth context
+import { AuthContext } from '../../contexts/AuthContext';
 
 /**
  * BlackjackPage Component
@@ -9,29 +9,14 @@ import { AuthContext } from '../../contexts/AuthContext'; // Assuming you have a
  */
 const BlackjackPage = () => {
   const { user } = useContext(AuthContext) || { user: null };
-  const [useMock, setUseMock] = useState(true);
-  
+
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-8 flex justify-between items-center">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">Blackjack</h1>
-          
-          {/* Toggle between mock and real mode */}
-          <div className="flex items-center">
-            <span className="text-gray-300 mr-3">Mock Mode</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useMock}
-                onChange={() => setUseMock(!useMock)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-            </label>
-          </div>
         </div>
-        
+
         {/* Game instructions */}
         <div className="mb-6 p-4 bg-[#1a2c3d] rounded-lg border border-[#2a3f52]">
           <h2 className="text-xl font-semibold text-white mb-2">How to Play</h2>
@@ -43,13 +28,10 @@ const BlackjackPage = () => {
             <li>Dealer hits on 16 or less, stands on 17 or more</li>
           </ul>
         </div>
-        
+
         {/* Blackjack game */}
         <div className="bg-[#1a2c3d] p-4 rounded-lg shadow-xl border border-[#2a3f52]">
-          <BlackjackGame 
-            initialBalance={user?.balance || 1000} 
-            useMock={useMock} 
-          />
+          <BlackjackGame initialBalance={user?.balance || 1000} />
         </div>
       </div>
     </MainLayout>

@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
 
@@ -71,15 +69,18 @@ const RouletteBettingPanel = ({
   };
   
   return (
-    <Card title="Place Your Bets">
+    <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
+      <h3 className="text-lg font-heading font-bold text-text-primary mb-4">Place Your Bets</h3>
       <div className="space-y-5">
         {/* Bet amount section */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label htmlFor="roulette-bet-amount" className="block text-sm font-medium text-text-secondary mb-2">
             Bet Amount
           </label>
           <Input
             type="number"
+            id="roulette-bet-amount"
+            name="roulette-bet-amount"
             min="1"
             value={betAmount}
             onChange={handleAmountChange}
@@ -95,34 +96,34 @@ const RouletteBettingPanel = ({
                 onClick={() => !isSpinning && setBetAmount(preset)}
                 disabled={isSpinning}
                 className={`
-                  px-2 py-1 rounded text-xs font-medium
+                  px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200
                   ${betAmount === preset
-                    ? 'bg-amber-500 text-gray-900'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
-                  ${isSpinning ? 'opacity-50 cursor-not-allowed' : ''}
+                    ? 'bg-accent-gold text-bg-base'
+                    : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
+                  ${isSpinning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
               >
                 {preset}
               </button>
             ))}
           </div>
-          
+
           {/* Available balance */}
           <div className="mt-2 text-right text-sm">
-            <span className="text-gray-400">Balance: </span>
-            <span className="font-bold text-green-500">{balance.toFixed(2)}</span>
+            <span className="text-text-muted">Balance: </span>
+            <span className="font-heading font-bold text-status-success">{balance.toFixed(2)}</span>
           </div>
         </div>
         
         {/* Bet type selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             Bet Type
           </label>
-          
+
           {Object.entries(betTypeCategories).map(([category, types]) => (
             <div key={category} className="mb-3">
-              <h4 className="text-xs uppercase text-gray-500 mb-1">{category}</h4>
+              <h4 className="text-xs uppercase font-heading text-text-muted tracking-wider mb-1">{category}</h4>
               <div className="grid grid-cols-2 gap-2">
                 {types.map(type => (
                   <button
@@ -130,11 +131,11 @@ const RouletteBettingPanel = ({
                     onClick={() => !isSpinning && handleBetTypeChange(type)}
                     disabled={isSpinning}
                     className={`
-                      px-2 py-2 rounded text-xs font-medium
+                      px-2 py-2 rounded-lg text-xs font-medium transition-colors duration-200
                       ${selectedBetType === type
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
-                      ${isSpinning ? 'opacity-50 cursor-not-allowed' : ''}
+                        ? 'bg-game-roulette text-white'
+                        : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
+                      ${isSpinning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                     `}
                   >
                     {BET_TYPES[type].name}
@@ -151,7 +152,7 @@ const RouletteBettingPanel = ({
         {/* Value selection based on bet type */}
         {selectedBetType === 'STRAIGHT' && (
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Select Number
             </label>
             <div className="grid grid-cols-6 gap-1 max-h-40 overflow-y-auto">
@@ -165,12 +166,12 @@ const RouletteBettingPanel = ({
                     ${selectedNumber === rouletteNumber.number
                       ? 'ring-2 ring-white'
                       : ''}
-                    ${rouletteNumber.color === 'red' 
-                      ? 'bg-red-600 text-white' 
-                      : rouletteNumber.color === 'black' 
+                    ${rouletteNumber.color === 'red'
+                      ? 'bg-red-600 text-white'
+                      : rouletteNumber.color === 'black'
                       ? 'bg-gray-900 text-white'
                       : 'bg-green-600 text-white'}
-                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : ''}
+                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   `}
                 >
                   {rouletteNumber.number}
@@ -182,7 +183,7 @@ const RouletteBettingPanel = ({
         
         {selectedBetType === 'DOZEN' && (
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Select Dozen
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -192,11 +193,11 @@ const RouletteBettingPanel = ({
                   onClick={() => !isSpinning && setSelectedValue(dozen.toString())}
                   disabled={isSpinning}
                   className={`
-                    py-2 rounded text-center
+                    py-2 rounded-lg text-center text-sm font-medium transition-colors duration-200
                     ${selectedValue === dozen.toString()
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
-                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : ''}
+                      ? 'bg-game-roulette text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
+                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   `}
                 >
                   {dozen === 1 ? '1-12' : dozen === 2 ? '13-24' : '25-36'}
@@ -205,10 +206,10 @@ const RouletteBettingPanel = ({
             </div>
           </div>
         )}
-        
+
         {selectedBetType === 'COLUMN' && (
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
+            <label className="block text-sm font-medium text-text-secondary mb-2">
               Select Column
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -218,11 +219,11 @@ const RouletteBettingPanel = ({
                   onClick={() => !isSpinning && setSelectedValue(column.toString())}
                   disabled={isSpinning}
                   className={`
-                    py-2 rounded text-center
+                    py-2 rounded-lg text-center text-sm font-medium transition-colors duration-200
                     ${selectedValue === column.toString()
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}
-                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : ''}
+                      ? 'bg-game-roulette text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'}
+                    ${isSpinning ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   `}
                 >
                   {column === 1 ? '1st' : column === 2 ? '2nd' : '3rd'} Column
@@ -234,28 +235,27 @@ const RouletteBettingPanel = ({
         
         {/* Potential win */}
         <div>
-          <label className="block text-sm font-medium text-gray-400 mb-2">
+          <label className="block text-sm font-medium text-text-secondary mb-2">
             Potential Win
           </label>
-          <div className="bg-gray-800 p-3 rounded text-center">
-            <span className="text-sm text-gray-400">Potential Payout: </span>
-            <span className="font-bold text-lg text-green-500">
+          <div className="bg-bg-elevated rounded-lg p-3 text-center">
+            <span className="text-sm text-text-muted">Potential Payout: </span>
+            <span className="font-heading font-bold text-lg text-status-success">
               {((betAmount || 0) * (BET_TYPES[selectedBetType]?.payout || 0) + (betAmount || 0)).toFixed(2)}
             </span>
           </div>
         </div>
-        
+
         {/* Place bet button */}
-        <Button
-          variant="primary"
-          className="w-full"
+        <button
           onClick={handlePlaceBet}
           disabled={isSpinning || betAmount <= 0}
+          className="bg-game-roulette hover:bg-emerald-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSpinning ? 'Wheel Spinning...' : 'Place Bet'}
-        </Button>
+        </button>
       </div>
-    </Card>
+    </div>
   );
 };
 

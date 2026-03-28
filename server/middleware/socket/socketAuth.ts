@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import { auth } from '../../lib/auth.js';
+import LoggingService from '../../src/services/loggingService.js';
 
 /**
  * Socket.io authentication middleware
@@ -38,7 +39,7 @@ export const socketAuth = async (socket: Socket, next: (err?: Error) => void) =>
 
     next();
   } catch (error) {
-    console.error('Socket authentication error:', error);
+    LoggingService.logSystemEvent('socket_auth_error', { error: String(error) }, 'error');
     next(new Error('Authentication error'));
   }
 };

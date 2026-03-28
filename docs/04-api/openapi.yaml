@@ -1,0 +1,1602 @@
+openapi: 3.0.3
+info:
+  title: Platinum Casino API
+  description: |
+    REST API for the Platinum Casino online gaming platform.
+
+    Authentication is handled via HTTP-only cookies containing a JWT token.
+    After a successful login or registration, the server sets an `authToken` cookie
+    that is automatically sent with subsequent requests.
+
+    Rate limiting is applied globally to all `/api` routes, with stricter limits
+    on authentication and bet-placement endpoints.
+  version: 1.0.0
+  contact:
+    name: Platinum Casino Dev Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+tags:
+  - name: Auth
+    description: Registration, login, logout, and token verification
+  - name: Users
+    description: Current user profile, balance, and transaction history
+  - name: Games
+    description: Game catalog and bet placement
+  - name: Admin
+    description: Administrative endpoints for user, transaction, and dashboard management (admin role required)
+  - name: Rewards
+    description: Daily login reward system
+
+security:
+  - cookieAuth: []
+
+paths:
+  # ---------------------------------------------------------------------------
+  # Auth
+  # ---------------------------------------------------------------------------
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      description: |
+        Creates a new user account with a starting balance of 1000.
+        Sets an HTTP-only `authToken` cookie on success.
+        Rate-limited to 5 requests per 15 minutes per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentials'
+      responses:
+        '201':
+          description: User registered successfully
+          headers:
+            Set-Cookie:
+              description: HTTP-only JWT auth cookie
+              schema:
+                type: string
+                example: authToken=eyJhbGciOiJIUzI1NiIs...; HttpOnly; Path=/; Max-Age=86400
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User registered successfully
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Validation error or username already exists
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/ErrorMessage'
+              examples:
+                usernameExists:
+                  summary: Username taken
+                  value:
+                    message: Username already exists
+                validationError:
+                  summary: Invalid payload
+                  value:
+                    message: Invalid payload
+                    errors:
+                      fieldErrors:
+                        username: ["String must contain at least 3 character(s)"]
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in an existing user
+      description: |
+        Authenticates with username and password.
+        Sets an HTTP-only `authToken` cookie on success.
+        Rate-limited to 5 requests per 15 minutes per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentials'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: HTTP-only JWT auth cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Login successful
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401':
+          description: Invalid credentials or account disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+              examples:
+                invalidCredentials:
+                  value:
+                    message: Invalid credentials
+                accountDisabled:
+                  value:
+                    message: Account is disabled
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out the current user
+      description: Clears the HTTP-only `authToken` cookie.
+      security: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+
+  /api/auth/verify:
+    get:
+      tags: [Auth]
+      summary: Verify the current auth token
+      description: Validates the JWT in the `authToken` cookie and returns the current user data.
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AuthUser'
+        '401':
+          description: No token, invalid token, or user no longer active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+
+  # ---------------------------------------------------------------------------
+  # Users
+  # ---------------------------------------------------------------------------
+  /api/users/me:
+    get:
+      tags: [Users]
+      summary: Get current user data
+      description: Returns the authenticated user's full profile including balance and activity timestamps.
+      responses:
+        '200':
+          description: Current user data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/users/profile:
+    get:
+      tags: [Users]
+      summary: Get user profile
+      description: Returns the authenticated user's profile with balance from the balance history table.
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      username:
+                        type: string
+                      role:
+                        $ref: '#/components/schemas/UserRole'
+                      balance:
+                        type: number
+                        format: double
+                      createdAt:
+                        type: string
+                        format: date-time
+                      lastLogin:
+                        type: string
+                        format: date-time
+                        nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Users]
+      summary: Update user profile (change password)
+      description: Allows the authenticated user to change their password by providing the current password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  description: The user's current password
+                newPassword:
+                  type: string
+                  description: The desired new password
+              required:
+                - currentPassword
+                - newPassword
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Profile updated successfully
+        '400':
+          description: Current password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/users/balance:
+    get:
+      tags: [Users]
+      summary: Get current balance
+      description: Returns the authenticated user's latest balance.
+      responses:
+        '200':
+          description: Current balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balance:
+                    type: number
+                    format: double
+                    example: 1250.50
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/users/balance/history:
+    get:
+      tags: [Users]
+      summary: Get balance history
+      description: Returns the authenticated user's full balance change history.
+      responses:
+        '200':
+          description: List of balance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BalanceRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/users/transactions:
+    get:
+      tags: [Users]
+      summary: Get user transactions
+      description: Returns transactions for the authenticated user with optional filters.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Maximum number of transactions to return
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+          description: Filter by transaction type
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions on or after this date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions on or before this date
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Games
+  # ---------------------------------------------------------------------------
+  /api/games:
+    get:
+      tags: [Games]
+      summary: List all available games
+      description: Returns the catalog of games available on the platform.
+      responses:
+        '200':
+          description: Array of available games
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameInfo'
+              example:
+                - id: crash
+                  name: Crash
+                  description: "Watch the multiplier increase until it crashes. Cash out before it's too late!"
+                  minBet: 10
+                  maxBet: 10000
+                  thumbnail: /images/games/crash.jpg
+                - id: plinko
+                  name: Plinko
+                  description: Drop the ball and watch it bounce through pins to determine your payout.
+                  minBet: 10
+                  maxBet: 5000
+                  thumbnail: /images/games/plinko.jpg
+                - id: wheel
+                  name: Wheel
+                  description: Spin the wheel and win based on where it stops!
+                  minBet: 10
+                  maxBet: 5000
+                  thumbnail: /images/games/wheel.jpg
+                - id: roulette
+                  name: Roulette
+                  description: Classic casino roulette with multiple betting options.
+                  minBet: 10
+                  maxBet: 5000
+                  thumbnail: /images/games/roulette.jpg
+                - id: blackjack
+                  name: Blackjack
+                  description: Beat the dealer by getting closer to 21 without going over.
+                  minBet: 10
+                  maxBet: 5000
+                  thumbnail: /images/games/blackjack.jpg
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/games/{gameId}/bet:
+    post:
+      tags: [Games]
+      summary: Place a bet on a game
+      description: |
+        Places a bet for the specified game. Rate-limited to 60 requests per minute.
+        Valid game IDs: `crash`, `plinko`, `wheel`, `roulette`, `blackjack`.
+      parameters:
+        - name: gameId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/GameType'
+          description: The game to place a bet on
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                betAmount:
+                  type: number
+                  format: double
+                  minimum: 0
+                  exclusiveMinimum: true
+                  description: The amount to bet (must be positive)
+                  example: 100
+              required:
+                - betAmount
+      responses:
+        '200':
+          description: Bet placed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Bet placed successfully
+                  gameId:
+                    $ref: '#/components/schemas/GameType'
+                  betAmount:
+                    type: number
+                    format: double
+                    example: 100
+                  sessionId:
+                    type: string
+                    description: Unique session identifier for this bet
+                    example: crash-1711500000000
+        '400':
+          description: Invalid gameId or bet amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+              examples:
+                invalidGameId:
+                  value:
+                    message: Invalid gameId
+                invalidBet:
+                  value:
+                    message: Invalid bet amount
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Admin
+  # ---------------------------------------------------------------------------
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      description: Returns all registered users. Requires admin role.
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  players:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminUserView'
+                  totalCount:
+                    type: integer
+                    description: Total number of users
+                    example: 42
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Admin]
+      summary: Create a new user
+      description: Creates a user account with the specified role. Requires admin role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                  example: newplayer
+                password:
+                  type: string
+                  minLength: 1
+                  example: securepassword123
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                isActive:
+                  type: boolean
+                  default: true
+              required:
+                - username
+                - password
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  username:
+                    type: string
+                  role:
+                    $ref: '#/components/schemas/UserRole'
+                  isActive:
+                    type: boolean
+                  createdAt:
+                    type: string
+                    format: date-time
+        '400':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/users/{id}:
+    put:
+      tags: [Admin]
+      summary: Update a user
+      description: Updates user details including username, password, role, and active status. Requires admin role.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  description: If provided, the password will be re-hashed
+                role:
+                  $ref: '#/components/schemas/UserRole'
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  username:
+                    type: string
+                  role:
+                    $ref: '#/components/schemas/UserRole'
+                  isActive:
+                    type: boolean
+                  updatedAt:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Admin]
+      summary: Delete a user
+      description: Permanently deletes a user account. Requires admin role.
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Get dashboard statistics
+      description: Returns recent transactions, game statistics, and aggregate totals. Requires admin role.
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recentTransactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                    description: Last 10 transactions across all users
+                  gameStats:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GameStat'
+                  totalStats:
+                    type: object
+                    properties:
+                      totalUsers:
+                        type: integer
+                        example: 150
+                      activeUsers:
+                        type: integer
+                        example: 150
+                      totalGames:
+                        type: integer
+                        example: 0
+                      houseProfit:
+                        type: number
+                        format: double
+                        example: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/games:
+    get:
+      tags: [Admin]
+      summary: Get game statistics
+      description: Returns per-game statistics sorted by total games played (descending). Requires admin role.
+      responses:
+        '200':
+          description: Array of game statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GameStat'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/transactions:
+    get:
+      tags: [Admin]
+      summary: Get transactions with filters
+      description: Returns transactions across all users with optional filtering and pagination. Requires admin role.
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+          description: Filter by user ID
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+          description: Filter by transaction type
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionStatus'
+          description: Filter by transaction status
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions on or after this date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions on or before this date
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Number of records per page
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            default: createdAt
+          description: Field to sort by
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort direction
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Admin]
+      summary: Create a manual transaction
+      description: |
+        Creates a manual credit or debit transaction for a user and updates their balance.
+        Requires admin role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: integer
+                  description: Target user ID
+                  example: 5
+                type:
+                  type: string
+                  enum: [credit, debit]
+                  description: Transaction direction
+                  example: credit
+                amount:
+                  type: number
+                  format: double
+                  description: Transaction amount (positive value)
+                  example: 500
+                description:
+                  type: string
+                  description: Reason for the transaction
+                  example: Manual balance adjustment
+              required:
+                - userId
+                - type
+                - amount
+                - description
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Transaction created successfully
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+                  newBalance:
+                    type: number
+                    format: double
+                    example: 1500
+        '400':
+          description: Missing fields, invalid type, or insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+              examples:
+                missingFields:
+                  value:
+                    message: Missing required fields
+                invalidType:
+                  value:
+                    message: Invalid transaction type
+                insufficientBalance:
+                  value:
+                    message: Insufficient balance
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/admin/transactions/{id}/void:
+    put:
+      tags: [Admin]
+      summary: Void a transaction
+      description: Marks a transaction as voided with an optional reason. Requires admin role.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Transaction ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Reason for voiding the transaction
+                  example: Duplicate transaction
+      responses:
+        '200':
+          description: Transaction voided
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Transaction voided successfully
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Transaction already voided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ---------------------------------------------------------------------------
+  # Rewards
+  # ---------------------------------------------------------------------------
+  /api/rewards/status:
+    get:
+      tags: [Rewards]
+      summary: Check daily reward availability
+      description: Returns whether the authenticated user can claim their daily login reward.
+      responses:
+        '200':
+          description: Reward status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  canClaim:
+                    type: boolean
+                    description: Whether the user can claim a reward right now
+                    example: true
+                  nextRewardTime:
+                    type: string
+                    format: date-time
+                    nullable: true
+                    description: When the next reward becomes available (null if claimable now)
+                    example: "2026-03-28T00:00:00.000Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/rewards/claim:
+    post:
+      tags: [Rewards]
+      summary: Claim daily login reward
+      description: |
+        Claims the daily login reward. Awards a random amount between 0 and 100 credits.
+        Can only be claimed once per day.
+      responses:
+        '200':
+          description: Reward claimed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  rewardAmount:
+                    type: number
+                    format: double
+                    description: The randomly generated reward amount
+                    example: 47.50
+                  newBalance:
+                    type: number
+                    format: double
+                    description: The user's updated balance after the reward
+                    example: 1047.50
+        '400':
+          description: Reward already claimed today
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Daily reward already claimed
+                  nextClaimTime:
+                    type: string
+                    format: date-time
+                    example: "2026-03-28T00:00:00.000Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: User not found
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/rewards/history:
+    get:
+      tags: [Rewards]
+      summary: Get reward claim history
+      description: Returns the authenticated user's login reward history and lifetime total.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+          description: Maximum number of reward records to return
+      responses:
+        '200':
+          description: Reward history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rewards:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoginReward'
+                  totalRewards:
+                    type: number
+                    format: double
+                    description: Lifetime total of all claimed rewards
+                    example: 1523.75
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+# =============================================================================
+# Components
+# =============================================================================
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: authToken
+      description: |
+        JWT stored in an HTTP-only cookie. Automatically set by the server on
+        successful login or registration. The token expires after 24 hours.
+        The JWT payload contains `userId`, `username`, and `role`.
+
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: User ID
+
+  responses:
+    Unauthorized:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+          example:
+            message: No token provided
+
+    Forbidden:
+      description: Insufficient permissions (admin role required)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+          example:
+            message: Access denied
+
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+          example:
+            message: Too many authentication attempts, please try again later
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+
+  schemas:
+    # ---- Enums ----
+    UserRole:
+      type: string
+      enum: [user, admin]
+      default: user
+
+    TransactionType:
+      type: string
+      enum: [deposit, withdrawal, game_win, game_loss, admin_adjustment, bonus, login_reward]
+
+    TransactionStatus:
+      type: string
+      enum: [pending, completed, failed, voided, processing]
+
+    GameType:
+      type: string
+      enum: [crash, plinko, wheel, roulette, blackjack]
+
+    BalanceChangeType:
+      type: string
+      enum: [deposit, withdrawal, win, loss, admin_adjustment, login_reward]
+
+    GameEventType:
+      type: string
+      enum: [session_start, bet_placed, bet_updated, game_result, win, loss, cashout, error, game_state_change]
+
+    # ---- Request / Response shapes ----
+    AuthCredentials:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          example: player1
+        password:
+          type: string
+          minLength: 6
+          maxLength: 128
+          format: password
+          example: s3cureP@ss
+      required:
+        - username
+        - password
+
+    AuthUser:
+      type: object
+      description: Minimal user object returned by auth endpoints
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: player1
+        role:
+          $ref: '#/components/schemas/UserRole'
+        balance:
+          type: number
+          format: double
+          example: 1000
+
+    ErrorMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          example: An error occurred
+      required:
+        - message
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Invalid payload
+        errors:
+          type: object
+          description: Zod flattened error object
+          properties:
+            fieldErrors:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+            formErrors:
+              type: array
+              items:
+                type: string
+
+    # ---- Domain models ----
+    User:
+      type: object
+      description: Full user record (database model)
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+          maxLength: 30
+        passwordHash:
+          type: string
+          description: bcrypt hash (never returned to clients)
+        role:
+          $ref: '#/components/schemas/UserRole'
+        balance:
+          type: string
+          description: Decimal stored as string (precision 15, scale 2)
+        avatar:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserProfile:
+      type: object
+      description: User profile returned by /api/users/me
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: player1
+        role:
+          $ref: '#/components/schemas/UserRole'
+        balance:
+          type: number
+          format: double
+          example: 1250.50
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+
+    AdminUserView:
+      type: object
+      description: User view returned by admin endpoints (no password hash)
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        balance:
+          type: number
+          format: double
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+
+    Transaction:
+      type: object
+      description: Financial transaction record
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        gameType:
+          $ref: '#/components/schemas/GameType'
+        amount:
+          type: string
+          description: Decimal stored as string (precision 15, scale 2)
+        balanceBefore:
+          type: string
+          description: Balance before transaction
+        balanceAfter:
+          type: string
+          description: Balance after transaction
+        status:
+          $ref: '#/components/schemas/TransactionStatus'
+        createdBy:
+          type: integer
+          nullable: true
+          description: Admin user ID if manually created
+        reference:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        gameSessionId:
+          type: integer
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+        notes:
+          type: object
+          nullable: true
+        voidedBy:
+          type: integer
+          nullable: true
+        voidedReason:
+          type: string
+          nullable: true
+        voidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GameSession:
+      type: object
+      description: Individual game session record
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        gameType:
+          $ref: '#/components/schemas/GameType'
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        initialBet:
+          type: string
+          description: Decimal stored as string
+        totalBet:
+          type: string
+          description: Decimal stored as string
+        outcome:
+          type: string
+          description: Net outcome amount as string
+        finalMultiplier:
+          type: string
+          nullable: true
+          description: Final multiplier achieved (e.g., for Crash)
+        gameState:
+          type: object
+          nullable: true
+          description: JSON blob with game-specific state
+        isCompleted:
+          type: boolean
+        resultDetails:
+          type: object
+          nullable: true
+          description: JSON blob with game-specific result details
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BalanceRecord:
+      type: object
+      description: Single balance-change entry
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        amount:
+          type: string
+          description: Balance after the change
+        previousBalance:
+          type: string
+          description: Balance before the change
+        changeAmount:
+          type: string
+          description: Amount added or subtracted
+        type:
+          $ref: '#/components/schemas/BalanceChangeType'
+        gameType:
+          $ref: '#/components/schemas/GameType'
+        relatedSessionId:
+          type: integer
+          nullable: true
+        transactionId:
+          type: integer
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        adminId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GameStat:
+      type: object
+      description: Aggregate statistics for a game type
+      properties:
+        id:
+          type: integer
+        gameType:
+          type: string
+          example: crash
+        name:
+          type: string
+          example: Crash
+        totalGamesPlayed:
+          type: integer
+          example: 12450
+        totalBetsAmount:
+          type: string
+          description: Decimal stored as string
+          example: "1250000.00"
+        totalWinningsAmount:
+          type: string
+          description: Decimal stored as string
+          example: "1180000.00"
+        houseProfit:
+          type: string
+          description: Decimal stored as string
+          example: "70000.00"
+        dailyStats:
+          type: object
+          nullable: true
+          description: JSON blob with per-day statistics
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GameInfo:
+      type: object
+      description: Game catalog entry
+      properties:
+        id:
+          $ref: '#/components/schemas/GameType'
+        name:
+          type: string
+          example: Crash
+        description:
+          type: string
+          example: "Watch the multiplier increase until it crashes. Cash out before it's too late!"
+        minBet:
+          type: number
+          example: 10
+        maxBet:
+          type: number
+          example: 10000
+        thumbnail:
+          type: string
+          example: /images/games/crash.jpg
+
+    GameLog:
+      type: object
+      description: Event log entry for a game session
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: integer
+          nullable: true
+        userId:
+          type: integer
+          nullable: true
+        gameType:
+          $ref: '#/components/schemas/GameType'
+        eventType:
+          $ref: '#/components/schemas/GameEventType'
+        eventDetails:
+          type: object
+          description: JSON blob with event-specific data
+        amount:
+          type: string
+          nullable: true
+          description: Decimal stored as string
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoginReward:
+      type: object
+      description: Login reward claim record
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        amount:
+          type: string
+          description: Decimal stored as string (precision 10, scale 2)
+          example: "47.50"
+        transactionId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    Message:
+      type: object
+      description: Chat message
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        userId:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time

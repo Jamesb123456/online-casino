@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Write",
+      "Edit",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git stash:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(node:*)",
+      "Bash(bun:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf /*:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(curl * | bash:*)",
+      "Bash(wget * | bash:*)",
+      "Bash(chmod 777:*)",
+      "Bash(: > /etc/*:*)",
+      "Bash(mkfs:*)",
+      "Bash(dd if=:*)",
+      "Bash(sudo:*)",
+      "Bash(ssh:*)",
+      "Bash(> /dev/:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/guard-bash.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": []
+  }
+}

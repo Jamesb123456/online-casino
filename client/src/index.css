@@ -1,1 +1,171 @@
+/* Google Fonts: Space Grotesk (headings) + DM Sans (body) */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
+
+@theme {
+  /* ── Typography ── */
+  --font-heading: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Background Colors ── */
+  --color-bg-base: #0B0E17;
+  --color-bg-card: #141827;
+  --color-bg-elevated: #1C2035;
+  --color-bg-surface: #232840;
+
+  /* ── Accent Colors ── */
+  --color-accent-gold: #F59E0B;
+  --color-accent-gold-light: #FBBF24;
+  --color-accent-gold-dark: #D97706;
+  --color-accent-purple: #7C3AED;
+  --color-accent-purple-light: #A78BFA;
+  --color-accent-rose: #F43F5E;
+
+  /* ── Text Colors ── */
+  --color-text-primary: #F1F5F9;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  /* ── Border Colors ── */
+  --color-border: #1E2A3A;
+  --color-border-light: #2D3B4F;
+
+  /* ── Game Colors ── */
+  --color-game-crash: #EF4444;
+  --color-game-plinko: #8B5CF6;
+  --color-game-wheel: #F59E0B;
+  --color-game-roulette: #10B981;
+  --color-game-blackjack: #3B82F6;
+  --color-game-landmines: #F97316;
+
+  /* ── Status Colors ── */
+  --color-status-success: #10B981;
+  --color-status-error: #EF4444;
+  --color-status-warning: #F59E0B;
+  --color-status-info: #3B82F6;
+
+  /* ── Shadows ── */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow-gold: 0 0 20px rgba(245, 158, 11, 0.3);
+  --shadow-glow-purple: 0 0 20px rgba(124, 58, 237, 0.3);
+  --shadow-glow-gold-lg: 0 0 40px rgba(245, 158, 11, 0.4), 0 0 80px rgba(245, 158, 11, 0.1);
+
+  /* ── Animations ── */
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-fade-in: fadeIn 200ms ease-out;
+  --animate-slide-up: slideUp 300ms ease-out;
+  --animate-slide-right: slideRight 300ms ease-out;
+  --animate-pulse-gold: pulseGold 2s ease-in-out infinite;
+}
+
+/* ── Keyframes ── */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulseGold {
+  0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.5); }
+}
+
+/* ── Base Styles ── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Selection ── */
+::selection {
+  background-color: rgba(245, 158, 11, 0.3);
+  color: #FBBF24;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ── Focus Visible ── */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Glass Utility ── */
+.glass {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-strong {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ── Gold Gradient Text Utility ── */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #F59E0B, #FBBF24, #F59E0B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Shimmer Background Utility ── */
+.bg-shimmer-gold {
+  background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}

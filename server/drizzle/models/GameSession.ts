@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, and } from 'drizzle-orm';
 import db from '../db.js';
 import { gameSessions, users } from '../schema.js';
@@ -99,8 +98,8 @@ class GameSessionModel {
       let totalOutcome = 0;
 
       sessions.forEach(session => {
-        totalBets += parseFloat(session.totalBet || 0);
-        totalOutcome += parseFloat(session.outcome || 0);
+        totalBets += parseFloat(session.totalBet as any || '0');
+        totalOutcome += parseFloat(session.outcome as any || '0');
       });
 
       const avgBet = totalSessions > 0 ? totalBets / totalSessions : 0;
@@ -124,7 +123,7 @@ class GameSessionModel {
   // Get active sessions
   static async getActiveSessions(gameType = null) {
     try {
-      let query = db
+      let query: any = db
         .select()
         .from(gameSessions)
         .where(eq(gameSessions.isCompleted, false));
@@ -143,7 +142,7 @@ class GameSessionModel {
   // Complete a session
   static async completeSession(id, outcome, finalMultiplier = null, resultDetails = null) {
     try {
-      const updateData = {
+      const updateData: any = {
         isCompleted: true,
         outcome: outcome.toString(),
         endTime: new Date(),
@@ -246,7 +245,7 @@ class GameSessionModel {
         conditions.push(eq(gameSessions.gameType, gameType));
       }
 
-      let query = db.select().from(gameSessions);
+      let query: any = db.select().from(gameSessions);
 
       if (conditions.length > 0) {
         query = query.where(conditions.length > 1 ? and(...conditions) : conditions[0]);

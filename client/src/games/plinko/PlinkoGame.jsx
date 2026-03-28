@@ -1,18 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PlinkoBoard from './PlinkoBoard';
 import PlinkoBettingPanel from './PlinkoBettingPanel';
-import Card from '../../components/ui/Card';
-import { 
-  getPlinkoMultipliers, 
-  generatePlinkoPath,
-  getBucketFromPath
+import {
+  getPlinkoMultipliers
 } from './plinkoUtils';
 import plinkoSocketService from '../../services/socket/plinkoSocketService';
-
-// For development, toggle between mock and real socket
-const USE_MOCK_SOCKET = true;
+import { useToast } from '../../contexts/ToastContext';
 
 const PlinkoGame = () => {
+  const toast = useToast();
   // Game state
   const [betAmount, setBetAmount] = useState(10);
   const [risk, setRisk] = useState('medium');
@@ -29,95 +25,47 @@ const PlinkoGame = () => {
 
   // Connect to socket when component mounts
   useEffect(() => {
-    if (!USE_MOCK_SOCKET) {
-      // Join the Plinko game room
-      joinPlinkoGame();
-      
-      // Listen for game results
-      const unsubscribe = onGameResult((result) => {
-        console.log('Received game result:', result);
-        
-        if (result && result.path) {
-          setAnimationPath(result.path);
-          setIsAnimating(true);
-          
-          // The actual game result will be processed when animation completes
-          // See handleAnimationComplete function
-        }
-      });
-      
-      // Cleanup when component unmounts
-      return () => {
-        leavePlinkoGame();
-        unsubscribe();
-      };
-    }
+    // Connect and join the Plinko game room
+    plinkoSocketService.connect();
+
+    // Listen for game results
+    plinkoSocketService.onGameResult((result) => {
+      if (result && result.path) {
+        setAnimationPath(result.path);
+        setIsAnimating(true);
+
+        // The actual game result will be processed when animation completes
+        // See handleAnimationComplete function
+      }
+    });
+
+    plinkoSocketService.onError?.((error) => {
+      setIsAnimating(false);
+      toast.error(error?.message || 'An error occurred. Please try again.');
+    });
+
+    // Cleanup when component unmounts
+    return () => {
+      plinkoSocketService.disconnect();
+    };
   }, []);
-  
-  // Debug logger for state changes
-  useEffect(() => {
-    console.log('Animation state changed:', { isAnimating, hasPath: animationPath !== null });
-  }, [isAnimating, animationPath]);
   
   // Handle dropping the ball (placing a bet)
   const handlePlaceBet = () => {
-    // Enhanced logging and safety checks
-    console.log('Attempting to place bet. Current state:', { 
-      isAnimating, 
-      betAmount,
-      'animationPath exists': animationPath !== null 
-    });
-    
-    if (isAnimating || betAmount <= 0) {
-      console.log('Cannot place bet: ' + (isAnimating ? 'Animation in progress' : 'Invalid bet amount'));
-      return;
-    }
+    if (isAnimating || betAmount <= 0) return;
     
     // Force reset animation state before starting a new one
     setAnimationPath(null);
     
     // Small delay to ensure previous state is cleared
     setTimeout(() => {
-      if (USE_MOCK_SOCKET) {
-        // Mock implementation for development
-        console.log('Starting new mock game');
-        setIsAnimating(true);
-        setGameResult(null);
-        
-        // Generate new path for the ball
-        const newPath = generatePlinkoPath();
-        console.log('Setting new animation path');
-        setAnimationPath(newPath);
-        
-        console.log('Mock game with bet:', betAmount, 'risk:', risk);
-      } else {
-        // Real socket implementation
-        setGameResult(null);
-        setIsAnimating(true); // Important: set this before making the request
-        
-        // Send drop ball request to server
-        dropBall({
-          betAmount,
-          risk
-        }, (response) => {
-          if (response.success) {
-            console.log('Ball dropped successfully, waiting for result');
-            // The animation path will come from the server via the onGameResult event
-            // The actual animation and result processing happens there
-          } else {
-            console.error('Error dropping ball:', response.error);
-            // Reset animation state on error
-            setIsAnimating(false);
-            // TODO: Show error notification
-          }
-        });
-      }
-    }, 50); // Small delay to ensure clean state transition
+      setGameResult(null);
+      setIsAnimating(true);
+      plinkoSocketService.startGame(betAmount, 16, risk);
+    }, 50);
   };
   
-  // Handle when animation completes
   const handleAnimationComplete = (bucketIndex) => {
-    console.log('Animation complete, ball landed in bucket:', bucketIndex);
     
     // Calculate winnings based on the bucket the ball landed in
     const winMultiplier = multipliers[bucketIndex];
@@ -142,13 +90,9 @@ const PlinkoGame = () => {
     // Set game result to display
     setGameResult(result);
     
-    // Critical: Reset animation state and path to allow a new ball to be dropped
-    // Use setTimeout to ensure state updates don't conflict
-    console.log('Resetting animation state...');
     setTimeout(() => {
       setIsAnimating(false);
-      setAnimationPath(null); // Reset the path so a new one can be set
-      console.log('Animation state reset complete, ready for next ball');
+      setAnimationPath(null);
     }, 100);
   };
   
@@ -163,7 +107,7 @@ const PlinkoGame = () => {
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="lg:w-8/12 space-y-4">
         {/* Game board */}
-        <div className="relative bg-gray-800 rounded-lg overflow-hidden">
+        <div className="relative bg-bg-card border border-border rounded-xl overflow-hidden">
           <PlinkoBoard
             multipliers={multipliers}
             animationPath={animationPath}
@@ -174,40 +118,49 @@ const PlinkoGame = () => {
           {gameResult && (
             <div className={`
               absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-              px-6 py-3 rounded-lg font-bold text-white text-2xl
-              ${gameResult.profit >= 0 ? 'bg-green-600' : 'bg-red-600'}
+              rounded-xl p-6 shadow-lg backdrop-blur-xl
+              ${gameResult.profit >= 0
+                ? 'bg-bg-card/95 border border-status-success/30'
+                : 'bg-bg-card/95 border border-status-error/30'}
             `}>
-              {gameResult.profit >= 0 ? 
-                `+${gameResult.profit.toFixed(2)}` : 
-                `${gameResult.profit.toFixed(2)}`
-              }
+              <div className={`text-3xl font-heading font-bold ${
+                gameResult.profit >= 0 ? 'text-status-success' : 'text-status-error'
+              }`}>
+                {gameResult.profit >= 0 ?
+                  `+${gameResult.profit.toFixed(2)}` :
+                  `${gameResult.profit.toFixed(2)}`
+                }
+              </div>
             </div>
           )}
         </div>
         
         {/* Game history */}
-        <Card title="Game History">
+        <div className="bg-bg-card border border-border rounded-xl overflow-hidden mt-4">
+          <div className="p-4 pb-0">
+            <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game History</h3>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-400 border-b border-gray-700">
-                  <th className="pb-2">Time</th>
-                  <th className="pb-2">Bet</th>
-                  <th className="pb-2">Risk</th>
-                  <th className="pb-2">Multiplier</th>
-                  <th className="pb-2">Profit</th>
+                <tr className="bg-bg-elevated text-text-muted text-xs font-heading uppercase tracking-wider">
+                  <th className="py-2 px-4 text-left">Time</th>
+                  <th className="py-2 px-4 text-left">Bet</th>
+                  <th className="py-2 px-4 text-left">Risk</th>
+                  <th className="py-2 px-4 text-left">Multiplier</th>
+                  <th className="py-2 px-4 text-left">Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {gameHistory.length > 0 ? (
                   gameHistory.map(game => (
-                    <tr key={game.id} className="border-b border-gray-800">
-                      <td className="py-2">{formatTime(game.timestamp)}</td>
-                      <td className="py-2">{game.betAmount.toFixed(2)}</td>
-                      <td className="py-2 capitalize">{game.risk}</td>
-                      <td className="py-2 font-medium">{game.multiplier.toFixed(2)}x</td>
-                      <td className={`py-2 font-bold ${
-                        game.profit >= 0 ? 'text-green-500' : 'text-red-500'
+                    <tr key={game.id} className="border-b border-border">
+                      <td className="py-2 px-4 text-text-secondary">{formatTime(game.timestamp)}</td>
+                      <td className="py-2 px-4 text-text-secondary">{game.betAmount.toFixed(2)}</td>
+                      <td className="py-2 px-4 text-text-secondary capitalize">{game.risk}</td>
+                      <td className="py-2 px-4 font-heading font-bold text-text-primary">{game.multiplier.toFixed(2)}x</td>
+                      <td className={`py-2 px-4 font-bold ${
+                        game.profit >= 0 ? 'text-status-success' : 'text-status-error'
                       }`}>
                         {game.profit >= 0 ? '+' : ''}{game.profit.toFixed(2)}
                       </td>
@@ -215,7 +168,7 @@ const PlinkoGame = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="5" className="text-center py-4 text-gray-400">
+                    <td colSpan="5" className="text-center py-4 text-text-muted">
                       No games played yet
                     </td>
                   </tr>
@@ -223,7 +176,7 @@ const PlinkoGame = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </div>
       
       <div className="lg:w-4/12">
@@ -237,31 +190,32 @@ const PlinkoGame = () => {
         />
         
         {/* Game statistics */}
-        <Card title="Game Stats" className="mt-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Games Played</div>
-              <div className="text-lg font-bold">{gameHistory.length}</div>
+        <div className="bg-bg-card border border-border rounded-xl p-5 mt-4">
+          <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game Stats</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Games Played</div>
+              <div className="text-lg font-heading font-bold text-text-primary">{gameHistory.length}</div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Total Wagered</div>
-              <div className="text-lg font-bold">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Total Wagered</div>
+              <div className="text-lg font-heading font-bold text-text-primary">
                 {gameHistory.reduce((sum, game) => sum + game.betAmount, 0).toFixed(2)}
               </div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Total Profit</div>
-              <div className={`text-lg font-bold ${
-                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0 
-                  ? 'text-green-500' 
-                  : 'text-red-500'
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Total Profit</div>
+              <div className={`text-lg font-heading font-bold ${
+                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0
+                  ? 'text-status-success'
+                  : 'text-status-error'
               }`}>
                 {gameHistory.reduce((sum, game) => sum + game.profit, 0).toFixed(2)}
               </div>
             </div>
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-xs text-gray-400">Best Win</div>
-              <div className="text-lg font-bold text-green-500">
+            <div className="bg-bg-elevated rounded-lg p-3">
+              <div className="text-xs text-text-muted">Best Win</div>
+              <div className="text-lg font-heading font-bold text-status-success">
                 {gameHistory.length > 0
                   ? Math.max(...gameHistory.map(g => g.profit)).toFixed(2)
                   : '0.00'
@@ -269,7 +223,7 @@ const PlinkoGame = () => {
               </div>
             </div>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

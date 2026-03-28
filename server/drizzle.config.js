@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export default defineConfig({
-  schema: './drizzle/schema.js',
+  schema: './drizzle/schema.ts',
   out: './drizzle/migrations',
   dialect: 'mysql',
   dbCredentials: {

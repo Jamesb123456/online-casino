@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Plinko Game Socket Handler
  * Handles all socket.io events for the Plinko game
@@ -6,13 +5,15 @@
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import { generatePath, calculateMultiplier } from '../utils/plinkoUtils.js';
+import { validateSocketData, plinkoDropBallSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 // Store active game sessions
 const activeSessions = new Map();
 
-// Store game history (in-memory for now, would be DB in production)
+// Store game history (in-memory, capped to prevent unbounded growth)
 const gameHistory = [];
+const MAX_HISTORY = 100;
 
 /**
  * Initialize Plinko socket handlers
@@ -82,12 +83,9 @@ function initPlinkoHandlers(io, socket, user) {
    */
   socket.on('plinko:drop_ball', async (data, callback) => {
     try {
-      // Validate bet data
-      const { betAmount, risk = 'medium', rows = 16 } = data;
-
-      if (!betAmount || isNaN(betAmount) || betAmount <= 0) {
-        throw new Error('Invalid bet amount');
-      }
+      // Validate bet data with Zod
+      const validated = validateSocketData(plinkoDropBallSchema, data);
+      const { betAmount, risk, rows } = validated;
 
       // Get user session
       const session = activeSessions.get(userId);
@@ -174,9 +172,11 @@ function initPlinkoHandlers(io, socket, user) {
         }
       );
 
-      // Add to history
+      // Add to history (capped)
       gameHistory.push(gameResult);
+      if (gameHistory.length > MAX_HISTORY) gameHistory.splice(0, gameHistory.length - MAX_HISTORY);
       session.history.push(gameResult);
+      if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
 
       // Send result to client
       const response = {

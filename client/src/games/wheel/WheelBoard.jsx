@@ -191,7 +191,7 @@ const WheelBoard = ({
       ref={canvasRef}
       width={400}
       height={400}
-      className="w-full max-w-md mx-auto bg-gray-900 rounded-full"
+      className="w-full max-w-md mx-auto bg-bg-base rounded-full"
     />
   );
 };

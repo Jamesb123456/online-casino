@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { getSocketBaseUrl } from './socketUtils';
 
 /**
  * Chat Socket Service
@@ -29,14 +30,11 @@ class ChatSocketService {
         // Close existing connection if any
         this.disconnect();
         
-        // Create socket connection with credentials (cookies)
-        // Socket.IO namespace should be direct to the server without /api
-        const socketUrl = 'http://localhost:5000'; // Use port 5000 to match server
-        console.log('Connecting to chat server at:', socketUrl);
-        
+        const socketUrl = getSocketBaseUrl();
+
         this.socket = io(`${socketUrl}/chat`, {
-          withCredentials: true, // Include cookies for authentication
-          transports: ['polling'], // Use only polling since WebSocket is failing
+          withCredentials: true,
+          transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionAttempts: 5,
           reconnectionDelay: 1000,

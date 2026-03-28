@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, gte, lte, count, sum, and, or, like } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import db from '../db.js';
@@ -139,7 +138,7 @@ class TransactionModel {
 
       // Since Drizzle doesn't have direct aggregation grouping like Mongoose,
       // we need to fetch data and group manually or use raw SQL
-      let query = db
+      let query: any = db
         .select({
           type: transactions.type,
           amount: transactions.amount,
@@ -247,7 +246,7 @@ class TransactionModel {
         conditions.push(eq(transactions.status, filter.status));
       }
 
-      let baseQuery = db.select({ count: count() }).from(transactions);
+      let baseQuery: any = db.select({ count: count() }).from(transactions);
 
       if (conditions.length > 0) {
         baseQuery = baseQuery.where(and(...conditions));
@@ -264,7 +263,7 @@ class TransactionModel {
   // Find transactions by filter
   static async findMany(filter: TransactionFilter = {}, limit = 50, offset = 0) {
     try {
-      let baseQuery = db.select().from(transactions);
+      let baseQuery: any = db.select().from(transactions);
 
       if (filter.userId) {
         baseQuery = baseQuery.where(eq(transactions.userId, filter.userId));
@@ -446,7 +445,7 @@ class TransactionModel {
       }
     }
 
-    let query = db.select(selectFields).from(transactions);
+    let query: any = db.select(selectFields).from(transactions);
     
     // Handle populate joins
     if (options.populate) {

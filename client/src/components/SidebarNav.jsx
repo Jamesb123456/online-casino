@@ -1,118 +1,137 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 
-// Navigation Category - renders a category with expandable items
-const NavCategory = ({ title, items, defaultOpen = false }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const location = useLocation();
-  
-  return (
-    <div className="mb-4">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between w-full px-4 py-2 text-left text-white bg-[#1a2c3d] hover:bg-[#213749] rounded-sm transition-colors"
-      >
-        <span className="font-medium">{title}</span>
-        <svg
-          className={`w-4 h-4 transition-transform ${isOpen ? 'transform rotate-180' : ''}`}
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
-      
-      {isOpen && (
-        <div className="mt-2 space-y-1">
-          {items.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center px-6 py-2 text-sm group transition-colors duration-200 ${
-                location.pathname === item.path
-                ? 'text-[#ffc107] bg-[#213749] border-l-2 border-[#ffc107]'
-                : 'text-gray-300 hover:text-white hover:bg-[#213749]/70 border-l-2 border-transparent'
-              } rounded-sm`}
-            >
-              <span className="ml-2">{item.label}</span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+// Game data with colors matching the design system game tokens
+const casinoGames = [
+  { path: '/games/crash', label: 'Crash', color: 'bg-game-crash' },
+  { path: '/games/roulette', label: 'Roulette', color: 'bg-game-roulette' },
+  { path: '/games/blackjack', label: 'Blackjack', color: 'bg-game-blackjack' },
+  { path: '/games/plinko', label: 'Plinko', color: 'bg-game-plinko' },
+  { path: '/games/wheel', label: 'Wheel', color: 'bg-game-wheel' },
+  { path: '/games/landmines', label: 'Landmines', color: 'bg-game-landmines' },
+];
 
-// Single Nav Item - renders a single item without category
-const NavItem = ({ path, label }) => {
-  const location = useLocation();
-  const isActive = location.pathname === path;
+const accountLinks = [
+  { path: '/profile', label: 'Profile', icon: ProfileIcon },
+  { path: '/rewards', label: 'Rewards', icon: RewardsIcon },
+  { path: '/leaderboard', label: 'Leaderboard', icon: LeaderboardIcon },
+];
 
-  return (
-    <Link
-      to={path}
-      className={`flex items-center px-4 py-3 text-sm group transition-all duration-200 ${
-        isActive
-        ? 'text-[#ffc107] bg-[#213749] border-l-2 border-[#ffc107]'
-        : 'text-gray-300 hover:text-white hover:bg-[#213749]/70 border-l-2 border-transparent'
-      } rounded-sm`}
-    >
-      <span className="ml-2">{label}</span>
-    </Link>
-  );
-};
+const supportLinks = [
+  { path: '/responsible-gaming', label: 'Responsible Gaming', icon: ShieldIcon },
+];
+
+// NavLink style helper
+const linkClass = ({ isActive }) =>
+  `flex items-center gap-3 px-4 py-2 text-sm rounded-r-lg transition-colors duration-200 ${
+    isActive
+      ? 'bg-accent-gold/10 text-accent-gold border-l-2 border-accent-gold'
+      : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated border-l-2 border-transparent'
+  }`;
 
 const SidebarNav = () => {
   return (
-    <div className="h-full w-64 bg-gradient-to-b from-[#0f1923] to-[#1a2c3d] border-r border-[#2a3f52]" data-testid="sidebar-nav" style={{zIndex: 30, position: 'relative', minHeight: '100vh'}}>
-      {/* Logo area */}
-      <div className="flex items-center px-6 py-6 border-b border-[#2a3f52]">
-        <div className="font-bold text-2xl text-white">
-          <span className="text-[#ffc107]">Platinum</span> Casino
-        </div>
-      </div>
-
-      {/* Navigation area */}
-      <div className="p-4 space-y-4">
-        {/* Casino Games Category */}
-        <NavCategory 
-          title="Casino Games" 
-          defaultOpen={true}
-          items={[
-            { path: '/games/crash', label: 'Crash' },
-            { path: '/games/roulette', label: 'Roulette' },
-            { path: '/games/blackjack', label: 'Blackjack' },
-            { path: '/games/plinko', label: 'Plinko' },
-            { path: '/games/wheel', label: 'Wheel' },
-          ]} 
-        />
-
-        {/* Single Items */}
-        <div className="my-4 space-y-1">
-          <NavItem path="/games" label="All Games" />
-          <NavItem path="/leaderboard" label="Leaderboard" />
-          <NavItem path="/promotions" label="Promotions" />
+    <aside
+      className="fixed left-0 top-16 bottom-0 w-64 bg-bg-card/80 backdrop-blur-xl border-r border-border overflow-y-auto hidden lg:block"
+      data-testid="sidebar-nav"
+      aria-label="Sidebar navigation"
+    >
+      <div className="py-6 space-y-8">
+        {/* Casino Games section */}
+        <div>
+          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+            Casino Games
+          </h2>
+          <nav className="space-y-0.5" aria-label="Casino games">
+            {casinoGames.map((game) => (
+              <NavLink key={game.path} to={game.path} className={linkClass}>
+                <span
+                  className={`w-2 h-2 rounded-full ${game.color} shrink-0`}
+                  aria-hidden="true"
+                />
+                <span>{game.label}</span>
+              </NavLink>
+            ))}
+          </nav>
         </div>
 
-        {/* Support & Admin */}
-        <NavCategory 
-          title="Support & Admin" 
-          items={[
-            { path: '/support', label: 'Support' },
-            { path: '/admin/dashboard', label: 'Admin Dashboard' },
-            { path: '/admin/players', label: 'Player Management' },
-            { path: '/admin/statistics', label: 'Game Statistics' },
-            { path: '/admin/transactions', label: 'Transactions' },
-          ]} 
-        />
+        {/* Account section */}
+        <div>
+          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+            Account
+          </h2>
+          <nav className="space-y-0.5" aria-label="Account">
+            {accountLinks.map((link) => (
+              <NavLink key={link.path} to={link.path} className={linkClass}>
+                <link.icon />
+                <span>{link.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+
+        {/* Support section */}
+        <div>
+          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+            Support
+          </h2>
+          <nav className="space-y-0.5" aria-label="Support">
+            {supportLinks.map((link) => (
+              <NavLink key={link.path} to={link.path} className={linkClass}>
+                <link.icon />
+                <span>{link.label}</span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
       </div>
-    </div>
+    </aside>
   );
 };
+
+/* ── Inline SVG Icon Components ── */
+
+function ProfileIcon() {
+  return (
+    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function RewardsIcon() {
+  return (
+    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 12 20 22 4 22 4 12" />
+      <rect x="2" y="7" width="20" height="5" />
+      <line x1="12" y1="22" x2="12" y2="7" />
+      <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+      <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+    </svg>
+  );
+}
+
+function LeaderboardIcon() {
+  return (
+    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9H4.5a2.5 2.5 0 010-5h1A2.5 2.5 0 018 6.5V9" />
+      <path d="M18 9h1.5a2.5 2.5 0 000-5h-1A2.5 2.5 0 0016 6.5V9" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22" />
+      <path d="M18 2H6v7a6 6 0 0012 0V2z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
 
 export default SidebarNav;

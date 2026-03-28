@@ -7,10 +7,15 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import { sql } from 'drizzle-orm';
 import LoggingService from './src/services/loggingService.js';
+import RedisService from './src/services/redisService.js';
 import type { Socket } from 'socket.io';
 // import initChatHandlers from './src/socket/chatHandler.js';
 // import initLiveGamesHandlers from './src/socket/liveGamesHandler.js';
+
+// Request ID Middleware
+import { requestIdMiddleware } from './middleware/requestId.js';
 
 // Socket Authentication Middleware
 import { socketAuth, getAuthenticatedUser } from './middleware/socket/socketAuth.js';
@@ -23,22 +28,34 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
 
 // Routes
+import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import gameRoutes from './routes/games.js';
 import adminRoutes from './routes/admin.js';
 import loginRewardsRoutes from './routes/login-rewards.js';
+import verifyRoutes from './routes/verify.js';
+import leaderboardRoutes from './routes/leaderboard.js';
+import responsibleGamingRoutes from './routes/responsible-gaming.js';
 
 // Config
 dotenv.config();
 
+// Validate required environment variables at startup
+const requiredEnvVars = ['DATABASE_URL'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  process.exit(1);
+}
+
 // Add global error handlers
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+  LoggingService.logSystemEvent('uncaught_exception', { error: String(error), stack: error.stack }, 'error');
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  LoggingService.logSystemEvent('unhandled_rejection', { reason: String(reason) }, 'error');
   process.exit(1);
 });
 
@@ -53,16 +70,35 @@ const io = new SocketIOServer(server, {
   }
 });
 
+// Optional Redis adapter for horizontal scaling
+(async () => {
+  try {
+    const pubClient = RedisService.getClient();
+    const subClient = RedisService.getSubscriber();
+    if (pubClient && subClient) {
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      io.adapter(createAdapter(pubClient, subClient));
+      LoggingService.logSystemEvent('redis_adapter_enabled', {});
+    }
+  } catch (err) {
+    LoggingService.logSystemEvent('redis_adapter_skipped', { reason: String(err) });
+  }
+})();
+
 // CORS must be before Better Auth handler
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true
 }));
 
+// Custom auth routes (registered before Better Auth catch-all so they take priority)
+app.use('/api/auth', authRoutes);
+
 // Better Auth handler - must be before express.json()
 app.all("/api/auth/*", toNodeHandler(auth));
 
 // Middleware
+app.use(requestIdMiddleware); // Assign request ID early so all downstream middleware/routes can use it
 app.use(express.json());
 app.use(cookieParser());
 app.use(helmet());
@@ -82,6 +118,31 @@ app.use('/api/users', userRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/rewards', loginRewardsRoutes);
+app.use('/api/verify', verifyRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/responsible-gaming', responsibleGamingRoutes);
+
+// Health check - basic
+app.get('/health', (req: express.Request, res: express.Response) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// Health check - database
+app.get('/api/health/db', async (req: express.Request, res: express.Response) => {
+  try {
+    // Test database connection with a simple query
+    const { db } = await import('./drizzle/db.js');
+    await db.execute(sql`SELECT 1`);
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    res.status(503).json({ status: 'error', database: 'disconnected' });
+  }
+});
 
 // Root route
 app.get('/', (req: express.Request, res: express.Response) => {
@@ -333,21 +394,53 @@ import('./src/socket/liveGamesHandler.js')
 // Graceful shutdown
 process.on('SIGINT', async () => {
   LoggingService.logSystemEvent('sigint_received', {});
+  await RedisService.close();
   await closeDB();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   LoggingService.logSystemEvent('sigterm_received', {});
+  await RedisService.close();
   await closeDB();
   process.exit(0);
 });
 
-// Start server
+// Start server with DB verification
 const PORT = process.env.PORT || 5000; // Default port 5000
-server.listen(PORT, async () => {
-  LoggingService.logSystemEvent('server_started', { port: PORT });
-  await connectDB();
-});
+
+const startServer = async () => {
+  // Verify database connection with retry
+  let dbConnected = false;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await connectDB();
+      dbConnected = true;
+      LoggingService.logSystemEvent('database_connected', { attempt });
+      break;
+    } catch (error) {
+      LoggingService.logSystemEvent('database_connection_failed', {
+        attempt,
+        maxAttempts: 5,
+        error: String(error)
+      }, 'error');
+      if (attempt < 5) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  if (!dbConnected) {
+    LoggingService.logSystemEvent('database_connection_exhausted', {}, 'error');
+    process.exit(1);
+  }
+
+  server.listen(PORT, () => {
+    LoggingService.logSystemEvent('server_started', { port: PORT });
+  });
+};
+
+startServer();
 
 export { io };

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Card from '../../components/ui/Card';
 import { getDifficultyLevel, calculateMultiplier, formatCurrency } from './landminesUtils';
 
 const LandminesBettingPanel = ({ 
@@ -40,18 +39,19 @@ const LandminesBettingPanel = ({
   };
   
   return (
-    <Card title="Landmines">
-      <div className="space-y-4 p-2">
+    <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
+      <h3 className="text-lg font-heading font-bold text-text-primary mb-4">Landmines</h3>
+      <div className="space-y-4">
         {/* Game info section */}
-        <div className="bg-gray-800 p-3 rounded-md">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="bg-bg-elevated rounded-lg p-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className="text-gray-400 text-xs">Base Multiplier</span>
-              <div className="font-bold">{baseMultiplier}x</div>
+              <span className="text-text-muted text-xs">Base Multiplier</span>
+              <div className="font-heading font-bold text-text-primary">{baseMultiplier}x</div>
             </div>
             <div>
-              <span className="text-gray-400 text-xs">Difficulty</span>
-              <div className="font-bold capitalize">{difficultyLevel}</div>
+              <span className="text-text-muted text-xs">Difficulty</span>
+              <div className="font-heading font-bold text-text-primary capitalize">{difficultyLevel}</div>
             </div>
           </div>
         </div>
@@ -62,15 +62,15 @@ const LandminesBettingPanel = ({
           <div className="space-y-4">
             {/* Bet amount selection */}
             <div>
-              <label className="text-gray-300 text-sm">Bet Amount</label>
-              <div className="grid grid-cols-3 gap-2 mt-1">
+              <label htmlFor="landmines-bet-amount" className="text-sm font-medium text-text-secondary">Bet Amount</label>
+              <div className="flex flex-wrap gap-2 mt-2">
                 {betAmounts.map(amount => (
                   <button
                     key={amount}
-                    className={`py-1 rounded-md text-sm font-medium transition
-                      ${betAmount === amount 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer
+                      ${betAmount === amount
+                        ? 'bg-accent-gold text-bg-base'
+                        : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                       }`
                     }
                     onClick={() => setBetAmount(amount)}
@@ -82,28 +82,29 @@ const LandminesBettingPanel = ({
               <div className="mt-2 flex items-center">
                 <input
                   type="number"
+                  id="landmines-bet-amount"
                   min="1"
                   step="1"
                   value={betAmount}
                   onChange={(e) => setBetAmount(Math.max(1, parseInt(e.target.value) || 0))}
-                  className="w-full bg-gray-700 text-white p-2 rounded-md"
+                  className="w-full bg-bg-surface border border-border rounded-lg text-text-primary p-2 focus:ring-2 focus:ring-accent-gold/50 focus:border-accent-gold"
                 />
               </div>
             </div>
             
             {/* Difficulty selection */}
             <div>
-              <label className="text-gray-300 text-sm">Game Difficulty</label>
-              <div className="flex justify-between mb-2">
-                <span className="text-white font-medium">Mines: {mineCount}</span>
-                <span className="text-white font-medium capitalize">{difficultyLevel}</span>
+              <span className="text-sm font-medium text-text-secondary" id="landmines-difficulty-label">Game Difficulty</span>
+              <div className="flex justify-between mb-2 mt-1">
+                <span className="text-text-primary font-medium text-sm">Mines: {mineCount}</span>
+                <span className="text-text-primary font-medium text-sm capitalize">{difficultyLevel}</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="flex gap-2" role="group" aria-labelledby="landmines-difficulty-label">
                 <button
-                  className={`py-2 rounded-md text-sm font-medium transition
-                    ${mineCount === 3 
-                      ? 'bg-green-600 text-white' 
-                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 flex-1 cursor-pointer
+                    ${mineCount === 3
+                      ? 'bg-game-landmines text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                     }`
                   }
                   onClick={() => setMineCount(3)}
@@ -111,10 +112,10 @@ const LandminesBettingPanel = ({
                   Easy
                 </button>
                 <button
-                  className={`py-2 rounded-md text-sm font-medium transition
-                    ${mineCount === 5 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 flex-1 cursor-pointer
+                    ${mineCount === 5
+                      ? 'bg-game-landmines text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                     }`
                   }
                   onClick={() => setMineCount(5)}
@@ -122,10 +123,10 @@ const LandminesBettingPanel = ({
                   Medium
                 </button>
                 <button
-                  className={`py-2 rounded-md text-sm font-medium transition
-                    ${mineCount === 10 
-                      ? 'bg-yellow-600 text-white' 
-                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 flex-1 cursor-pointer
+                    ${mineCount === 10
+                      ? 'bg-game-landmines text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                     }`
                   }
                   onClick={() => setMineCount(10)}
@@ -133,13 +134,13 @@ const LandminesBettingPanel = ({
                   Hard
                 </button>
               </div>
-              
-              <div className="grid grid-cols-2 gap-2 mt-2">
+
+              <div className="flex gap-2 mt-2">
                 <button
-                  className={`py-2 rounded-md text-sm font-medium transition
-                    ${mineCount === 15 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 flex-1 cursor-pointer
+                    ${mineCount === 15
+                      ? 'bg-game-landmines text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                     }`
                   }
                   onClick={() => setMineCount(15)}
@@ -147,10 +148,10 @@ const LandminesBettingPanel = ({
                   Expert
                 </button>
                 <button
-                  className={`py-2 rounded-md text-sm font-medium transition
-                    ${mineCount === 20 
-                      ? 'bg-red-600 text-white' 
-                      : 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-200 flex-1 cursor-pointer
+                    ${mineCount === 20
+                      ? 'bg-game-landmines text-white'
+                      : 'bg-bg-elevated text-text-secondary hover:bg-bg-surface'
                     }`
                   }
                   onClick={() => setMineCount(20)}
@@ -162,10 +163,7 @@ const LandminesBettingPanel = ({
             
             {/* Start button */}
             <button
-              className={`
-                w-full py-3 rounded-md font-bold text-white transition-colors
-                ${isLoading ? 'bg-blue-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
-              `}
+              className="bg-game-landmines hover:bg-orange-600 text-white font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleStartGame}
               disabled={isLoading}
             >
@@ -175,41 +173,40 @@ const LandminesBettingPanel = ({
         ) : (
           // Game active panel (with potential win and cashout)
           <div className="space-y-4">
-            <div className="bg-gray-800 p-3 rounded-md">
+            <div className="bg-bg-elevated rounded-lg p-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <span className="text-gray-400 text-xs">Revealed</span>
-                  <div className="font-bold">{revealedCount}</div>
+                  <span className="text-text-muted text-xs">Revealed</span>
+                  <div className="font-heading font-bold text-text-primary">{revealedCount}</div>
                 </div>
                 <div>
-                  <span className="text-gray-400 text-xs">Diamonds Left</span>
-                  <div className="font-bold">{remainingSafeCells}</div>
+                  <span className="text-text-muted text-xs">Diamonds Left</span>
+                  <div className="font-heading font-bold text-text-primary">{remainingSafeCells}</div>
                 </div>
                 <div>
-                  <span className="text-gray-400 text-xs">Mines</span>
-                  <div className="font-bold">{mines}</div>
+                  <span className="text-text-muted text-xs">Mines</span>
+                  <div className="font-heading font-bold text-text-primary">{mines}</div>
                 </div>
                 <div>
-                  <span className="text-gray-400 text-xs">Bet</span>
-                  <div className="font-bold">{formatCurrency(betAmount)}</div>
+                  <span className="text-text-muted text-xs">Bet</span>
+                  <div className="font-heading font-bold text-text-primary">{formatCurrency(betAmount)}</div>
                 </div>
               </div>
             </div>
-            
+
             {/* Potential win display */}
             <div className="text-center">
-              <div className="text-gray-300 text-sm">Potential Win</div>
-              <div className="text-2xl font-bold text-green-500">
+              <div className="text-text-secondary text-sm">Potential Win</div>
+              <div className="text-2xl font-heading font-bold text-status-success">
                 {formatCurrency(potentialWin)}
               </div>
             </div>
-            
+
             {/* Cashout button */}
             <button
               className={`
-                w-full py-3 rounded-md font-bold transition-colors
-                ${potentialWin === 0 ? 'bg-gray-700 text-gray-400 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}
-                ${isLoading ? 'cursor-not-allowed opacity-80' : ''}
+                font-bold rounded-lg py-3 px-6 w-full cursor-pointer transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
+                ${potentialWin === 0 ? 'bg-bg-elevated text-text-muted' : 'bg-game-landmines hover:bg-orange-600 text-white'}
               `}
               onClick={handleCashOut}
               disabled={potentialWin === 0 || isLoading}
@@ -219,7 +216,7 @@ const LandminesBettingPanel = ({
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 };
 

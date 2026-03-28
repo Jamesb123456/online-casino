@@ -18,30 +18,30 @@ const ApiStatus = ({
   const isLoading = status === 'loading' || loading === true;
   const hasError = status === 'error' || error;
   const dataEmpty = status === 'empty' || isEmpty === true;
-  
+
   if (isLoading) {
     return <Loading message={loadingMessage} />;
   }
-  
+
   if (hasError) {
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+      <div className="p-4 bg-status-error/10 border border-status-error/20 rounded-lg text-status-error">
         <p className="font-medium">{errorMessage}</p>
         {error && typeof error === 'string' && (
-          <p className="text-sm mt-1">{error}</p>
+          <p className="text-sm mt-1 text-status-error/80">{error}</p>
         )}
       </div>
     );
   }
-  
+
   if (dataEmpty) {
     return (
-      <div className="p-4 bg-gray-50 border border-gray-200 rounded-md text-gray-600">
+      <div className="p-4 bg-bg-surface border border-border rounded-lg text-text-muted">
         <p>{emptyMessage}</p>
       </div>
     );
   }
-  
+
   return children;
 };
 

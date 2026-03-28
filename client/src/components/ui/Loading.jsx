@@ -9,12 +9,11 @@ const Loading = ({ size = 'md', message = 'Loading...' }) => {
 
   return (
     <div className="flex flex-col items-center justify-center p-4">
-      <div 
-        className={`${sizeClasses[size]} rounded-full border-t-gray-200 border-r-gray-200 border-b-gray-200 border-l-primary animate-spin`} 
-        style={{ borderLeftColor: '#4F46E5' }}
+      <div
+        className={`${sizeClasses[size]} rounded-full border-accent-gold border-t-transparent animate-spin`}
       />
       {message && (
-        <p className="mt-4 text-gray-600">{message}</p>
+        <p className="mt-4 text-text-secondary">{message}</p>
       )}
     </div>
   );

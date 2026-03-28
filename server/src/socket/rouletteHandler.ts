@@ -5,6 +5,7 @@
  */
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
+import { validateSocketData, roulettePlaceBetSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
 // Store active game sessions
@@ -16,8 +17,9 @@ const connectedUsers = new Map();
 // Store active players with their details (for multiplayer)
 const activePlayers = new Map();
 
-// Store game history (in-memory for now, would be DB in production)
+// Store game history (in-memory, capped to prevent unbounded growth)
 const gameHistory = [];
+const MAX_HISTORY = 100;
 
 // Store current active bets from all players
 const currentBets = [];
@@ -322,15 +324,12 @@ function initRouletteHandlers(io, socket, user) {
    */
   socket.on('roulette:place_bet', async (data, callback) => {
     try {
-      // Validate bet data
-      const { type, value, amount } = data;
-      
-      if (!type || !BET_TYPES[type]) {
+      // Validate bet data with Zod
+      const validated = validateSocketData(roulettePlaceBetSchema, data);
+      const { type, value, amount } = validated;
+
+      if (!BET_TYPES[type]) {
         throw new Error('Invalid bet type');
-      }
-      
-      if (!amount || isNaN(amount) || amount <= 0) {
-        throw new Error('Invalid bet amount');
       }
       
       // Get user session
@@ -555,11 +554,14 @@ function initRouletteHandlers(io, socket, user) {
           profit: totalProfit
         });
         
-        // Add to history
+        // Add to history (capped)
         gameHistory.push(gameResult);
+        if (gameHistory.length > MAX_HISTORY) gameHistory.splice(0, gameHistory.length - MAX_HISTORY);
         session.history.push(gameResult);
-        
+        if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
+
         // Clear current bets and the pending result data
+        currentBets.length = 0;
         session.currentBets = [];
         session.pendingResult = null;
         session.processedBets = null;

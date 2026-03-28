@@ -1,55 +1,50 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
-import { eq, desc, and, gte, lte } from 'drizzle-orm';
+import { eq, desc, and, gte, lte, like } from 'drizzle-orm';
 import { db } from '../db.js';
 import { messages, users } from '../schema.js';
 
 class MessageModel {
   // Create a new message
-  static async create(data) {
+  static async create(data: any) {
     try {
       const result = await db.insert(messages).values(data);
-      
+
       // For MySQL, we need to get the inserted message by insertId
-      if (result.insertId) {
+      if ((result as any).insertId) {
         const [newMessage] = await db
           .select()
           .from(messages)
-          .where(eq(messages.id, result.insertId));
+          .where(eq(messages.id, (result as any).insertId));
         return newMessage;
       }
-      
+
       // Fallback if insertId is not available
-      return { id: result.insertId, ...data };
+      return { id: (result as any).insertId, ...data };
     } catch (error) {
-      throw new Error(`Error creating message: ${error.message}`);
+      throw new Error(`Error creating message: ${(error as Error).message}`);
     }
   }
 
   // Find message by ID
-  static async findById(id) {
+  static async findById(id: any) {
     const result = await db
       .select({
         id: messages.id,
         content: messages.content,
         createdAt: messages.createdAt,
         userId: messages.userId,
-        isSystem: messages.isSystem,
-        user: {
-          id: users.id,
-          username: users.username,
-          avatar: users.avatar
-        }
+        username: users.username,
+        avatar: users.avatar
       })
       .from(messages)
       .leftJoin(users, eq(messages.userId, users.id))
       .where(eq(messages.id, id))
       .limit(1);
-    
+
     return result[0] || null;
   }
 
   // Find message by ID with user details
-  static async findByIdWithUser(id) {
+  static async findByIdWithUser(id: any) {
     try {
       const [message] = await db
         .select({
@@ -66,7 +61,7 @@ class MessageModel {
 
       return message || null;
     } catch (error) {
-      throw new Error(`Error finding message with user: ${error.message}`);
+      throw new Error(`Error finding message with user: ${(error as Error).message}`);
     }
   }
 
@@ -89,12 +84,12 @@ class MessageModel {
 
       return recentMessages;
     } catch (error) {
-      throw new Error(`Error getting recent messages: ${error.message}`);
+      throw new Error(`Error getting recent messages: ${(error as Error).message}`);
     }
   }
 
   // Find messages by user ID
-  static async findByUserId(userId, limit = 50, offset = 0) {
+  static async findByUserId(userId: any, limit = 50, offset = 0) {
     try {
       const userMessages = await db
         .select()
@@ -106,7 +101,7 @@ class MessageModel {
 
       return userMessages;
     } catch (error) {
-      throw new Error(`Error finding messages by user ID: ${error.message}`);
+      throw new Error(`Error finding messages by user ID: ${(error as Error).message}`);
     }
   }
 
@@ -130,12 +125,12 @@ class MessageModel {
 
       return paginatedMessages;
     } catch (error) {
-      throw new Error(`Error finding messages with pagination: ${error.message}`);
+      throw new Error(`Error finding messages with pagination: ${(error as Error).message}`);
     }
   }
 
   // Update message
-  static async update(id, updateData) {
+  static async update(id: any, updateData: any) {
     try {
       await db
         .update(messages)
@@ -150,12 +145,12 @@ class MessageModel {
 
       return updatedMessage;
     } catch (error) {
-      throw new Error(`Error updating message: ${error.message}`);
+      throw new Error(`Error updating message: ${(error as Error).message}`);
     }
   }
 
   // Delete message
-  static async delete(id) {
+  static async delete(id: any) {
     try {
       // Get the message before deleting
       const [messageToDelete] = await db
@@ -173,12 +168,12 @@ class MessageModel {
 
       return messageToDelete;
     } catch (error) {
-      throw new Error(`Error deleting message: ${error.message}`);
+      throw new Error(`Error deleting message: ${(error as Error).message}`);
     }
   }
 
   // Delete messages by user ID (for cleanup)
-  static async deleteByUserId(userId) {
+  static async deleteByUserId(userId: any) {
     try {
       // Get messages before deleting
       const messagesToDelete = await db
@@ -192,7 +187,7 @@ class MessageModel {
 
       return messagesToDelete;
     } catch (error) {
-      throw new Error(`Error deleting messages by user ID: ${error.message}`);
+      throw new Error(`Error deleting messages by user ID: ${(error as Error).message}`);
     }
   }
 
@@ -202,12 +197,12 @@ class MessageModel {
       const result = await db.select({ count: messages.id }).from(messages);
       return result.length;
     } catch (error) {
-      throw new Error(`Error getting message count: ${error.message}`);
+      throw new Error(`Error getting message count: ${(error as Error).message}`);
     }
   }
 
   // Get message count for a specific user
-  static async getUserMessageCount(userId) {
+  static async getUserMessageCount(userId: any) {
     try {
       const result = await db
         .select({ count: messages.id })
@@ -215,14 +210,14 @@ class MessageModel {
         .where(eq(messages.userId, userId));
       return result.length;
     } catch (error) {
-      throw new Error(`Error getting user message count: ${error.message}`);
+      throw new Error(`Error getting user message count: ${(error as Error).message}`);
     }
   }
 
   // Get all messages (with optional limit)
-  static async findAll(limit = null) {
+  static async findAll(limit: any = null) {
     try {
-      let query = db
+      let query: any = db
         .select({
           id: messages.id,
           content: messages.content,
@@ -242,12 +237,12 @@ class MessageModel {
       const allMessages = await query;
       return allMessages;
     } catch (error) {
-      throw new Error(`Error finding all messages: ${error.message}`);
+      throw new Error(`Error finding all messages: ${(error as Error).message}`);
     }
   }
 
   // Search messages by content (simple text search)
-  static async searchByContent(searchTerm, limit = 50) {
+  static async searchByContent(searchTerm: any, limit = 50) {
     try {
       // Note: This is a simple search. For production, consider using full-text search
       const searchResults = await db
@@ -261,40 +256,39 @@ class MessageModel {
         })
         .from(messages)
         .leftJoin(users, eq(messages.userId, users.id))
-        .where(messages.content.includes(searchTerm))
+        .where(like(messages.content, `%${searchTerm}%`))
         .orderBy(desc(messages.createdAt))
         .limit(limit);
 
       return searchResults;
     } catch (error) {
-      throw new Error(`Error searching messages: ${error.message}`);
+      throw new Error(`Error searching messages: ${(error as Error).message}`);
     }
   }
 
-  static async find(conditions = {}) {
-    let query = db
+  static async find(conditions: any = {}) {
+    let query: any = db
       .select({
         id: messages.id,
         content: messages.content,
         createdAt: messages.createdAt,
         userId: messages.userId,
-        isSystem: messages.isSystem,
         username: users.username,
         avatar: users.avatar
       })
       .from(messages)
       .leftJoin(users, eq(messages.userId, users.id));
 
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
+    const whereConditions: any[] = [];
+
+    Object.entries(conditions).forEach(([key, value]: [string, any]) => {
       if (typeof value === 'object' && value.$gte && value.$lte) {
         whereConditions.push(and(
-          gte(messages[key], value.$gte),
-          lte(messages[key], value.$lte)
+          gte((messages as any)[key], value.$gte),
+          lte((messages as any)[key], value.$lte)
         ));
       } else {
-        whereConditions.push(eq(messages[key], value));
+        whereConditions.push(eq((messages as any)[key], value));
       }
     });
 
@@ -305,11 +299,11 @@ class MessageModel {
     return await query.orderBy(desc(messages.createdAt)).limit(50);
   }
 
-  static async findOne(conditions) {
-    const whereConditions = [];
-    
-    Object.entries(conditions).forEach(([key, value]) => {
-      whereConditions.push(eq(messages[key], value));
+  static async findOne(conditions: any) {
+    const whereConditions: any[] = [];
+
+    Object.entries(conditions).forEach(([key, value]: [string, any]) => {
+      whereConditions.push(eq((messages as any)[key], value));
     });
 
     const result = await db
@@ -318,7 +312,6 @@ class MessageModel {
         content: messages.content,
         createdAt: messages.createdAt,
         userId: messages.userId,
-        isSystem: messages.isSystem,
         username: users.username,
         avatar: users.avatar
       })
@@ -326,32 +319,33 @@ class MessageModel {
       .leftJoin(users, eq(messages.userId, users.id))
       .where(and(...whereConditions))
       .limit(1);
-    
+
     return result[0] || null;
   }
 
   // Instance method for save functionality
   async save() {
-    if (this.id) {
+    const self = this as any;
+    if (self.id) {
       await db
         .update(messages)
-        .set(this)
-        .where(eq(messages.id, this.id));
-      
+        .set(self)
+        .where(eq(messages.id, self.id));
+
       // Get the updated message
       const [updatedMessage] = await db
         .select()
         .from(messages)
-        .where(eq(messages.id, this.id));
-      
+        .where(eq(messages.id, self.id));
+
       Object.assign(this, updatedMessage);
       return this;
     } else {
-      const result = await db.insert(messages).values(this);
-      this.id = result.insertId;
+      const result = await db.insert(messages).values(self);
+      self.id = (result as any).insertId;
       return this;
     }
   }
 }
 
-export default MessageModel; 
+export default MessageModel;

@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 /**
  * Chat Socket Handler
  * Manages real-time communication for the global chat feature
@@ -92,7 +91,7 @@ const initChatHandlers = (io) => {
         content: msg.content,
         createdAt: msg.createdAt,
         userId: msg.userId,
-        isSystem: msg.isSystem || false,
+        isSystem: (msg as any).isSystem || false,
         username: msg.username,
         avatar: msg.avatar
       }));

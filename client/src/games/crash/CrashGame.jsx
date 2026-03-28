@@ -4,194 +4,17 @@ import CrashBettingPanel from './CrashBettingPanel';
 import CrashHistory from './CrashHistory';
 import CrashPlayersList from './CrashPlayersList';
 import CrashActiveBets from './CrashActiveBets';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
 import crashSocketService from '../../services/socket/crashSocketService';
 import { AuthContext } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 
 // Don't destructure socket methods as they will lose their 'this' context
 // Access methods directly through the service object instead
 const crashSocket = crashSocketService;
 
-// For development, toggle between mock and real socket
-// In production, this would be determined by environment variables
-const USE_MOCK_SOCKET = false; // Changed to false to use real server implementation
-
-// Mock socket implementation for development
-const useMockSocket = () => {
-  const [gameState, setGameState] = useState({
-    status: 'waiting', // waiting, running, crashed
-    crashPoint: 0,
-    currentMultiplier: 1.00,
-    countdown: 5,
-    players: [],
-  });
-
-  const [history, setHistory] = useState([
-    { id: 1, crashPoint: 1.98, timestamp: new Date().getTime() - 60000 },
-    { id: 2, crashPoint: 3.45, timestamp: new Date().getTime() - 120000 },
-    { id: 3, crashPoint: 1.23, timestamp: new Date().getTime() - 180000 },
-    { id: 4, crashPoint: 7.85, timestamp: new Date().getTime() - 240000 },
-    { id: 5, crashPoint: 1.15, timestamp: new Date().getTime() - 300000 },
-  ]);
-  
-  // Mock multiplayer data
-  const [activePlayers, setActivePlayers] = useState([
-    { id: 'player1', username: 'JohnDoe', avatar: null, joinedAt: Date.now() - 300000 },
-    { id: 'player2', username: 'AliceSmith', avatar: null, joinedAt: Date.now() - 200000 },
-    { id: 'player3', username: 'BobJohnson', avatar: null, joinedAt: Date.now() - 100000 },
-    { id: 'player4', username: 'EveWilliams', avatar: null, joinedAt: Date.now() - 50000 },
-  ]);
-  
-  const [activeBets, setActiveBets] = useState([
-    { userId: 'player1', username: 'JohnDoe', amount: 25, autoCashoutAt: 2.0, cashedOut: false },
-    { userId: 'player2', username: 'AliceSmith', amount: 50, autoCashoutAt: 1.5, cashedOut: false },
-    { userId: 'player3', username: 'BobJohnson', amount: 100, autoCashoutAt: null, cashedOut: false },
-  ]);
-
-  // Mock game cycle
-  useEffect(() => {
-    let intervalId;
-    let startTime;
-    let animationFrameId;
-
-    const startGame = () => {
-      // Generate random crash point between 1.00 and 10.00
-      const crashPoint = 1 + Math.random() * 9;
-      console.log('Game started with crash point:', crashPoint.toFixed(2));
-      
-      setGameState(prev => ({
-        ...prev,
-        status: 'running',
-        crashPoint,
-        currentMultiplier: 1.00
-      }));
-      
-      // Reset bets for new game
-      setActiveBets(prev => prev.map(bet => ({
-        ...bet,
-        cashedOut: false,
-        cashedOutAt: null
-      })));
-
-      startTime = Date.now();
-      
-      // Animation function to update multiplier
-      const updateMultiplier = () => {
-        const elapsedTime = Date.now() - startTime;
-        
-        // Calculate new multiplier (exponential growth)
-        const newMultiplier = 1 + (elapsedTime / 1000);
-        
-        if (newMultiplier < crashPoint) {
-          setGameState(prev => ({
-            ...prev,
-            currentMultiplier: parseFloat(newMultiplier.toFixed(2))
-          }));
-          
-          // Process auto cashouts for mock players
-          processAutoCashouts(newMultiplier);
-          
-          animationFrameId = requestAnimationFrame(updateMultiplier);
-        } else {
-          // Game crashed
-          setGameState(prev => ({
-            ...prev,
-            status: 'crashed',
-            currentMultiplier: crashPoint
-          }));
-          
-          // Add to history
-          setHistory(prev => [
-            { 
-              id: Date.now(), 
-              crashPoint: parseFloat(crashPoint.toFixed(2)), 
-              timestamp: Date.now() 
-            },
-            ...prev.slice(0, 9) // Keep last 10 items
-          ]);
-          
-          // Wait 3 seconds then start countdown for next game
-          setTimeout(startCountdown, 3000);
-        }
-      };
-      
-      animationFrameId = requestAnimationFrame(updateMultiplier);
-    };
-    
-    // Process auto cashouts for mock players
-    const processAutoCashouts = (currentMultiplier) => {
-      setActiveBets(prev => {
-        return prev.map(bet => {
-          if (!bet.cashedOut && bet.autoCashoutAt && currentMultiplier >= bet.autoCashoutAt) {
-            const profit = bet.amount * bet.autoCashoutAt - bet.amount;
-            return {
-              ...bet,
-              cashedOut: true,
-              cashedOutAt: bet.autoCashoutAt,
-              profit: profit
-            };
-          }
-          return bet;
-        });
-      });
-    };
-
-    const startCountdown = () => {
-      setGameState(prev => ({
-        ...prev,
-        status: 'waiting',
-        countdown: 5
-      }));
-      
-      intervalId = setInterval(() => {
-        setGameState(prev => {
-          if (prev.countdown <= 1) {
-            clearInterval(intervalId);
-            startGame();
-            return {...prev, countdown: 0};
-          }
-          return {...prev, countdown: prev.countdown - 1};
-        });
-      }, 1000);
-    };
-
-    // Start initial countdown
-    startCountdown();
-
-    return () => {
-      clearInterval(intervalId);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
-  const mockPlaceBet = useCallback((betData) => {
-    console.log('Mock place bet:', betData);
-    return Promise.resolve({ success: true, betId: Date.now() });
-  }, []);
-
-  const mockCashOut = useCallback((data) => {
-    console.log('Mock cash out:', data);
-    return Promise.resolve({ 
-      success: true, 
-      multiplier: gameState.currentMultiplier,
-      winnings: data.amount * gameState.currentMultiplier
-    });
-  }, [gameState.currentMultiplier]);
-
-  return { 
-    gameState, 
-    history,
-    activePlayers,
-    activeBets,
-    placeBet: mockPlaceBet,
-    cashOut: mockCashOut
-  };
-};
-
-// Real socket implementation
-const useRealSocket = () => {
+// Socket hook for real-time game state
+const useCrashSocket = () => {
   const [gameState, setGameState] = useState({
     status: 'connecting', // connecting, waiting, running, crashed
     crashPoint: 0,
@@ -400,42 +223,27 @@ const useRealSocket = () => {
 };
 
 const CrashGame = () => {
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated, loading } = useContext(AuthContext);
+  const toast = useToast();
   const navigate = useNavigate();
   const [connectionError, setConnectionError] = useState(null);
-  
-  // Check authentication status on component mount
+
+  // Check authentication status after auth state has loaded
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       console.log('User not authenticated, redirecting to login');
       navigate('/login', { state: { from: '/games/crash', message: 'You must be logged in to play games.' } });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, loading, navigate]);
   
-  // Use either mock or real socket based on flag
-  let gameState, history, activePlayers = [], activeBets = [], socketPlaceBet, socketCashOut;
-  
-  if (USE_MOCK_SOCKET) {
-    // Use mock implementation
-    const mockSocketData = useMockSocket();
-    gameState = mockSocketData.gameState;
-    history = mockSocketData.history;
-    activePlayers = mockSocketData.activePlayers || [];
-    activeBets = mockSocketData.activeBets || [];
-    socketPlaceBet = mockSocketData.placeBet;
-    socketCashOut = mockSocketData.cashOut;
-  } else {
-    // Use real implementation with direct references to crashSocket methods
-    const realSocketData = useRealSocket();
-    gameState = realSocketData.gameState;
-    history = realSocketData.history;
-    activePlayers = realSocketData.activePlayers || [];
-    activeBets = realSocketData.activeBets || [];
-    
-    // Use the newly implemented socket methods directly - no need to bind
-    socketPlaceBet = (data, callback) => crashSocket.placeBet(data, callback);
-    socketCashOut = (data, callback) => crashSocket.cashOut(data, callback);
-  }
+  // Use real socket implementation
+  const socketData = useCrashSocket();
+  const gameState = socketData.gameState;
+  const history = socketData.history;
+  const activePlayers = socketData.activePlayers || [];
+  const activeBets = socketData.activeBets || [];
+  const socketPlaceBet = (data, callback) => crashSocket.placeBet(data, callback);
+  const socketCashOut = (data, callback) => crashSocket.cashOut(data, callback);
   
   // Listen for authentication errors
   useEffect(() => {
@@ -488,7 +296,7 @@ const CrashGame = () => {
       } catch (error) {
         console.error('Error placing bet:', error);
         setActiveBet(null);
-        // TODO: Show error toast/notification
+        toast.error(error.message || 'Failed to place bet. Please try again.');
       }
     }
   };
@@ -529,7 +337,7 @@ const CrashGame = () => {
           ...prev,
           status: 'placed',
         }));
-        // TODO: Show error toast/notification
+        toast.error(error.message || 'Failed to cash out. Please try again.');
       }
     }
   };
@@ -653,28 +461,28 @@ const CrashGame = () => {
     <div className="flex flex-col lg:flex-row gap-6">
       <div className="lg:w-8/12 space-y-4">
         <div className="relative">
-          <Card className="p-0 overflow-hidden">
+          <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
             <canvas
               ref={canvasRef}
               width={800}
               height={400}
-              className="w-full bg-gray-900"
+              className="w-full bg-bg-base rounded-lg overflow-hidden"
             ></canvas>
             
             {/* Game status overlay */}
-            <div className="absolute top-4 left-4 flex gap-2">
+            <div className="absolute top-4 left-4 flex items-center gap-2">
               <span className={`
-                w-3 h-3 rounded-full ${
-                  gameState.status === 'connecting' ? 'bg-blue-400 animate-pulse' :
-                  gameState.status === 'waiting' ? 'bg-yellow-400' :
-                  gameState.status === 'running' ? 'bg-green-500 animate-pulse' : 
-                  'bg-red-500'
+                w-2 h-2 rounded-full ${
+                  gameState.status === 'connecting' ? 'bg-status-info' :
+                  gameState.status === 'waiting' ? 'bg-accent-gold' :
+                  gameState.status === 'running' ? 'bg-status-success' :
+                  'bg-status-error'
                 }
               `}></span>
-              <span className="text-xs font-bold text-white">
+              <span className="text-xs font-heading font-bold text-text-primary">
                 {gameState.status === 'connecting' ? 'CONNECTING' :
                  gameState.status === 'waiting' ? 'STARTING' :
-                 gameState.status === 'running' ? 'LIVE' : 
+                 gameState.status === 'running' ? 'LIVE' :
                  'CRASHED'}
               </span>
             </div>
@@ -683,16 +491,22 @@ const CrashGame = () => {
             {gameResult && (
               <div className={`
                 absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-                px-6 py-3 rounded-lg font-bold text-white text-2xl
-                ${gameResult.type === 'win' ? 'bg-green-600' : 'bg-red-600'}
+                rounded-xl p-6 shadow-lg backdrop-blur-xl
+                ${gameResult.type === 'win'
+                  ? 'bg-bg-card/95 border border-status-success/30'
+                  : 'bg-bg-card/95 border border-status-error/30'}
               `}>
-                {gameResult.type === 'win' 
-                  ? `+${gameResult.profit.toFixed(2)} @ ${formatMultiplier(gameResult.multiplier)}` 
-                  : `Crashed @ ${formatMultiplier(gameState.crashPoint)}`
-                }
+                <div className={`text-3xl font-heading font-bold ${
+                  gameResult.type === 'win' ? 'text-status-success' : 'text-status-error'
+                }`}>
+                  {gameResult.type === 'win'
+                    ? `+${gameResult.profit.toFixed(2)} @ ${formatMultiplier(gameResult.multiplier)}`
+                    : `Crashed @ ${formatMultiplier(gameState.crashPoint)}`
+                  }
+                </div>
               </div>
             )}
-          </Card>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

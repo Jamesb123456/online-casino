@@ -1,11 +1,12 @@
 import { io } from 'socket.io-client';
+import { getSocketBaseUrl } from './socketUtils';
 
 class CrashSocketService {
   constructor() {
     this.socket = null;
     this.isConnected = false;
     this.namespace = '/crash';
-    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'; // Using port 5000 to match server
+    this.apiUrl = getSocketBaseUrl();
     this.currentUser = null;
   }
   
@@ -23,8 +24,6 @@ class CrashSocketService {
    */
   connect(userInfo = null) {
     if (!this.socket) {
-      console.log(`Connecting to crash socket at ${this.apiUrl}${this.namespace}`);
-
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
         autoConnect: true,
@@ -36,26 +35,20 @@ class CrashSocketService {
 
       // Socket connection event listeners
       this.socket.on('connect', () => {
-        console.log('Connected to crash socket server');
         this.isConnected = true;
       });
 
       this.socket.on('disconnect', (reason) => {
-        console.log('Disconnected from crash socket server:', reason);
         this.isConnected = false;
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('Crash socket connection error:', error);
-        // Emit a custom event for authentication errors
         if (error.message && error.message.includes('Authentication')) {
           this.socket.emit('authenticationError', error.message);
         }
       });
 
-      this.socket.on('error', (error) => {
-        console.error('Crash socket error:', error);
-      });
+      this.socket.on('error', () => {});
     }
   }
 
@@ -81,9 +74,7 @@ class CrashSocketService {
       }
       
       if (!this.isConnected) {
-        console.log('Connecting to crash game...');
         this.socket.on('connect', () => {
-          console.log('Connected, joining crash game room');
           resolve();
         });
         

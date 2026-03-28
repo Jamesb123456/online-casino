@@ -1,4 +1,3 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import express, { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { authenticate as auth } from '../middleware/auth.js';
@@ -21,7 +20,7 @@ router.get('/me', auth, async (req: AuthenticatedRequest, res: Response) => {
     }
 
     // Use balance from user record directly (same as auth routes)
-    const currentBalance = parseFloat(user.balance || 0);
+    const currentBalance = parseFloat(String(user.balance || 0));
 
     res.json({
       id: user.id,
@@ -75,7 +74,7 @@ router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const updateData = {};
+    const updateData: any = {};
 
     // Update password if provided
     if (newPassword && currentPassword) {
@@ -136,7 +135,7 @@ router.get('/transactions', auth, async (req: AuthenticatedRequest, res: Respons
     const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
 
     // Build filter
-    const filter = { userId: req.user.userId };
+    const filter: any = { userId: req.user.userId };
 
     // Validate type against allowlist
     const allowedTypes = ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus', 'login_reward'];

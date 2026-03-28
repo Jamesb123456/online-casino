@@ -1,7 +1,7 @@
-// @ts-nocheck -- TODO: fix Drizzle/Express type errors and remove this directive
 import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
 import db from '../db.js';
 import { gameStats } from '../schema.js';
+import LoggingService from '../../src/services/loggingService.js';
 
 class GameStatModel {
   // Create a new game stat
@@ -25,11 +25,11 @@ class GameStatModel {
     try {
       const [stat] = await db.select().from(gameStats).where(eq(gameStats.id, id));
       if (stat && stat.dailyStats) {
-        stat.dailyStats = JSON.parse(stat.dailyStats);
+        (stat as any).dailyStats = JSON.parse(stat.dailyStats as any);
       }
       return stat || null;
     } catch (error) {
-      throw new Error(`Error finding game stat by ID: ${error.message}`);
+      throw new Error(`Error finding game stat by ID: ${(error as Error).message}`);
     }
   }
 
@@ -38,11 +38,11 @@ class GameStatModel {
     try {
       const [stat] = await db.select().from(gameStats).where(eq(gameStats.gameType, gameType));
       if (stat && stat.dailyStats) {
-        stat.dailyStats = JSON.parse(stat.dailyStats);
+        (stat as any).dailyStats = JSON.parse(stat.dailyStats as any);
       }
       return stat || null;
     } catch (error) {
-      throw new Error(`Error finding game stat by game type: ${error.message}`);
+      throw new Error(`Error finding game stat by game type: ${(error as Error).message}`);
     }
   }
 
@@ -73,13 +73,13 @@ class GameStatModel {
       
       if (existingStat) {
         // Get existing daily stats
-        const dailyStats = existingStat.dailyStats || [];
-        
+        const dailyStats: any[] = existingStat.dailyStats as any[] || [];
+
         // Find or create today's daily stats
         const todayStatsIndex = dailyStats.findIndex(
-          stats => new Date(stats.date).toDateString() === today.toDateString()
+          (stats: any) => new Date(stats.date).toDateString() === today.toDateString()
         );
-        
+
         if (todayStatsIndex !== -1) {
           // Update today's stats
           dailyStats[todayStatsIndex].gamesPlayed += 1;
@@ -96,10 +96,10 @@ class GameStatModel {
             profit
           });
         }
-        
+
         // Keep only the last 30 days of daily stats
         if (dailyStats.length > 30) {
-          dailyStats.sort((a, b) => new Date(b.date) - new Date(a.date));
+          dailyStats.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
           dailyStats.splice(30);
         }
         
@@ -135,7 +135,7 @@ class GameStatModel {
         });
       }
     } catch (error) {
-      console.error(`Error updating game stats for ${gameType}:`, error);
+      LoggingService.logger.error(`Error updating game stats for ${gameType}`, { error: String(error) });
       throw new Error(`Error updating game stats: ${error.message}`);
     }
   }
@@ -223,9 +223,9 @@ class GameStatModel {
 
       allStats.forEach(stat => {
         totalGames += stat.totalGamesPlayed;
-        totalBets += parseFloat(stat.totalBetsAmount || 0);
-        totalWinnings += parseFloat(stat.totalWinningsAmount || 0);
-        totalProfit += parseFloat(stat.houseProfit || 0);
+        totalBets += parseFloat(String(stat.totalBetsAmount || '0'));
+        totalWinnings += parseFloat(String(stat.totalWinningsAmount || '0'));
+        totalProfit += parseFloat(String(stat.houseProfit || '0'));
       });
 
       return {
@@ -252,12 +252,12 @@ class GameStatModel {
 
       // Sort by date and return the most recent days
       const sortedStats = stat.dailyStats
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, days);
 
       return sortedStats;
     } catch (error) {
-      throw new Error(`Error getting daily stats: ${error.message}`);
+      throw new Error(`Error getting daily stats: ${(error as Error).message}`);
     }
   }
 }

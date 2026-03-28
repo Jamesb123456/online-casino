@@ -42,16 +42,16 @@ const LandminesBoard = ({
   // - hidden: default background
   const getCellClass = (row, col) => {
     if (gameOver && displayGrid[row][col]) {
-      return 'bg-red-600 hover:bg-red-700';
+      return 'bg-status-error/80 hover:bg-status-error';
     }
-    
+
     if (isCellRevealed(row, col)) {
-      return displayGrid[row][col] 
-        ? 'bg-red-600 hover:bg-red-700' 
-        : 'bg-green-600 hover:bg-green-700';
+      return displayGrid[row][col]
+        ? 'bg-status-error/80 hover:bg-status-error'
+        : 'bg-status-success/80 hover:bg-status-success';
     }
-    
-    return 'bg-gray-700 hover:bg-gray-600';
+
+    return 'bg-bg-surface hover:bg-bg-elevated border border-border';
   };
   
   return (

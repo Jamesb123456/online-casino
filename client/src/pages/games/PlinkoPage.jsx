@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import PlinkoGame from '../../games/plinko/PlinkoGame';
 
 const PlinkoPage = () => {
+  useEffect(() => {
+    document.title = 'Plinko | Platinum Casino';
+  }, []);
   return (
     <MainLayout>
       <div className="mb-8">

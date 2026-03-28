@@ -5,11 +5,13 @@ import RoulettePlayersList from './RoulettePlayersList';
 import RouletteActiveBets from './RouletteActiveBets';
 import Badge from '../../components/ui/Badge';
 import { AuthContext } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import rouletteSocketService from '../../services/socket/rouletteSocketService';
 import { BET_TYPES } from './rouletteUtils';
 
 const RouletteGame = () => {
   const { user } = useContext(AuthContext);
+  const toast = useToast();
 
   // Game state
   const [balance, setBalance] = useState(1000);
@@ -30,6 +32,8 @@ const RouletteGame = () => {
 
   // Socket connection effect
   useEffect(() => {
+    const unsubs = [];
+
     const connectSocket = async () => {
       try {
         // Use authenticated user for multiplayer identity
@@ -51,39 +55,34 @@ const RouletteGame = () => {
         }
 
         // Set up multiplayer event listeners
-        rouletteSocketService.onActivePlayers((players) => {
+        unsubs.push(rouletteSocketService.onActivePlayers((players) => {
           setActivePlayers(players);
-        });
+        }));
 
-        rouletteSocketService.onPlayerJoined((player) => {
+        unsubs.push(rouletteSocketService.onPlayerJoined((player) => {
           setActivePlayers(prev => [...prev, player]);
-        });
+        }));
 
-        rouletteSocketService.onPlayerLeft((player) => {
+        unsubs.push(rouletteSocketService.onPlayerLeft((player) => {
           setActivePlayers(prev => prev.filter(p => p.id !== player.id));
-        });
+        }));
 
-        rouletteSocketService.onCurrentBets((bets) => {
+        unsubs.push(rouletteSocketService.onCurrentBets((bets) => {
           setMultiplayerBets(bets);
-        });
+        }));
 
-        rouletteSocketService.onPlayerBet((bet) => {
+        unsubs.push(rouletteSocketService.onPlayerBet((bet) => {
           setMultiplayerBets(prev => [...prev, bet]);
-        });
+        }));
 
-        // Remove any existing listeners first to prevent duplicates
-        rouletteSocketService.off('roulette:spin_started');
-        rouletteSocketService.off('roulette:spin_result');
-        rouletteSocketService.off('roulette:round_complete');
-
-        rouletteSocketService.onSpinStarted((data) => {
+        unsubs.push(rouletteSocketService.onSpinStarted((data) => {
           setIsSpinning(true);
           setSpinPhase('start');
           setSpinData(data.spinData);
           setShowResult(false);
-        });
+        }));
 
-        rouletteSocketService.onSpinResult((data) => {
+        unsubs.push(rouletteSocketService.onSpinResult((data) => {
           setSpinPhase('result');
           setWinningNumber(data.winningNumber);
           setBalance(prevBalance => prevBalance + data.totalProfit);
@@ -105,11 +104,11 @@ const RouletteGame = () => {
           setTimeout(() => {
             setShowResult(true);
           }, 1000);
-        });
+        }));
 
-        rouletteSocketService.onRoundComplete(() => {
+        unsubs.push(rouletteSocketService.onRoundComplete(() => {
           setIsSpinning(false);
-        });
+        }));
 
       } catch (error) {
         console.error('Error connecting to roulette game:', error);
@@ -120,6 +119,7 @@ const RouletteGame = () => {
 
     // Cleanup on unmount
     return () => {
+      unsubs.forEach(unsub => unsub());
       rouletteSocketService.disconnect();
       setIsConnected(false);
     };
@@ -131,7 +131,7 @@ const RouletteGame = () => {
     
     // Validate bet amount doesn't exceed balance
     if (betAmount > balance) {
-      alert('Insufficient balance');
+      toast.error('Insufficient balance');
       return;
     }
     
@@ -154,7 +154,7 @@ const RouletteGame = () => {
         setBalance(response.balance);
         setCurrentBets(response.currentBets);
       } else {
-        alert(response.error || 'Failed to place bet');
+        toast.error(response.error || 'Failed to place bet');
       }
     });
   }, [isSpinning, betAmount, balance]);
@@ -166,26 +166,26 @@ const RouletteGame = () => {
       
       // Check if there are active bets
       if (currentBets.length === 0) {
-        alert('Place at least one bet before spinning');
+        toast.warning('Place at least one bet before spinning');
         return;
       }
       
       try {
         await rouletteSocketService.ensureConnected();
       } catch (connError) {
-        alert('Cannot connect to game server. Please refresh the page.');
+        toast.error('Cannot connect to game server. Please refresh the page.');
         return;
       }
 
       const response = await rouletteSocketService.spin(currentBets);
 
       if (!response.success) {
-        alert('Error spinning the wheel. Please try again.');
+        toast.error('Error spinning the wheel. Please try again.');
         return;
       }
     } catch (error) {
       console.error('Error spinning wheel:', error);
-      alert(error.message);
+      toast.error(error.message || 'An unexpected error occurred.');
       setIsSpinning(false);
     }      
   };
@@ -297,7 +297,7 @@ const RouletteGame = () => {
         
         {/* Last result details */}
         {gameResult && !isSpinning && (
-          <div className="bg-bg-card border border-border rounded-xl p-5 mt-4">
+          <div role="alert" className="bg-bg-card border border-border rounded-xl p-5 mt-4">
             <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Last Spin Results</h3>
             <div>
               <div className="flex justify-between mb-2">

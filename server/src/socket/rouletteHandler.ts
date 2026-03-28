@@ -21,8 +21,8 @@ const activePlayers = new Map();
 const gameHistory = [];
 const MAX_HISTORY = 100;
 
-// Store current active bets from all players
-const currentBets = [];
+// Note: Per-player bets are stored in session.currentBets (inside activeSessions)
+// to avoid cross-player contamination from a shared global array.
 
 /**
  * Standard roulette numbers and their configurations
@@ -355,11 +355,8 @@ function initRouletteHandlers(io, socket, user) {
       // Deduct bet amount from balance
       session.balance -= amount;
       
-      // Add bet to current bets
+      // Add bet to session's current bets (per-player, not shared globally)
       session.currentBets.push(bet);
-      
-      // Add to global currentBets for multiplayer
-      currentBets.push(bet);
       
       // Broadcast bet to all players in the room
       io.to('roulette').emit('roulette:playerBet', bet);
@@ -560,8 +557,7 @@ function initRouletteHandlers(io, socket, user) {
         session.history.push(gameResult);
         if (session.history.length > MAX_HISTORY) session.history.splice(0, session.history.length - MAX_HISTORY);
 
-        // Clear current bets and the pending result data
-        currentBets.length = 0;
+        // Clear session bets and the pending result data
         session.currentBets = [];
         session.pendingResult = null;
         session.processedBets = null;

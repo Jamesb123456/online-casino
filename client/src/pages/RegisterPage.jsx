@@ -1,9 +1,13 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import { AuthContext } from '../contexts/AuthContext';
 
 const RegisterPage = () => {
+  useEffect(() => {
+    document.title = 'Register | Platinum Casino';
+  }, []);
+
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -40,11 +44,8 @@ const RegisterPage = () => {
         password: formData.password
       };
 
-      console.log('Registration attempt with:', registrationData);
-
       // Call the register function from AuthContext
       const user = await register(registrationData);
-      console.log('Registration successful:', user);
 
       // Redirect to home page after successful registration
       navigate('/');
@@ -75,7 +76,7 @@ const RegisterPage = () => {
 
             {/* Error message */}
             {error && (
-              <div className="mx-6 mb-4 bg-status-error/10 border border-status-error/20 text-status-error p-3 rounded-lg text-sm flex items-center">
+              <div role="alert" className="mx-6 mb-4 bg-status-error/10 border border-status-error/20 text-status-error p-3 rounded-lg text-sm flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>

@@ -39,7 +39,7 @@ const BlackjackTable = ({
     }
 
     return (
-      <div className={`text-center my-4 rounded-xl p-4 backdrop-blur-xl bg-bg-card/95 border ${
+      <div role="alert" className={`text-center my-4 rounded-xl p-4 backdrop-blur-xl bg-bg-card/95 border ${
         result === 'player' ? 'border-status-success/30' : result === 'dealer' ? 'border-status-error/30' : 'border-accent-gold/30'
       }`}>
         <div className={`text-3xl font-heading font-bold ${resultStyle}`}>

@@ -8,6 +8,7 @@ import { eq, desc } from 'drizzle-orm';
 import db from '../../drizzle/db.js';
 import { gameSessions, users } from '../../drizzle/schema.js';
 import LoggingService from '../services/loggingService.js';
+import { socketAuth } from '../../middleware/socket/socketAuth.js';
 
 const GAME_TYPES = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'landmines'];
 
@@ -17,6 +18,7 @@ const GAME_TYPES = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'landmi
  */
 const initLiveGamesHandlers = (io) => {
   const liveNsp = io.of('/live-games');
+  liveNsp.use(socketAuth);
 
   liveNsp.on('connection', (socket) => {
     socket.on('get_live_games', async () => {

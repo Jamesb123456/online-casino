@@ -69,7 +69,7 @@ class WheelSocketService {
         return reject(new Error('Socket not connected'));
       }
 
-      this.socket.emit('wheel:placeBet', betData, (response) => {
+      this.socket.emit('wheel:place_bet', betData, (response) => {
         if (response && response.success) {
           resolve(response);
         } else {
@@ -84,116 +84,141 @@ class WheelSocketService {
    * @param {Function} callback 
    */
   onCountdown(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('countdown', callback);
+    return () => { if (this.socket) this.socket.off('countdown', callback); };
   }
 
   /**
    * Listen for game starting event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onGameStarting(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('gameStarting', callback);
+    return () => { if (this.socket) this.socket.off('gameStarting', callback); };
   }
 
   /**
    * Listen for wheel spinning event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onWheelSpinning(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheelSpinning', callback);
+    return () => { if (this.socket) this.socket.off('wheelSpinning', callback); };
   }
 
   /**
    * Listen for game result event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onGameResult(callback) {
-    if (!this.socket) return;
-    this.socket.on('gameResult', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('wheel:game_result', callback);
+    return () => { if (this.socket) this.socket.off('wheel:game_result', callback); };
   }
 
   /**
    * Listen for player bets event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPlayerBets(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('playerBets', callback);
+    return () => { if (this.socket) this.socket.off('playerBets', callback); };
   }
 
   /**
    * Listen for balance update event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onBalanceUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('balanceUpdate', callback);
+    return () => { if (this.socket) this.socket.off('balanceUpdate', callback); };
   }
 
   /**
    * Listen for history update
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onHistoryUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('historyUpdate', callback);
+    return () => { if (this.socket) this.socket.off('historyUpdate', callback); };
   }
 
   /**
    * Listen for error event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onError(callback) {
-    if (!this.socket) return;
-    this.socket.on('error', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('wheel:error', callback);
+    return () => { if (this.socket) this.socket.off('wheel:error', callback); };
   }
-  
+
   /**
    * Listen for active players list update
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onActivePlayers(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheel:activePlayers', callback);
+    return () => { if (this.socket) this.socket.off('wheel:activePlayers', callback); };
   }
-  
+
   /**
    * Listen for player joined event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPlayerJoined(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheel:playerJoined', callback);
+    return () => { if (this.socket) this.socket.off('wheel:playerJoined', callback); };
   }
-  
+
   /**
    * Listen for player left event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPlayerLeft(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheel:playerLeft', callback);
+    return () => { if (this.socket) this.socket.off('wheel:playerLeft', callback); };
   }
-  
+
   /**
    * Listen for player bet event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPlayerBet(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheel:playerBet', callback);
+    return () => { if (this.socket) this.socket.off('wheel:playerBet', callback); };
   }
-  
+
   /**
    * Listen for current bets update
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onCurrentBets(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('wheel:currentBets', callback);
+    return () => { if (this.socket) this.socket.off('wheel:currentBets', callback); };
   }
 }
 

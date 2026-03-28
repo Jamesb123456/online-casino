@@ -70,7 +70,7 @@ router.get('/', authenticate, (req, res) => {
 const betLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 
 const betSchema = z.object({
-  betAmount: z.number().positive()
+  betAmount: z.number().positive().max(10000, 'Bet amount cannot exceed 10,000')
 });
 
 const gameParamSchema = z.object({

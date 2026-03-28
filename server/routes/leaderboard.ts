@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express, { Request, Response } from 'express';
 import { db } from '../drizzle/db.js';
 import { sql } from 'drizzle-orm';

@@ -39,9 +39,9 @@ const SidebarNav = () => {
       <div className="py-6 space-y-8">
         {/* Casino Games section */}
         <div>
-          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+          <p className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted" aria-hidden="true">
             Casino Games
-          </h2>
+          </p>
           <nav className="space-y-0.5" aria-label="Casino games">
             {casinoGames.map((game) => (
               <NavLink key={game.path} to={game.path} className={linkClass}>
@@ -57,9 +57,9 @@ const SidebarNav = () => {
 
         {/* Account section */}
         <div>
-          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+          <p className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted" aria-hidden="true">
             Account
-          </h2>
+          </p>
           <nav className="space-y-0.5" aria-label="Account">
             {accountLinks.map((link) => (
               <NavLink key={link.path} to={link.path} className={linkClass}>
@@ -72,9 +72,9 @@ const SidebarNav = () => {
 
         {/* Support section */}
         <div>
-          <h2 className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted">
+          <p className="px-4 mb-3 text-xs font-heading uppercase tracking-wider text-text-muted" aria-hidden="true">
             Support
-          </h2>
+          </p>
           <nav className="space-y-0.5" aria-label="Support">
             {supportLinks.map((link) => (
               <NavLink key={link.path} to={link.path} className={linkClass}>

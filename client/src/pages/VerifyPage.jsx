@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MainLayout from '../layouts/MainLayout';
 import { api } from '../services/api';
 
 const VerifyPage = () => {
+  useEffect(() => {
+    document.title = 'Verify | Platinum Casino';
+  }, []);
   const [serverSeed, setServerSeed] = useState('');
   const [serverSeedHash, setServerSeedHash] = useState('');
   const [clientSeed, setClientSeed] = useState('');

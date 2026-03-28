@@ -25,21 +25,23 @@ const BlackjackGame = () => {
     if (user) {
       setBalance(user.balance);
     }
-    
+
     // Connect to socket
     blackjackSocketService.connect();
-    
-    // Event listeners
-    blackjackSocketService.onGameStarted(handleGameStarted);
-    blackjackSocketService.onCardDealt(handleCardDealt);
-    blackjackSocketService.onPlayerTurn(handlePlayerTurn);
-    blackjackSocketService.onDealerTurn(handleDealerTurn);
-    blackjackSocketService.onGameResult(handleGameResult);
-    blackjackSocketService.onBalanceUpdate(handleBalanceUpdate);
-    blackjackSocketService.onError(handleError);
-    
+
+    // Event listeners - collect unsubscribe functions
+    const unsubs = [];
+    unsubs.push(blackjackSocketService.onGameStarted(handleGameStarted));
+    unsubs.push(blackjackSocketService.onCardDealt(handleCardDealt));
+    unsubs.push(blackjackSocketService.onPlayerTurn(handlePlayerTurn));
+    unsubs.push(blackjackSocketService.onDealerTurn(handleDealerTurn));
+    unsubs.push(blackjackSocketService.onGameResult(handleGameResult));
+    unsubs.push(blackjackSocketService.onBalanceUpdate(handleBalanceUpdate));
+    unsubs.push(blackjackSocketService.onError(handleError));
+
     return () => {
-      // Clean up on component unmount
+      // Clean up individual listeners, then disconnect
+      unsubs.forEach(unsub => unsub());
       blackjackSocketService.disconnect();
     };
   }, [user]);

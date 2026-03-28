@@ -450,6 +450,8 @@ const PlinkoBoard = ({
       ref={canvasRef}
       width={600}
       height={500}
+      role="img"
+      aria-label="Plinko game board with pins and multiplier buckets"
       className="w-full bg-bg-base rounded-lg overflow-hidden"
     />
   );

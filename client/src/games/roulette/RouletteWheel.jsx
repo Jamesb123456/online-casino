@@ -321,6 +321,8 @@ const RouletteWheel = ({
         ref={canvasRef}
         width={dimensions.width}
         height={dimensions.height}
+        role="img"
+        aria-label="Roulette wheel with numbered pockets"
         className="mx-auto bg-bg-base rounded-full shadow-card"
       />
       {winningNumber !== null && showResult && !spinning && (

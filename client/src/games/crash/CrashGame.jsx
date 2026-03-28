@@ -14,7 +14,7 @@ import { useNavigate } from 'react-router-dom';
 const crashSocket = crashSocketService;
 
 // Socket hook for real-time game state
-const useCrashSocket = () => {
+const useCrashSocket = (authUser) => {
   const [gameState, setGameState] = useState({
     status: 'connecting', // connecting, waiting, running, crashed
     crashPoint: 0,
@@ -29,14 +29,13 @@ const useCrashSocket = () => {
 
   // Initialize socket and subscribe to events
   useEffect(() => {
-    // Initialize Socket.IO connection with user info
-    // In a real app, this would come from authentication
+    // Initialize Socket.IO connection with authenticated user info
     const userInfo = {
-      userId: `user_${Math.floor(Math.random() * 10000)}`,
-      username: `Player_${Math.floor(Math.random() * 10000)}`,
-      avatar: null
+      userId: authUser?.id || 'guest',
+      username: authUser?.username || 'Guest',
+      avatar: authUser?.avatar || null
     };
-    
+
     // Initialize Socket.IO connection
     crashSocketService.setUser(userInfo);
     crashSocketService.connect(userInfo);
@@ -46,7 +45,6 @@ const useCrashSocket = () => {
 
     // Subscribe to game state updates
     const unsubGameState = crashSocket.onGameStateChange((state) => {
-      console.log('Game state update:', state);
       setGameState(state);
       
       // If we're getting initial state with history
@@ -108,31 +106,26 @@ const useCrashSocket = () => {
     
     // Subscribe to active players updates
     const unsubActivePlayers = crashSocket.onActivePlayers((players) => {
-      console.log('Active players update:', players);
       setActivePlayers(players);
     });
     
     // Subscribe to player joined events
     const unsubPlayerJoined = crashSocket.onPlayerJoined((player) => {
-      console.log('Player joined:', player);
       setActivePlayers(prev => [...prev, player]);
     });
     
     // Subscribe to player left events
     const unsubPlayerLeft = crashSocket.onPlayerLeft((player) => {
-      console.log('Player left:', player);
       setActivePlayers(prev => prev.filter(p => p.id !== player.id));
     });
     
     // Subscribe to current bets updates
     const unsubCurrentBets = crashSocket.onCurrentBets((bets) => {
-      console.log('Current bets update:', bets);
       setActiveBets(bets);
     });
     
     // Subscribe to player bet events
     const unsubPlayerBet = crashSocket.onPlayerBet((bet) => {
-      console.log('Player bet:', bet);
       setActiveBets(prev => {
         // Check if this player already has a bet
         const existingBetIndex = prev.findIndex(b => b.userId === bet.userId);
@@ -150,7 +143,6 @@ const useCrashSocket = () => {
     
     // Subscribe to player cashout events
     const unsubPlayerCashout = crashSocket.onPlayerCashout((cashout) => {
-      console.log('Player cashout:', cashout);
       setActiveBets(prev => {
         return prev.map(bet => {
           if (bet.userId === cashout.userId) {
@@ -184,7 +176,7 @@ const useCrashSocket = () => {
       unsubPlayerBet();
       unsubPlayerCashout();
     };
-  }, []);
+  }, [authUser]);
 
   // Handle place bet with socket
   const realPlaceBet = useCallback((betData) => {
@@ -231,13 +223,12 @@ const CrashGame = () => {
   // Check authentication status after auth state has loaded
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      console.log('User not authenticated, redirecting to login');
       navigate('/login', { state: { from: '/games/crash', message: 'You must be logged in to play games.' } });
     }
   }, [isAuthenticated, loading, navigate]);
   
   // Use real socket implementation
-  const socketData = useCrashSocket();
+  const socketData = useCrashSocket(user);
   const gameState = socketData.gameState;
   const history = socketData.history;
   const activePlayers = socketData.activePlayers || [];
@@ -466,6 +457,8 @@ const CrashGame = () => {
               ref={canvasRef}
               width={800}
               height={400}
+              role="img"
+              aria-label="Crash game graph showing the multiplier curve"
               className="w-full bg-bg-base rounded-lg overflow-hidden"
             ></canvas>
             
@@ -489,7 +482,7 @@ const CrashGame = () => {
             
             {/* Game result popup */}
             {gameResult && (
-              <div className={`
+              <div role="alert" className={`
                 absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2
                 rounded-xl p-6 shadow-lg backdrop-blur-xl
                 ${gameResult.type === 'win'

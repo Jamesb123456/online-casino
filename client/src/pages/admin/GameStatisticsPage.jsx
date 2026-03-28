@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import GameStatistics from '../../components/admin/GameStatistics';
 
@@ -7,6 +7,9 @@ import GameStatistics from '../../components/admin/GameStatistics';
  * Admin page displaying detailed game statistics and metrics
  */
 const GameStatisticsPage = () => {
+  useEffect(() => {
+    document.title = 'Game Statistics | Platinum Casino';
+  }, []);
   return (
     <AdminLayout>
       <GameStatistics />

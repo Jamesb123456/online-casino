@@ -22,6 +22,8 @@ const {
   mockGameStatFindAll,
   mockBalanceGetLatestBalance,
   mockBalanceCreate,
+  mockBalanceServiceManualAdjustment,
+  mockDbExecute,
 } = vi.hoisted(() => ({
   mockUserFind: vi.fn(),
   mockUserFindAll: vi.fn(),
@@ -37,6 +39,8 @@ const {
   mockGameStatFindAll: vi.fn(),
   mockBalanceGetLatestBalance: vi.fn(),
   mockBalanceCreate: vi.fn(),
+  mockBalanceServiceManualAdjustment: vi.fn(),
+  mockDbExecute: vi.fn(),
 }));
 
 // Tracks which user the auth middleware injects (admin vs. regular user)
@@ -97,6 +101,18 @@ vi.mock('../../../drizzle/models/Balance.js', () => ({
 vi.mock('../../../src/services/loggingService.js', () => ({
   default: {
     logSystemEvent: vi.fn(),
+  },
+}));
+
+vi.mock('../../../src/services/balanceService.js', () => ({
+  default: {
+    manualAdjustment: mockBalanceServiceManualAdjustment,
+  },
+}));
+
+vi.mock('../../../drizzle/db.js', () => ({
+  db: {
+    execute: mockDbExecute,
   },
 }));
 
@@ -405,10 +421,10 @@ describe('Admin routes', () => {
   // =========================================================================
   describe('POST /users/:id/balance', () => {
     it('should adjust balance upward (positive amount)', async () => {
-      mockUserFindById.mockResolvedValue({ ...sampleUser, balance: '500.00' });
-      mockTransactionCreate.mockResolvedValue({ id: 100 });
-      mockBalanceCreate.mockResolvedValue({});
-      mockUserUpdateById.mockResolvedValue({});
+      mockBalanceServiceManualAdjustment.mockResolvedValue({
+        user: { ...sampleUser, balance: '700.00' },
+        transaction: { id: 100 },
+      });
 
       const res = await request(createApp())
         .post('/api/admin/users/10/balance')
@@ -419,10 +435,10 @@ describe('Admin routes', () => {
     });
 
     it('should adjust balance downward (negative amount)', async () => {
-      mockUserFindById.mockResolvedValue({ ...sampleUser, balance: '500.00' });
-      mockTransactionCreate.mockResolvedValue({ id: 101 });
-      mockBalanceCreate.mockResolvedValue({});
-      mockUserUpdateById.mockResolvedValue({});
+      mockBalanceServiceManualAdjustment.mockResolvedValue({
+        user: { ...sampleUser, balance: '300.00' },
+        transaction: { id: 101 },
+      });
 
       const res = await request(createApp())
         .post('/api/admin/users/10/balance')
@@ -451,7 +467,7 @@ describe('Admin routes', () => {
     });
 
     it('should return 400 when resulting balance would be negative', async () => {
-      mockUserFindById.mockResolvedValue({ ...sampleUser, balance: '100.00' });
+      mockBalanceServiceManualAdjustment.mockRejectedValue(new Error('Insufficient balance'));
 
       const res = await request(createApp())
         .post('/api/admin/users/10/balance')
@@ -462,7 +478,7 @@ describe('Admin routes', () => {
     });
 
     it('should return 404 when user not found', async () => {
-      mockUserFindById.mockResolvedValue(null);
+      mockBalanceServiceManualAdjustment.mockRejectedValue(new Error('User not found'));
 
       const res = await request(createApp())
         .post('/api/admin/users/999/balance')
@@ -473,7 +489,7 @@ describe('Admin routes', () => {
     });
 
     it('should return 500 on error', async () => {
-      mockUserFindById.mockRejectedValue(new Error('DB error'));
+      mockBalanceServiceManualAdjustment.mockRejectedValue(new Error('DB error'));
 
       const res = await request(createApp())
         .post('/api/admin/users/10/balance')
@@ -484,10 +500,10 @@ describe('Admin routes', () => {
     });
 
     it('should accept string amounts', async () => {
-      mockUserFindById.mockResolvedValue({ ...sampleUser, balance: '500.00' });
-      mockTransactionCreate.mockResolvedValue({ id: 102 });
-      mockBalanceCreate.mockResolvedValue({});
-      mockUserUpdateById.mockResolvedValue({});
+      mockBalanceServiceManualAdjustment.mockResolvedValue({
+        user: { ...sampleUser, balance: '600.00' },
+        transaction: { id: 102 },
+      });
 
       const res = await request(createApp())
         .post('/api/admin/users/10/balance')
@@ -507,10 +523,7 @@ describe('Admin routes', () => {
       mockGameStatFindAll.mockResolvedValue([
         { gameType: 'crash', name: 'Crash', totalGamesPlayed: 100, houseProfit: 500 },
       ]);
-      mockUserFindAll.mockResolvedValue([
-        { id: 1, isActive: true, balance: '1000' },
-        { id: 2, isActive: false, balance: '500' },
-      ]);
+      mockDbExecute.mockResolvedValue([[{ totalUsers: 2, activeUsers: 1, totalBalance: 1500 }]]);
 
       const res = await request(createApp()).get('/api/admin/dashboard');
 

@@ -99,23 +99,9 @@ class CrashSocketService {
     }
   }
 
-  /**
-   * Place a bet in the crash game
-   * @param {number} amount - Bet amount
-   * @param {number} autoCashout - Auto cashout multiplier (optional)
-   */
-  placeBet(amount, autoCashout = null) {
-    if (!this.socket || !this.isConnected) return;
-    this.socket.emit('placeBet', { amount, autoCashout });
-  }
-
-  /**
-   * Cashout from the current round
-   */
-  cashout() {
-    if (!this.socket || !this.isConnected) return;
-    this.socket.emit('cashout');
-  }
+  // NOTE: The primary placeBet and cashOut methods with callback support
+  // are defined further below in this class. The legacy no-callback versions
+  // have been removed to avoid duplicate method definitions.
 
   /**
    * Listen for game starting event
@@ -321,7 +307,7 @@ class CrashSocketService {
 
   /**
    * Place a bet in the crash game
-   * @param {Object} betData - Bet data (amount, autoCashout)
+   * @param {Object} betData - Bet data (amount, autoCashout/autoCashoutAt)
    * @param {Function} callback - Response callback
    */
   placeBet(betData, callback) {
@@ -329,8 +315,12 @@ class CrashSocketService {
       if (callback) callback({ success: false, message: 'Socket not connected' });
       return;
     }
-    
-    this.socket.emit('placeBet', betData, callback);
+
+    // Normalise field name: server expects autoCashoutAt, client may send autoCashout
+    const payload = typeof betData === 'object' && betData !== null
+      ? { amount: betData.amount, autoCashoutAt: betData.autoCashout ?? betData.autoCashoutAt }
+      : betData;
+    this.socket.emit('placeBet', payload, callback);
   }
   
   /**

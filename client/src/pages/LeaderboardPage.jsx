@@ -9,6 +9,10 @@ const PERIODS = [
 ];
 
 const LeaderboardPage = () => {
+  useEffect(() => {
+    document.title = 'Leaderboard | Platinum Casino';
+  }, []);
+
   const [period, setPeriod] = useState('allTime');
   const [leaderboard, setLeaderboard] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

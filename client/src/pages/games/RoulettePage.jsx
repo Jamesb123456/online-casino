@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import RouletteGame from '../../games/roulette/RouletteGame';
 
 const RoulettePage = () => {
+  useEffect(() => {
+    document.title = 'Roulette | Platinum Casino';
+  }, []);
   return (
     <MainLayout>
       <div className="mb-8">

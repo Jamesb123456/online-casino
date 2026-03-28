@@ -6,6 +6,9 @@ import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 
 const CrashPage = () => {
+  useEffect(() => {
+    document.title = 'Crash | Platinum Casino';
+  }, []);
   const [gameStatus, setGameStatus] = useState({
     status: 'loading',
     error: null

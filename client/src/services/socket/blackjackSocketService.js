@@ -51,7 +51,7 @@ class BlackjackSocketService {
    */
   placeBet(amount) {
     if (!this.socket || !this.isConnected) return;
-    this.socket.emit('placeBet', { amount });
+    this.socket.emit('blackjack_start', { betAmount: amount });
   }
 
   /**
@@ -59,7 +59,7 @@ class BlackjackSocketService {
    */
   hit() {
     if (!this.socket || !this.isConnected) return;
-    this.socket.emit('hit');
+    this.socket.emit('blackjack_hit');
   }
 
   /**
@@ -67,7 +67,7 @@ class BlackjackSocketService {
    */
   stand() {
     if (!this.socket || !this.isConnected) return;
-    this.socket.emit('stand');
+    this.socket.emit('blackjack_stand');
   }
 
   /**
@@ -75,7 +75,7 @@ class BlackjackSocketService {
    */
   doubleDown() {
     if (!this.socket || !this.isConnected) return;
-    this.socket.emit('doubleDown');
+    this.socket.emit('blackjack_double');
   }
 
   /**
@@ -83,62 +83,87 @@ class BlackjackSocketService {
    * @param {Function} callback 
    */
   onGameStarted(callback) {
-    if (!this.socket) return;
-    this.socket.on('gameStarted', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
   }
 
   /**
-   * Listen for card dealt event
-   * @param {Function} callback 
+   * Listen for game state updates (covers card dealt, player turn, dealer turn, game result)
+   * The server sends all state via 'blackjack_game_state'
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  onGameState(callback) {
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
+  }
+
+  /**
+   * Listen for card dealt event (alias for game state)
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onCardDealt(callback) {
-    if (!this.socket) return;
-    this.socket.on('cardDealt', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
   }
 
   /**
-   * Listen for player turn event
-   * @param {Function} callback 
+   * Listen for player turn event (alias for game state)
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPlayerTurn(callback) {
-    if (!this.socket) return;
-    this.socket.on('playerTurn', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
   }
 
   /**
-   * Listen for dealer turn event
-   * @param {Function} callback 
+   * Listen for dealer turn event (alias for game state)
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onDealerTurn(callback) {
-    if (!this.socket) return;
-    this.socket.on('dealerTurn', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
   }
 
   /**
-   * Listen for game result event
-   * @param {Function} callback 
+   * Listen for game result event (alias for game state)
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onGameResult(callback) {
-    if (!this.socket) return;
-    this.socket.on('gameResult', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_game_state', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_game_state', callback); };
   }
 
   /**
    * Listen for balance update event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onBalanceUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('balanceUpdate', callback);
+    return () => { if (this.socket) this.socket.off('balanceUpdate', callback); };
   }
 
   /**
    * Listen for error event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onError(callback) {
-    if (!this.socket) return;
-    this.socket.on('error', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('blackjack_error', callback);
+    return () => { if (this.socket) this.socket.off('blackjack_error', callback); };
   }
 }
 

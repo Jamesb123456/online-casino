@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import BlackjackGame from '../../games/blackjack/BlackjackGame';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -8,6 +8,9 @@ import { AuthContext } from '../../contexts/AuthContext';
  * Page container for the Blackjack game
  */
 const BlackjackPage = () => {
+  useEffect(() => {
+    document.title = 'Blackjack | Platinum Casino';
+  }, []);
   const { user } = useContext(AuthContext) || { user: null };
 
   return (

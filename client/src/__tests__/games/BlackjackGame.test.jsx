@@ -3,25 +3,27 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// Mock socket service
-vi.mock('@/services/socket/blackjackSocketService', () => ({
-  default: {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    onGameStarted: vi.fn(),
-    onCardDealt: vi.fn(),
-    onPlayerTurn: vi.fn(),
-    onDealerTurn: vi.fn(),
-    onGameResult: vi.fn(),
-    onBalanceUpdate: vi.fn(),
-    onError: vi.fn(),
-    startGame: vi.fn(),
-    hit: vi.fn(),
-    stand: vi.fn(),
-    double: vi.fn(),
-    split: vi.fn(),
-  },
-}));
+// Mock socket service — event listener methods must return unsubscribe functions
+vi.mock('@/services/socket/blackjackSocketService', () => {
+  const noop = () => {};
+  return {
+    default: {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      onGameStarted: vi.fn(() => noop),
+      onCardDealt: vi.fn(() => noop),
+      onPlayerTurn: vi.fn(() => noop),
+      onDealerTurn: vi.fn(() => noop),
+      onGameResult: vi.fn(() => noop),
+      onBalanceUpdate: vi.fn(() => noop),
+      onError: vi.fn(() => noop),
+      placeBet: vi.fn(),
+      hit: vi.fn(),
+      stand: vi.fn(),
+      doubleDown: vi.fn(),
+    },
+  };
+});
 
 vi.mock('@/contexts/AuthContext', () => ({
   AuthContext: React.createContext({
@@ -41,9 +43,9 @@ vi.mock('@/games/blackjack/BlackjackTable', () => ({
 }));
 
 vi.mock('@/games/blackjack/BlackjackBettingPanel', () => ({
-  default: ({ onPlaceBet, balance }) => (
+  default: ({ onPlaceBet, userBalance }) => (
     <div data-testid="blackjack-betting-panel">
-      <span data-testid="balance">Balance: {balance}</span>
+      <span data-testid="balance">Balance: {userBalance}</span>
       <button data-testid="place-bet" onClick={() => onPlaceBet?.(100)}>Place Bet</button>
     </div>
   ),

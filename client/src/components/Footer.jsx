@@ -50,11 +50,11 @@ const Footer = () => {
               Support
             </h3>
             <ul className="space-y-2">
-              <FooterLink to="/help" label="Help Center" />
-              <FooterLink to="/faq" label="FAQs" />
-              <FooterLink to="/contact" label="Contact Us" />
               <FooterLink to="/responsible-gaming" label="Responsible Gaming" />
             </ul>
+            <p className="text-text-muted text-xs mt-3">
+              This is a demo site for demonstration purposes only.
+            </p>
           </div>
 
           {/* Legal */}
@@ -62,12 +62,9 @@ const Footer = () => {
             <h3 className="text-sm font-heading font-semibold text-text-primary mb-4 uppercase tracking-wider">
               Legal
             </h3>
-            <ul className="space-y-2">
-              <FooterLink to="/terms" label="Terms & Conditions" />
-              <FooterLink to="/privacy" label="Privacy Policy" />
-              <FooterLink to="/cookies" label="Cookie Policy" />
-              <FooterLink to="/about" label="About Us" />
-            </ul>
+            <p className="text-text-muted text-sm">
+              This platform is for entertainment purposes only. No real money gambling is offered. All balances are virtual.
+            </p>
           </div>
         </div>
 
@@ -135,9 +132,8 @@ const SocialButton = ({ icon }) => {
 
   return (
     <a
-      href={`https://${icon}.com`}
-      target="_blank"
-      rel="noopener noreferrer"
+      href="#"
+      onClick={(e) => e.preventDefault()}
       className="bg-bg-elevated hover:bg-accent-gold/20 hover:text-accent-gold text-text-muted p-2 rounded-full transition-colors duration-200"
       aria-label={`Follow us on ${icon}`}
     >

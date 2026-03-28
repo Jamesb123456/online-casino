@@ -170,8 +170,8 @@ describe('Edge cases: requestIdMiddleware', () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it('should preserve a valid x-request-id header', () => {
-    const existingId = 'my-custom-id-12345';
+  it('should preserve a valid UUID x-request-id header', () => {
+    const existingId = '550e8400-e29b-41d4-a716-446655440000';
     const req = { headers: { 'x-request-id': existingId } } as any;
     const res = { setHeader: vi.fn() } as any;
     const next = vi.fn();

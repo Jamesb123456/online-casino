@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import LandminesGame from '../../games/landmines/LandminesGame';
 
 const LandminesPage = () => {
+  useEffect(() => {
+    document.title = 'Landmines | Platinum Casino';
+  }, []);
   return (
     <MainLayout>
       <div className="mb-6 mt-4">

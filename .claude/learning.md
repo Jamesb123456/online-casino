@@ -44,13 +44,13 @@ _Discoveries about system design or structure._
 - **Agent:** Claude Code (Opus 4.6)
 - **Category:** Architecture
 
-- **Context:** Initial repository analysis during knowledge system setup.
-- **Problem:** Multiple game socket handlers exist but only Crash and Roulette are wired. Landmines, Plinko, and Wheel are disabled (TODO comments in `server/server.ts`). Blackjack handler exists but is not connected.
-- **Root Cause:** Incomplete migration/implementation — handlers were written but not yet integrated into the server startup.
-- **Solution:** N/A — documenting current state for future agents.
+- **Context:** Initial repository analysis during knowledge system setup (updated 2026-03-28).
+- **Problem:** Originally, multiple game socket handlers existed but only Crash and Roulette were wired. This has since been resolved.
+- **Root Cause:** Incomplete migration/implementation at the time of initial analysis.
+- **Solution:** All 6 game handlers (Crash, Roulette, Landmines, Blackjack, Plinko, Wheel) are now wired in `server/server.ts`.
 - **Prevention:** Check `server/server.ts` to verify which handlers are actually wired before assuming a game endpoint is live.
 - **Affected Files:** `server/server.ts`, `server/src/socket/*.ts`
-- **Notes:** This is a known state, not a bug. Future work will wire remaining handlers.
+- **Notes:** All game namespaces are now fully connected and operational.
 
 ---
 

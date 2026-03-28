@@ -134,10 +134,12 @@ const GameStatistics = () => {
               onChange={(e) => setGameFilter(e.target.value)}
             >
               <option value="all">All Games</option>
+              <option value="blackjack">Blackjack</option>
               <option value="crash">Crash</option>
+              <option value="landmines">Landmines</option>
               <option value="plinko">Plinko</option>
-              <option value="wheel">Wheel</option>
               <option value="roulette">Roulette</option>
+              <option value="wheel">Wheel</option>
             </select>
           </div>
         </div>
@@ -246,10 +248,10 @@ const GameStatistics = () => {
                   <div className="relative h-48 w-48 rounded-full overflow-hidden flex flex-col justify-center items-center">
                     {/* Simplified pie chart representation */}
                     {statistics.gameBreakdown.map((game, index) => {
-                      const totalWagered = statistics.gameBreakdown.reduce(
-                        (sum, g) => sum + g.wagered, 0
+                      const totalBets = statistics.gameBreakdown.reduce(
+                        (sum, g) => sum + g.bets, 0
                       );
-                      const percentage = game.wagered / totalWagered;
+                      const percentage = totalBets > 0 ? game.bets / totalBets : 0;
 
                       // Generate colors based on index
                       const colors = [

@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 
 const ResponsibleGamingPage = () => {
+  useEffect(() => {
+    document.title = 'Responsible Gaming | Platinum Casino';
+  }, []);
   const { isAuthenticated, user, logout } = useContext(AuthContext);
   const [limits, setLimits] = useState(null);
   const [activitySummary, setActivitySummary] = useState(null);

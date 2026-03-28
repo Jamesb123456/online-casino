@@ -27,7 +27,8 @@ const WheelGame = () => {
   const [gameHistory, setGameHistory] = useState([]);
   const [maxMultiplier, setMaxMultiplier] = useState(0);
   const [spins, setSpins] = useState(0);
-  
+  const [pendingServerResult, setPendingServerResult] = useState(null);
+
   // Multiplayer state
   const [activePlayers, setActivePlayers] = useState([]);
   const [currentBets, setCurrentBets] = useState([]);
@@ -56,6 +57,8 @@ const WheelGame = () => {
   
   // Initialize socket connection and event listeners
   useEffect(() => {
+    const unsubs = [];
+
     // Set user information for socket authentication
     if (user) {
       wheelSocketService.setUser({
@@ -64,33 +67,34 @@ const WheelGame = () => {
         avatar: user.avatar
       });
     }
-    
+
     // Connect to socket
     wheelSocketService.connect();
-    
+
     // Set up multiplayer event listeners
-    wheelSocketService.onActivePlayers((players) => {
+    unsubs.push(wheelSocketService.onActivePlayers((players) => {
       setActivePlayers(players);
-    });
+    }));
 
-    wheelSocketService.onPlayerJoined((player) => {
+    unsubs.push(wheelSocketService.onPlayerJoined((player) => {
       setActivePlayers(prev => [...prev, player]);
-    });
+    }));
 
-    wheelSocketService.onPlayerLeft((player) => {
+    unsubs.push(wheelSocketService.onPlayerLeft((player) => {
       setActivePlayers(prev => prev.filter(p => p.id !== player.id));
-    });
+    }));
 
-    wheelSocketService.onCurrentBets((bets) => {
+    unsubs.push(wheelSocketService.onCurrentBets((bets) => {
       setCurrentBets(bets);
-    });
+    }));
 
-    wheelSocketService.onPlayerBet((bet) => {
+    unsubs.push(wheelSocketService.onPlayerBet((bet) => {
       setCurrentBets(prev => [...prev, bet]);
-    });
-    
+    }));
+
     // Cleanup on unmount
     return () => {
+      unsubs.forEach(unsub => unsub());
       wheelSocketService.disconnect();
     };
   }, [user]);
@@ -110,34 +114,49 @@ const WheelGame = () => {
         segments: segments.length,
       });
 
-      // Use server-provided segment index and angle
-      const segmentIndex = response.segmentIndex;
-      const angle = response.angle || calculateRotationAngle(segmentIndex, segments.length);
+      // Store the authoritative server result so handleSpinComplete uses it
+      setPendingServerResult({
+        segmentIndex: response.segmentIndex,
+        multiplier: response.multiplier,
+        winAmount: response.winAmount,
+        profit: response.profit,
+      });
+
+      // Use server-provided angle for animation
+      const angle = response.targetAngle || response.angle || calculateRotationAngle(response.segmentIndex, segments.length);
       setTargetAngle(angle);
 
       setSpins(prev => prev + 1);
     } catch (error) {
       // Fallback to local generation if server is unavailable
       const result = generateWheelResult('', segments);
+      setPendingServerResult(null);
       const angle = calculateRotationAngle(result.segmentIndex, segments.length);
       setTargetAngle(angle);
       setSpins(prev => prev + 1);
     }
   }, [isSpinning, betAmount, difficulty, segments]);
 
-  // Handle spin completion
+  // Handle spin completion - uses authoritative server result when available
   const handleSpinComplete = useCallback(() => {
-    // Use target angle to determine the winning segment
-    // We convert back from the angle to find the segment index
-    const normalizedAngle = targetAngle % 360;
-    const segmentAngle = 360 / segments.length;
-    const segmentIndex = Math.round(normalizedAngle / segmentAngle) % segments.length;
-    
-    // Get winning multiplier
-    const winMultiplier = segments[segmentIndex].multiplier;
-    const winnings = betAmount * winMultiplier;
-    const profit = calculateProfit(betAmount, winMultiplier);
-    
+    let segmentIndex, winMultiplier, winnings, profit;
+
+    if (pendingServerResult) {
+      // Use the authoritative server result to avoid client-server disagreement
+      segmentIndex = pendingServerResult.segmentIndex;
+      winMultiplier = pendingServerResult.multiplier;
+      winnings = pendingServerResult.winAmount;
+      profit = pendingServerResult.profit;
+    } else {
+      // Fallback: derive from angle (only when server was unavailable)
+      const normalizedAngle = targetAngle % 360;
+      const segmentAngle = 360 / segments.length;
+      segmentIndex = Math.round(normalizedAngle / segmentAngle) % segments.length;
+      winMultiplier = segments[segmentIndex].multiplier;
+      winnings = betAmount * winMultiplier;
+      profit = calculateProfit(betAmount, winMultiplier);
+    }
+
     // Create result object
     const result = {
       id: Date.now(),
@@ -149,16 +168,17 @@ const WheelGame = () => {
       winnings,
       profit
     };
-    
+
     // Update game history
     setGameHistory(prev => [result, ...prev]);
-    
+
     // Set game result to display
     setGameResult(result);
-    
-    // Reset spinning state
+
+    // Clear the pending server result and reset spinning state
+    setPendingServerResult(null);
     setIsSpinning(false);
-  }, [targetAngle, segments, betAmount, difficulty]);
+  }, [pendingServerResult, targetAngle, segments, betAmount, difficulty]);
 
   // Format timestamp for display
   const formatTime = (timestamp) => {
@@ -187,7 +207,7 @@ const WheelGame = () => {
             
             {/* Game result popup */}
             {gameResult && (
-              <div className={`
+              <div role="alert" className={`
                 absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2
                 rounded-xl p-6 shadow-lg backdrop-blur-xl
                 ${gameResult.profit >= 0

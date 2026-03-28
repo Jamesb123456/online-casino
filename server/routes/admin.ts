@@ -1,9 +1,13 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { authenticate as auth, adminOnly } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import LoggingService from '../src/services/loggingService.js';
 import { adminCreateUserSchema, adminUpdateUserSchema, adminTransactionSchema } from '../src/validation/schemas.js';
+import balanceService from '../src/services/balanceService.js';
+import { db } from '../drizzle/db.js';
+import { sql } from 'drizzle-orm';
 
 // Import Drizzle models
 import UserModel from '../drizzle/models/User.js';
@@ -185,50 +189,28 @@ router.post('/users/:id/balance', auth, adminOnly, async (req: Request, res: Res
       return res.status(400).json({ message: 'Amount must be a non-zero finite number' });
     }
 
-    const user = await UserModel.findById(parseInt(id));
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    const userId = parseInt(id);
+    const adminId = (req as AuthenticatedRequest).user.userId;
 
-    const currentBalance = parseFloat(String(user.balance || 0));
-    const newBalance = currentBalance + parsedAmount;
+    const result = await balanceService.manualAdjustment(
+      userId,
+      parsedAmount,
+      reason || 'Admin balance adjustment',
+      adminId
+    );
 
-    if (newBalance < 0) {
-      return res.status(400).json({ message: 'Insufficient balance' });
-    }
-
-    const transactionType = parsedAmount > 0 ? 'admin_adjustment' : 'withdrawal';
-    const balType = parsedAmount > 0 ? 'admin_adjustment' : 'withdrawal';
-
-    const transaction = await Transaction.create({
-      userId: parseInt(id),
-      type: transactionType,
-      amount: Math.abs(parsedAmount),
-      balanceBefore: currentBalance,
-      balanceAfter: newBalance,
-      status: 'completed',
-      description: reason || 'Admin balance adjustment',
-      createdBy: (req as AuthenticatedRequest).user.userId,
-      createdAt: new Date()
-    });
-
-    await Balance.create({
-      userId: parseInt(id),
-      amount: newBalance,
-      previousBalance: currentBalance,
-      changeAmount: parsedAmount,
-      type: balType,
-      note: reason || 'Admin balance adjustment',
-      adminId: (req as AuthenticatedRequest).user.userId,
-      transactionId: transaction.id,
-      createdAt: new Date()
-    });
-
-    await UserModel.updateById(parseInt(id), { balance: newBalance });
+    const newBalance = parseFloat(String(result.user.balance || 0));
 
     res.json({ message: 'Balance updated', newBalance });
   } catch (error) {
-    LoggingService.logSystemEvent('admin_balance_adjust_error', { error: (error as Error)?.message }, 'error');
+    const message = (error as Error)?.message;
+    if (message === 'User not found') {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (message === 'Insufficient balance') {
+      return res.status(400).json({ message: 'Insufficient balance' });
+    }
+    LoggingService.logSystemEvent('admin_balance_adjust_error', { error: message }, 'error');
     res.status(500).json({ message: 'Error adjusting balance' });
   }
 });
@@ -249,21 +231,22 @@ router.get('/dashboard', auth, adminOnly, async (req: Request, res: Response) =>
     // Get game stats
     const gameStats = await GameStatModel.findAll();
 
-    // Get total stats
-    const allUsers = await UserModel.findAll();
-    const totalUsers = allUsers.length;
-    const activeUsers = allUsers.filter(u => u.isActive).length;
+    // Get total stats via SQL aggregation (avoids loading all users into memory)
+    const userStatsResult = await db.execute(sql`
+      SELECT
+        COUNT(*) as totalUsers,
+        COUNT(CASE WHEN is_active = 1 THEN 1 END) as activeUsers,
+        COALESCE(SUM(balance), 0) as totalBalance
+      FROM users
+    `);
+    const userStats = (userStatsResult as any)[0]?.[0] || { totalUsers: 0, activeUsers: 0, totalBalance: 0 };
     const totalGames = gameStats.reduce((sum, s) => sum + Number(s.totalGamesPlayed || 0), 0);
     const houseProfit = gameStats.reduce((sum, s) => sum + Number(s.houseProfit || 0), 0);
-    const totalBalance = allUsers.reduce((sum, u) => {
-      const bal = Number(u.balance);
-      return sum + (isNaN(bal) ? 0 : bal);
-    }, 0);
 
     res.json({
-      totalPlayers: totalUsers,
-      activePlayers: activeUsers,
-      totalBalance,
+      totalPlayers: Number(userStats.totalUsers),
+      activePlayers: Number(userStats.activeUsers),
+      totalBalance: Number(userStats.totalBalance),
       totalGames,
       recentTransactions,
       alerts: []
@@ -445,10 +428,22 @@ router.post('/transactions', auth, adminOnly, async (req: Request, res: Response
 });
 
 // Void transaction (admin only)
+const voidSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(500, 'Reason must not exceed 500 characters')
+});
+
 router.put('/transactions/:id/void', auth, adminOnly, async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { reason } = req.body;
+
+    // Validate request body
+    const parseResult = voidSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues.map((e: any) => e.message).join(', ');
+      res.status(400).json({ message: errors });
+      return;
+    }
+    const { reason } = parseResult.data;
 
     // Find transaction
     const transaction = await Transaction.findById(parseInt(id));

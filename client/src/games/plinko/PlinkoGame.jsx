@@ -116,7 +116,7 @@ const PlinkoGame = () => {
           
           {/* Game result popup */}
           {gameResult && (
-            <div className={`
+            <div role="alert" className={`
               absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2
               rounded-xl p-6 shadow-lg backdrop-blur-xl
               ${gameResult.profit >= 0

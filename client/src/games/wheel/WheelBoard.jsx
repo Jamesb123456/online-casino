@@ -191,6 +191,8 @@ const WheelBoard = ({
       ref={canvasRef}
       width={400}
       height={400}
+      role="img"
+      aria-label="Wheel of Fortune game wheel with multiplier segments"
       className="w-full max-w-md mx-auto bg-bg-base rounded-full"
     />
   );

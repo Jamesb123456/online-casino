@@ -55,7 +55,10 @@ const Toast = ({
   if (!isVisible) return null;
 
   return (
-    <div className={`
+    <div
+      role="alert"
+      aria-live="assertive"
+      className={`
       fixed top-4 right-4 max-w-md z-50
       bg-bg-card/95 backdrop-blur-xl border border-border rounded-lg shadow-card
       border-l-4 ${currentType.border}

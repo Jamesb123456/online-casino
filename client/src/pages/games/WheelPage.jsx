@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import WheelGame from '../../games/wheel/WheelGame';
 
 const WheelPage = () => {
+  useEffect(() => {
+    document.title = 'Wheel | Platinum Casino';
+  }, []);
   return (
     <MainLayout>
       <div className="mb-8">

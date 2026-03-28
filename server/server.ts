@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import compression from 'compression';
 import { sql } from 'drizzle-orm';
 import LoggingService from './src/services/loggingService.js';
 import RedisService from './src/services/redisService.js';
@@ -41,7 +42,7 @@ import responsibleGamingRoutes from './routes/responsible-gaming.js';
 dotenv.config();
 
 // Validate required environment variables at startup
-const requiredEnvVars = ['DATABASE_URL'];
+const requiredEnvVars = ['DATABASE_URL', 'BETTER_AUTH_SECRET'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
@@ -91,6 +92,17 @@ app.use(cors({
   credentials: true
 }));
 
+// Dedicated auth rate limiter — must be registered before auth handlers
+// to prevent brute-force attacks on login/register endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 attempts per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many authentication attempts, please try again later' }
+});
+app.use('/api/auth', authLimiter);
+
 // Custom auth routes (registered before Better Auth catch-all so they take priority)
 app.use('/api/auth', authRoutes);
 
@@ -98,11 +110,14 @@ app.use('/api/auth', authRoutes);
 app.all("/api/auth/*", toNodeHandler(auth));
 
 // Middleware
+app.use(helmet({
+  contentSecurityPolicy: false // Disabled because client is served from different origin in dev/production
+}));
+app.use(compression());
 app.use(requestIdMiddleware); // Assign request ID early so all downstream middleware/routes can use it
 app.use(express.json());
 app.use(cookieParser());
-app.use(helmet());
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Global API rate limiting
 const apiLimiter = rateLimit({
@@ -258,9 +273,21 @@ const blackjackNamespace = io.of('/blackjack');
 // Apply authentication middleware to blackjack namespace
 blackjackNamespace.use(socketAuth);
 
+// Create the blackjack handler ONCE so game state (Maps) persists across connections
+let blackjackHandler: any = null;
+import('./src/socket/blackjackHandler.js')
+  .then((mod: any) => {
+    const HandlerClass = mod?.default || mod?.BlackjackHandler;
+    if (HandlerClass && typeof HandlerClass === 'function') {
+      blackjackHandler = new HandlerClass(blackjackNamespace);
+      LoggingService.logSystemEvent('blackjack_handler_initialized', {});
+    }
+  })
+  .catch((err) => LoggingService.logSystemEvent('blackjack_handler_init_failed', { error: String(err) }, 'error'));
+
 blackjackNamespace.on('connection', (socket) => {
   LoggingService.logGameEvent('blackjack', 'namespace_connection', { socketId: socket.id });
-  
+
   // Get authenticated user from socket
   const user = getAuthenticatedUser(socket);
   if (!user) {
@@ -268,19 +295,16 @@ blackjackNamespace.on('connection', (socket) => {
     socket.disconnect();
     return;
   }
-  
+
   LoggingService.logGameEvent('blackjack', 'namespace_authenticated', { username: user.username, userId: user.userId });
-  
-  // Initialize blackjack handlers
-  import('./src/socket/blackjackHandler.js')
-    .then((mod: any) => {
-      const HandlerClass = mod?.default || mod?.BlackjackHandler;
-      if (HandlerClass && typeof HandlerClass === 'function') {
-        const handler = new HandlerClass(blackjackNamespace);
-        handler.handleConnection(socket);
-      }
-    })
-    .catch((err) => LoggingService.logSystemEvent('blackjack_handler_init_failed', { error: String(err) }, 'error'));
+
+  // Use the singleton handler instance so game state persists across reconnections
+  if (blackjackHandler) {
+    blackjackHandler.handleConnection(socket);
+  } else {
+    LoggingService.logSystemEvent('blackjack_handler_not_ready', { socketId: socket.id }, 'warning');
+    socket.emit('blackjack_error', { message: 'Game handler is initializing, please reconnect shortly' });
+  }
 
   // Handle disconnection
   socket.on('disconnect', () => {
@@ -335,6 +359,9 @@ wheelNamespace.on('connection', (socket) => {
     LoggingService.logGameEvent('wheel', 'namespace_disconnected', { username: user.username, userId: user.userId });
   });
 });
+
+// Apply authentication middleware to main namespace
+io.use(socketAuth);
 
 // Socket.io main namespace connection
 io.on('connection', (socket: Socket) => {

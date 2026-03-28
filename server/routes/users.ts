@@ -78,6 +78,14 @@ router.put('/profile', auth, async (req: AuthenticatedRequest, res: Response) =>
 
     // Update password if provided
     if (newPassword && currentPassword) {
+      // Validate password strength and max length (bcrypt has internal limits; long inputs cause DoS)
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+      }
+      if (newPassword.length > 128) {
+        return res.status(400).json({ message: 'Password must not exceed 128 characters' });
+      }
+
       // Verify current password
       const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
       if (!isCurrentPasswordValid) {

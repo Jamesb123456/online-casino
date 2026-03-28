@@ -59,38 +59,36 @@ describe('Footer', () => {
       expect(screen.getByText('Support')).toBeInTheDocument();
     });
 
-    it.each([
-      ['Help Center', '/help'],
-      ['FAQs', '/faq'],
-      ['Contact Us', '/contact'],
-      ['Responsible Gaming', '/responsible-gaming'],
-    ])('contains %s link pointing to %s', (label, path) => {
+    it('contains Responsible Gaming link', () => {
       renderFooter();
 
-      const link = screen.getByText(label);
+      const link = screen.getByText('Responsible Gaming');
       expect(link).toBeInTheDocument();
-      expect(link.closest('a')).toHaveAttribute('href', path);
+      expect(link.closest('a')).toHaveAttribute('href', '/responsible-gaming');
+    });
+
+    it('shows demo site note', () => {
+      renderFooter();
+
+      expect(
+        screen.getByText(/demo site for demonstration purposes/i)
+      ).toBeInTheDocument();
     });
   });
 
-  describe('Legal links', () => {
+  describe('Legal section', () => {
     it('renders Legal section heading', () => {
       renderFooter();
 
       expect(screen.getByText('Legal')).toBeInTheDocument();
     });
 
-    it.each([
-      ['Terms & Conditions', '/terms'],
-      ['Privacy Policy', '/privacy'],
-      ['Cookie Policy', '/cookies'],
-      ['About Us', '/about'],
-    ])('contains %s link pointing to %s', (label, path) => {
+    it('shows entertainment disclaimer', () => {
       renderFooter();
 
-      const link = screen.getByText(label);
-      expect(link).toBeInTheDocument();
-      expect(link.closest('a')).toHaveAttribute('href', path);
+      expect(
+        screen.getByText(/entertainment purposes only/i)
+      ).toBeInTheDocument();
     });
   });
 
@@ -133,9 +131,7 @@ describe('Footer', () => {
 
         const link = screen.getByLabelText(`Follow us on ${platform}`);
         expect(link).toBeInTheDocument();
-        expect(link).toHaveAttribute('href', `https://${platform}.com`);
-        expect(link).toHaveAttribute('target', '_blank');
-        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        expect(link).toHaveAttribute('href', '#');
       }
     );
   });
@@ -159,7 +155,7 @@ describe('Footer', () => {
       const { container } = renderFooter();
 
       // All SVGs inside social buttons should have aria-hidden
-      const socialSvgs = container.querySelectorAll('a[target="_blank"] svg');
+      const socialSvgs = container.querySelectorAll('a[href="#"] svg');
       socialSvgs.forEach((svg) => {
         expect(svg).toHaveAttribute('aria-hidden', 'true');
       });

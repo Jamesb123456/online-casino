@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 
 const RewardsPage = () => {
+  useEffect(() => {
+    document.title = 'Rewards | Platinum Casino';
+  }, []);
   const { isAuthenticated, user } = useContext(AuthContext);
   const [rewardStatus, setRewardStatus] = useState({ canClaim: false, nextRewardTime: null });
   const [isLoading, setIsLoading] = useState(true);

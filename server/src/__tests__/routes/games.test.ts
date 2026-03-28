@@ -184,7 +184,7 @@ describe('Games routes', () => {
 
       const res = await request(createApp())
         .post('/api/games/roulette/bet')
-        .send({ betAmount: 50000 });
+        .send({ betAmount: 5000 });
 
       expect(res.status).toBe(400);
       expect(res.body).toEqual({ message: 'Insufficient balance' });

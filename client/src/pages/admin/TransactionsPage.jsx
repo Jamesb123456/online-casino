@@ -8,6 +8,9 @@ import CreateTransactionForm from '../../components/admin/CreateTransactionForm'
  * Admin page for viewing and managing financial transactions
  */
 const TransactionsPage = () => {
+  useEffect(() => {
+    document.title = 'Transactions | Platinum Casino';
+  }, []);
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalTransactions, setTotalTransactions] = useState(0);

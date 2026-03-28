@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 import Card from '../components/ui/Card';
 
 const GamesPage = () => {
+  useEffect(() => {
+    document.title = 'Games | Platinum Casino';
+  }, []);
   const games = [
     {
       id: 'crash',

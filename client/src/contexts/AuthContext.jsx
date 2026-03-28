@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { authClient } from '../lib/auth-client';
 import socketService from '../services/socketService';
 import { api } from '../services/api';
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login function
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     try {
       setError(null);
       setLoading(true);
@@ -93,10 +93,10 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Logout function
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       setLoading(true);
       await authClient.signOut();
@@ -110,10 +110,10 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       setLoading(false);
     }
-  };
+  }, []);
 
   // Register function
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     try {
       setError(null);
       setLoading(true);
@@ -145,20 +145,18 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Update user balance (for game wins/losses)
-  const updateBalance = (newBalance) => {
-    if (user) {
-      setUser({
-        ...user,
-        balance: newBalance,
-      });
-    }
-  };
+  const updateBalance = useCallback((newBalance) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      return { ...prev, balance: newBalance };
+    });
+  }, []);
 
   // Context value
-  const value = {
+  const value = useMemo(() => ({
     user,
     loading,
     error,
@@ -167,7 +165,7 @@ export const AuthProvider = ({ children }) => {
     register,
     updateBalance,
     isAuthenticated: !!user,
-  };
+  }), [user, loading, error, login, logout, register, updateBalance]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

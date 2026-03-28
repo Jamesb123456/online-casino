@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import Button from './Button';
 
@@ -16,6 +16,7 @@ const Modal = ({
   centered = true
 }) => {
   const [isShowing, setIsShowing] = useState(false);
+  const modalRef = useRef(null);
 
   // Handle modal close with animation - defined with useCallback to maintain reference
   const handleClose = useCallback(() => {
@@ -54,6 +55,57 @@ const Modal = ({
     };
   }, [isOpen, closeOnEsc, handleClose]);
 
+  // Focus trapping - trap focus inside modal when open
+  useEffect(() => {
+    if (!isOpen) return;
+    const modal = modalRef.current;
+    if (!modal) return;
+
+    const focusableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    // Small delay to ensure modal content is rendered
+    const timeoutId = setTimeout(() => {
+      const focusableElements = modal.querySelectorAll(focusableSelector);
+      const firstEl = focusableElements[0];
+      const lastEl = focusableElements[focusableElements.length - 1];
+
+      const previouslyFocused = document.activeElement;
+      firstEl?.focus();
+
+      const handleKeyDown = (e) => {
+        if (e.key !== 'Tab') return;
+        if (e.shiftKey) {
+          if (document.activeElement === firstEl) {
+            e.preventDefault();
+            lastEl?.focus();
+          }
+        } else {
+          if (document.activeElement === lastEl) {
+            e.preventDefault();
+            firstEl?.focus();
+          }
+        }
+      };
+
+      modal.addEventListener('keydown', handleKeyDown);
+
+      // Store cleanup data on the ref for the effect cleanup
+      modal._focusTrapCleanup = () => {
+        modal.removeEventListener('keydown', handleKeyDown);
+        previouslyFocused?.focus();
+      };
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (modal._focusTrapCleanup) {
+        modal._focusTrapCleanup();
+        delete modal._focusTrapCleanup;
+      }
+    };
+  }, [isOpen]);
+
   // Don't render if not open - moved after all hooks
   if (!isOpen) return null;
 
@@ -91,6 +143,7 @@ const Modal = ({
       onClick={handleOverlayClick}
     >
       <div
+        ref={modalRef}
         className={`${sizeClasses[size]} w-full ${variantClasses[variant]} rounded-xl shadow-card relative overflow-hidden transform transition-all duration-300 ${isShowing ? 'scale-100 translate-y-0 opacity-100' : 'scale-95 translate-y-4 opacity-0'}`}
         role="dialog"
         aria-modal="true"

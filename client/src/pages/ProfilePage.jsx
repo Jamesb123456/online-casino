@@ -1,9 +1,12 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import MainLayout from '../layouts/MainLayout';
 
 const ProfilePage = () => {
+  useEffect(() => {
+    document.title = 'Profile | Platinum Casino';
+  }, []);
   const { user } = useContext(AuthContext);
   const toast = useToast();
 

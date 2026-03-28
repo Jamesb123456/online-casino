@@ -93,8 +93,8 @@ describe('LeaderboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/failed to load leaderboard/i)).toBeInTheDocument();
     }, { timeout: 5000 });
-    // Then check for retry button
-    expect(screen.getByText(/try again/i)).toBeInTheDocument();
+    // Then check for retry button — use getByRole to avoid matching "try again" in error message text
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
   it('should show empty state when no data', async () => {

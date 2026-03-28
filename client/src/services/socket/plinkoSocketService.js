@@ -53,7 +53,7 @@ class PlinkoSocketService {
    */
   startGame(amount, rows, risk) {
     if (!this.socket || !this.isConnected) return;
-    this.socket.emit('startGame', { amount, rows, risk });
+    this.socket.emit('plinko:drop_ball', { betAmount: amount, rows, risk });
   }
 
   /**
@@ -61,62 +61,75 @@ class PlinkoSocketService {
    * @param {Function} callback 
    */
   onGameStarted(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('gameStarted', callback);
+    return () => { if (this.socket) this.socket.off('gameStarted', callback); };
   }
 
   /**
    * Listen for ball position update
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onBallUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('ballUpdate', callback);
+    return () => { if (this.socket) this.socket.off('ballUpdate', callback); };
   }
 
   /**
    * Listen for game result
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onGameResult(callback) {
-    if (!this.socket) return;
-    this.socket.on('gameResult', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('plinko:game_result', callback);
+    return () => { if (this.socket) this.socket.off('plinko:game_result', callback); };
   }
 
   /**
    * Listen for balance update event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onBalanceUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('balanceUpdate', callback);
+    return () => { if (this.socket) this.socket.off('balanceUpdate', callback); };
   }
 
   /**
    * Listen for plinko path reveal
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onPathReveal(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('pathReveal', callback);
+    return () => { if (this.socket) this.socket.off('pathReveal', callback); };
   }
 
   /**
    * Listen for history update
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onHistoryUpdate(callback) {
-    if (!this.socket) return;
+    if (!this.socket) return () => {};
     this.socket.on('historyUpdate', callback);
+    return () => { if (this.socket) this.socket.off('historyUpdate', callback); };
   }
 
   /**
    * Listen for error event
-   * @param {Function} callback 
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
    */
   onError(callback) {
-    if (!this.socket) return;
-    this.socket.on('error', callback);
+    if (!this.socket) return () => {};
+    this.socket.on('plinko:error', callback);
+    return () => { if (this.socket) this.socket.off('plinko:error', callback); };
   }
 }
 

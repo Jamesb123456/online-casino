@@ -85,6 +85,9 @@ class BlackjackHandler {
           }
         }
 
+        // Deduct the initial bet from the player's balance
+        await BalanceService.placeBet(userIdNum, betAmount, 'blackjack', { action: 'initial_bet' });
+
         // Create new game
         const gameId = this.generateGameId();
         const game = this.createNewGame(userIdNum, Number(betAmount));
@@ -266,6 +269,12 @@ class BlackjackHandler {
           socket.emit('blackjack_error', { message: 'Insufficient balance to double' });
           return;
         }
+
+        // Deduct the additional bet amount (equal to original bet) via BalanceService
+        await BalanceService.placeBet(userIdNum, game.betAmount, 'blackjack', {
+          gameId,
+          action: 'double_down'
+        });
 
         // Double the bet
         game.betAmount *= 2;

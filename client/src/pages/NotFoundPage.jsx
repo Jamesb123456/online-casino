@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 
 const NotFoundPage = () => {
+  useEffect(() => {
+    document.title = 'Page Not Found | Platinum Casino';
+  }, []);
   return (
     <MainLayout>
       <div className="min-h-[60vh] flex items-center justify-center px-4">

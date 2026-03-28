@@ -54,8 +54,8 @@ describe('requestIdMiddleware', () => {
     expect(req.requestId).toMatch(UUID_V4_REGEX);
   });
 
-  it('should reuse the x-request-id header value when provided', () => {
-    const customId = 'my-custom-request-id-12345';
+  it('should reuse the x-request-id header value when provided as valid UUID', () => {
+    const customId = '550e8400-e29b-41d4-a716-446655440000';
     const req = mockRequest({
       headers: { 'x-request-id': customId },
     });
@@ -82,16 +82,17 @@ describe('requestIdMiddleware', () => {
     expect(req.requestId.length).toBeGreaterThan(0);
   });
 
-  it('should set requestId on the req object when provided via header', () => {
+  it('should set requestId on the req object when provided via header as valid UUID', () => {
+    const validUuid = '6ba7b810-9dad-41d6-a098-7f6e55840000';
     const req = mockRequest({
-      headers: { 'x-request-id': 'header-provided-id' },
+      headers: { 'x-request-id': validUuid },
     });
     const res = mockResponse();
     const next = mockNext();
 
     requestIdMiddleware(req as any, res as any, next);
 
-    expect(req.requestId).toBe('header-provided-id');
+    expect(req.requestId).toBe(validUuid);
   });
 
   // -----------------------------------------------------------------------
@@ -107,8 +108,8 @@ describe('requestIdMiddleware', () => {
     expect(res.setHeader).toHaveBeenCalledWith('x-request-id', req.requestId);
   });
 
-  it('should set the x-request-id response header with the provided header value', () => {
-    const customId = 'echo-this-id';
+  it('should set the x-request-id response header with the provided valid UUID value', () => {
+    const customId = '550e8400-e29b-41d4-a716-446655440000';
     const req = mockRequest({
       headers: { 'x-request-id': customId },
     });
@@ -193,19 +194,19 @@ describe('requestIdMiddleware', () => {
     expect(req.requestId).toMatch(UUID_V4_REGEX);
   });
 
-  it('should not generate a UUID when a non-empty x-request-id header is provided', () => {
-    const customId = 'not-a-uuid-but-valid';
+  it('should reject non-UUID x-request-id and generate a new UUID', () => {
+    const invalidId = 'not-a-uuid-but-valid';
     const req = mockRequest({
-      headers: { 'x-request-id': customId },
+      headers: { 'x-request-id': invalidId },
     });
     const res = mockResponse();
     const next = mockNext();
 
     requestIdMiddleware(req as any, res as any, next);
 
-    // The custom value should be used as-is, not replaced with a UUID
-    expect(req.requestId).toBe(customId);
-    expect(req.requestId).not.toMatch(UUID_V4_REGEX);
+    // Non-UUID values are rejected for security (prevents log injection/XSS)
+    expect(req.requestId).not.toBe(invalidId);
+    expect(req.requestId).toMatch(UUID_V4_REGEX);
   });
 
   it('should generate a UUID when x-request-id header is an empty string', () => {

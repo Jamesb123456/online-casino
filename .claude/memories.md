@@ -25,7 +25,7 @@ Platinum Casino is a web-based online casino platform with real-time multiplayer
 - **Client** is a React 18 SPA served by Vite in development and built to static files for production.
 - **Database** is MySQL accessed via Drizzle ORM. The schema is defined in `server/drizzle/schema.ts`.
 - **Real-time games** use a namespace-per-game Socket.IO pattern (e.g., `/crash`, `/roulette`, `/wheel`).
-- **Authentication** uses JWT tokens stored in HTTP-only cookies with a localStorage fallback for socket connections.
+- **Authentication** uses Better Auth (session-based) with HTTP-only cookies for session management.
 
 ---
 
@@ -36,7 +36,7 @@ Platinum Casino is a web-based online casino platform with real-time multiplayer
 | Frontend    | React 18 (JSX), Vite, Tailwind CSS v4, React Router v6 |
 | Backend     | Node.js, Express, TypeScript (ESM), Socket.IO  |
 | Database    | MySQL, Drizzle ORM                             |
-| Auth        | JWT (HTTP-only cookies + localStorage fallback) |
+| Auth        | Better Auth (session-based, HTTP-only cookies)  |
 | Logging     | Winston (`LoggingService`)                     |
 | Build       | TypeScript compiler (server), Vite (client)    |
 | Runtime     | Node.js / Bun (dev via `bun --watch`)          |

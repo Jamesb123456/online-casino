@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
 
 const HomePage = () => {
+  useEffect(() => {
+    document.title = 'Platinum Casino';
+  }, []);
+
   // Featured games data with proper titles and images
   const featuredGames = [
     {

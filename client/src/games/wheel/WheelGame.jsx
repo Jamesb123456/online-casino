@@ -15,7 +15,7 @@ import {
 } from './wheelUtils';
 
 const WheelGame = () => {
-  const { user } = useContext(AuthContext);
+  const { user, updateBalance } = useContext(AuthContext);
   
   // Game state
   const [betAmount, setBetAmount] = useState(10);
@@ -90,6 +90,10 @@ const WheelGame = () => {
 
     unsubs.push(wheelSocketService.onPlayerBet((bet) => {
       setCurrentBets(prev => [...prev, bet]);
+    }));
+
+    unsubs.push(wheelSocketService.onBalanceUpdate((data) => {
+      if (data?.balance != null) updateBalance(data.balance);
     }));
 
     // Cleanup on unmount

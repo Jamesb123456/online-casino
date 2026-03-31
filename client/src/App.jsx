@@ -39,6 +39,10 @@ const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage')
 const PlayerManagementPage = lazy(() => import('./pages/admin/PlayerManagementPage'))
 const GameStatisticsPage = lazy(() => import('./pages/admin/GameStatisticsPage'))
 const TransactionsPage = lazy(() => import('./pages/admin/TransactionsPage'))
+const GameAnalyticsPage = lazy(() => import('./pages/admin/GameAnalyticsPage'))
+const GameDetailPage = lazy(() => import('./pages/admin/GameDetailPage'))
+const PlayerProfilePage = lazy(() => import('./pages/admin/PlayerProfilePage'))
+const RevenueDashboardPage = lazy(() => import('./pages/admin/RevenueDashboardPage'))
 
 // Guards
 import AdminGuard from './components/guards/AdminGuard'
@@ -140,6 +144,46 @@ const router = createBrowserRouter(
           <AdminGuard>
             <Suspense fallback={<Loading size="lg" message="Loading transactions..." />}>
               <TransactionsPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/analytics/games"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading game analytics..." />}>
+              <GameAnalyticsPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/analytics/games/:gameType"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading game details..." />}>
+              <GameDetailPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/analytics/players/:userId"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading player profile..." />}>
+              <PlayerProfilePage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/analytics/revenue"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading revenue dashboard..." />}>
+              <RevenueDashboardPage />
             </Suspense>
           </AdminGuard>
         }

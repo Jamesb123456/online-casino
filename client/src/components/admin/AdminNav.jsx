@@ -22,8 +22,14 @@ const AdminNav = () => {
       badge: null
     },
     {
-      name: 'Game Statistics',
-      path: '/admin/game-stats',
+      name: 'Game Analytics',
+      path: '/admin/analytics/games',
+      icon: '\uD83C\uDFB0',
+      badge: null
+    },
+    {
+      name: 'Revenue',
+      path: '/admin/analytics/revenue',
       icon: '\uD83D\uDCC8',
       badge: null
     },
@@ -31,7 +37,7 @@ const AdminNav = () => {
       name: 'Transactions',
       path: '/admin/transactions',
       icon: '\uD83D\uDCB0',
-      badge: { text: 'New', variant: 'primary' }
+      badge: null
     }
   ];
 

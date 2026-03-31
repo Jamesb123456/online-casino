@@ -82,7 +82,7 @@ export const auth = betterAuth({
       adminRoles: ["admin"],
     }),
   ],
-  trustedOrigins: [process.env.CLIENT_URL || "http://localhost:5173"],
+  trustedOrigins: [process.env.CLIENT_URL || "http://localhost"],
   databaseHooks: {
     user: {
       create: {

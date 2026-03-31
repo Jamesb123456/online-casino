@@ -175,6 +175,10 @@ function initLandminesHandlers(io, socket, user) {
         landminesSessionId: gameId
       });
 
+      // Emit balance update to the player
+      const balanceAfterBet = await BalanceService.getBalance(userId);
+      socket.emit('balanceUpdate', { balance: balanceAfterBet });
+
       // Log bet placed
       LoggingService.logBetPlaced('landmines', gameId, userId, betAmount, {
         mines,
@@ -462,6 +466,10 @@ function initLandminesHandlers(io, socket, user) {
       multiplier,
       profit
     });
+
+    // Emit balance update to the player
+    const balanceAfterWin = await BalanceService.getBalance(userId);
+    socket.emit('balanceUpdate', { balance: balanceAfterWin });
 
     // Create game result
     const gameResult = {

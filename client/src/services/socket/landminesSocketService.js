@@ -110,6 +110,17 @@ const onPlayerCashout = (callback) => {
   return () => { s.off('landmines:player_cashout', callback); };
 };
 
+/**
+ * Listen for balance updates from server
+ * @param {Function} callback
+ * @returns {Function} Unsubscribe function
+ */
+const onBalanceUpdate = (callback) => {
+  const s = ensureSocket();
+  s.on('balanceUpdate', callback);
+  return () => { s.off('balanceUpdate', callback); };
+};
+
 export default {
   ensureSocket,
   disconnectSocket,
@@ -120,4 +131,5 @@ export default {
   cashOut,
   getGameHistory,
   onPlayerCashout,
+  onBalanceUpdate,
 };

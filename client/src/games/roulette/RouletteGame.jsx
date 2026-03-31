@@ -10,7 +10,7 @@ import rouletteSocketService from '../../services/socket/rouletteSocketService';
 import { BET_TYPES } from './rouletteUtils';
 
 const RouletteGame = () => {
-  const { user } = useContext(AuthContext);
+  const { user, updateBalance } = useContext(AuthContext);
   const toast = useToast();
 
   // Game state
@@ -75,6 +75,25 @@ const RouletteGame = () => {
           setMultiplayerBets(prev => [...prev, bet]);
         }));
 
+        unsubs.push(rouletteSocketService.onBalanceUpdate((data) => {
+          if (data?.balance != null) {
+            setBalance(data.balance);
+            updateBalance(data.balance);
+          }
+        }));
+
+        unsubs.push(rouletteSocketService.onBettingStart(() => {
+          setIsSpinning(false);
+          setSpinPhase(null);
+          setShowResult(false);
+          setCurrentBets([]);
+          setMultiplayerBets([]);
+        }));
+
+        unsubs.push(rouletteSocketService.onBettingEnd(() => {
+          // Betting phase ended, spin coming
+        }));
+
         unsubs.push(rouletteSocketService.onSpinStarted((data) => {
           setIsSpinning(true);
           setSpinPhase('start');
@@ -85,25 +104,27 @@ const RouletteGame = () => {
         unsubs.push(rouletteSocketService.onSpinResult((data) => {
           setSpinPhase('result');
           setWinningNumber(data.winningNumber);
-          setBalance(prevBalance => prevBalance + data.totalProfit);
 
+          setTimeout(() => {
+            setShowResult(true);
+          }, 1000);
+        }));
+
+        unsubs.push(rouletteSocketService.onPersonalResult((data) => {
           const gameResultObj = {
-            id: data.gameId,
-            winningNumber: data.winningNumber,
+            id: Date.now(),
+            winningNumber: data.winningNumber || winningNumber,
             winningColor: data.winningColor,
-            bets: data.bets,
+            bets: data.bets || [],
             totalBetAmount: data.bets ? data.bets.reduce((sum, bet) => sum + bet.amount, 0) : 0,
-            totalWinnings: data.totalWinnings,
-            totalProfit: data.totalProfit,
+            totalWinnings: data.totalWinnings || 0,
+            totalProfit: data.totalProfit || 0,
             timestamp: new Date()
           };
 
           setGameResult(gameResultObj);
           setGameHistory(prevHistory => [gameResultObj, ...prevHistory]);
-
-          setTimeout(() => {
-            setShowResult(true);
-          }, 1000);
+          setCurrentBets([]);
         }));
 
         unsubs.push(rouletteSocketService.onRoundComplete(() => {
@@ -274,12 +295,12 @@ const RouletteGame = () => {
                     <tr key={game.id} className="border-b border-border">
                       <td className="py-2 px-4 text-text-secondary">{formatTime(game.timestamp)}</td>
                       <td className="py-2 px-4">{getNumberColorBadge(game.winningNumber)}</td>
-                      <td className="py-2 px-4 text-text-secondary">{game.bets.length}</td>
-                      <td className="py-2 px-4 text-text-secondary">{game.totalBetAmount.toFixed(2)}</td>
+                      <td className="py-2 px-4 text-text-secondary">{game.bets ? game.bets.length : '-'}</td>
+                      <td className="py-2 px-4 text-text-secondary">{game.totalBetAmount != null ? game.totalBetAmount.toFixed(2) : '-'}</td>
                       <td className={`py-2 px-4 font-bold ${
-                        game.totalProfit >= 0 ? 'text-status-success' : 'text-status-error'
+                        (game.totalProfit || 0) >= 0 ? 'text-status-success' : 'text-status-error'
                       }`}>
-                        {game.totalProfit >= 0 ? '+' : ''}{game.totalProfit.toFixed(2)}
+                        {game.totalProfit != null ? `${game.totalProfit >= 0 ? '+' : ''}${game.totalProfit.toFixed(2)}` : '-'}
                       </td>
                     </tr>
                   ))
@@ -311,7 +332,7 @@ const RouletteGame = () => {
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-text-muted mb-1">Bets</h4>
                 <div className="space-y-2">
-                  {gameResult.bets.map((bet, index) => (
+                  {(gameResult.bets || []).map((bet, index) => (
                     <div key={index} className="flex justify-between items-center text-sm">
                       <div>
                         <span className="text-text-secondary">{bet.type}</span>
@@ -362,24 +383,24 @@ const RouletteGame = () => {
             <div className="bg-bg-elevated rounded-lg p-3">
               <div className="text-xs text-text-muted">Total Wagered</div>
               <div className="text-lg font-heading font-bold text-text-primary">
-                {gameHistory.reduce((sum, game) => sum + game.totalBetAmount, 0).toFixed(2)}
+                {gameHistory.reduce((sum, game) => sum + (game.totalBetAmount || 0), 0).toFixed(2)}
               </div>
             </div>
             <div className="bg-bg-elevated rounded-lg p-3">
               <div className="text-xs text-text-muted">Total Profit</div>
               <div className={`text-lg font-heading font-bold ${
-                gameHistory.reduce((sum, game) => sum + game.totalProfit, 0) >= 0
+                gameHistory.reduce((sum, game) => sum + (game.totalProfit || 0), 0) >= 0
                   ? 'text-status-success'
                   : 'text-status-error'
               }`}>
-                {gameHistory.reduce((sum, game) => sum + game.totalProfit, 0).toFixed(2)}
+                {gameHistory.reduce((sum, game) => sum + (game.totalProfit || 0), 0).toFixed(2)}
               </div>
             </div>
             <div className="bg-bg-elevated rounded-lg p-3">
               <div className="text-xs text-text-muted">Best Win</div>
               <div className="text-lg font-heading font-bold text-status-success">
                 {gameHistory.length > 0
-                  ? Math.max(...gameHistory.map(g => g.totalProfit)).toFixed(2)
+                  ? Math.max(...gameHistory.map(g => g.totalProfit || 0)).toFixed(2)
                   : '0.00'
                 }
               </div>

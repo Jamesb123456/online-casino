@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import PlinkoBoard from './PlinkoBoard';
 import PlinkoBettingPanel from './PlinkoBettingPanel';
 import {
@@ -6,9 +6,11 @@ import {
 } from './plinkoUtils';
 import plinkoSocketService from '../../services/socket/plinkoSocketService';
 import { useToast } from '../../contexts/ToastContext';
+import { AuthContext } from '../../contexts/AuthContext';
 
 const PlinkoGame = () => {
   const toast = useToast();
+  const { updateBalance } = useContext(AuthContext);
   // Game state
   const [betAmount, setBetAmount] = useState(10);
   const [risk, setRisk] = useState('medium');
@@ -44,24 +46,36 @@ const PlinkoGame = () => {
       toast.error(error?.message || 'An error occurred. Please try again.');
     });
 
+    const unsubBalance = plinkoSocketService.onBalanceUpdate((data) => {
+      if (data?.balance != null) updateBalance(data.balance);
+    });
+
     // Cleanup when component unmounts
     return () => {
+      unsubBalance();
       plinkoSocketService.disconnect();
     };
-  }, []);
+  }, [updateBalance]);
   
   // Handle dropping the ball (placing a bet)
   const handlePlaceBet = () => {
     if (isAnimating || betAmount <= 0) return;
-    
+
     // Force reset animation state before starting a new one
     setAnimationPath(null);
-    
+
     // Small delay to ensure previous state is cleared
     setTimeout(() => {
       setGameResult(null);
       setIsAnimating(true);
-      plinkoSocketService.startGame(betAmount, 16, risk);
+      plinkoSocketService.startGame(betAmount, 16, risk, (result) => {
+        if (result && result.success && result.path) {
+          setAnimationPath(result.path);
+        } else {
+          setIsAnimating(false);
+          toast.error(result?.error || 'Failed to start game. Please try again.');
+        }
+      });
     }, 50);
   };
   

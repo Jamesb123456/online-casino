@@ -124,6 +124,38 @@ export const paginationSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Analytics query schemas
+// ---------------------------------------------------------------------------
+
+export const analyticsPeriodSchema = z.object({
+  period: z.enum(['24h', '7d', '30d', '90d', 'all']).default('30d'),
+});
+
+export const analyticsGameDetailSchema = z.object({
+  period: z.enum(['24h', '7d', '30d', '90d', 'all']).default('30d'),
+  granularity: z.enum(['hour', 'day', 'week']).default('day'),
+});
+
+export const analyticsPlayerSessionsSchema = z.object({
+  gameType: z.enum(['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines']).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  sortBy: z.enum(['startTime', 'totalBet', 'outcome']).default('startTime'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+
+export const analyticsTopPlayersSchema = z.object({
+  metric: z.enum(['wagered', 'profit', 'sessions', 'deposits']).default('wagered'),
+  period: z.enum(['24h', '7d', '30d', '90d', 'all']).default('30d'),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const analyticsRevenueSchema = z.object({
+  period: z.enum(['24h', '7d', '30d', '90d', 'all']).default('30d'),
+  granularity: z.enum(['hour', 'day', 'week']).default('day'),
+});
+
+// ---------------------------------------------------------------------------
 // Helper: validate and return parsed data, or throw with a readable message
 // ---------------------------------------------------------------------------
 

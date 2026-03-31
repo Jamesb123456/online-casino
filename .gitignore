@@ -32,6 +32,16 @@ logs/
 
 # Testing
 coverage/
+test-results/
+playwright-report/
+e2e/.auth/
+
+# Tool-generated
+.blender-toolkit/
+.playwright-mcp/
+
+# Test output
+client/vitest_json.txt
 
 # Temporary files
 *.tmp

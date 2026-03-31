@@ -88,6 +88,10 @@ class BlackjackHandler {
         // Deduct the initial bet from the player's balance
         await BalanceService.placeBet(userIdNum, betAmount, 'blackjack', { action: 'initial_bet' });
 
+        // Notify client of updated balance
+        const newBalanceAfterBet = await BalanceService.getBalance(userIdNum);
+        socket.emit('balanceUpdate', { balance: newBalanceAfterBet });
+
         // Create new game
         const gameId = this.generateGameId();
         const game = this.createNewGame(userIdNum, Number(betAmount));
@@ -275,6 +279,10 @@ class BlackjackHandler {
           gameId,
           action: 'double_down'
         });
+
+        // Notify client of updated balance after double down bet
+        const newBalanceAfterDouble = await BalanceService.getBalance(userIdNum);
+        socket.emit('balanceUpdate', { balance: newBalanceAfterDouble });
 
         // Double the bet
         game.betAmount *= 2;
@@ -503,6 +511,10 @@ class BlackjackHandler {
 
       // Update game statistics
       await GameStat.updateStats('blackjack', game.betAmount.toString(), game.winAmount || 0);
+
+      // Notify client of updated balance after game ends
+      const newBalanceAfterEnd = await BalanceService.getBalance(game.userId);
+      this.io.to(`blackjack_${gameId}`).emit('balanceUpdate', { balance: newBalanceAfterEnd });
 
       // Log game end
       await LoggingService.logGameAction(

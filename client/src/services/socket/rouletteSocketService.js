@@ -232,6 +232,17 @@ class RouletteSocketService {
   }
 
   /**
+   * Listen for personal result (user's bet outcomes after spin)
+   * @param {Function} callback
+   * @returns {Function} Unsubscribe function
+   */
+  onPersonalResult(callback) {
+    if (!this.socket) return () => {};
+    this.socket.on('roulette:personal_result', callback);
+    return () => { if (this.socket) this.socket.off('roulette:personal_result', callback); };
+  }
+
+  /**
    * Listen for round complete event
    * @param {Function} callback
    * @returns {Function} Unsubscribe function

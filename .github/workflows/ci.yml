@@ -103,6 +103,140 @@ jobs:
           path: client/coverage/
           retention-days: 14
 
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: build
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test_root
+          MYSQL_DATABASE: platinum_casino_test
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_pass
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        run: cd server && npm ci && npm install zod seedrandom
+
+      - name: Push schema to test DB
+        run: cd server && npx drizzle-kit push --force
+        env:
+          DATABASE_URL: mysql://test_user:test_pass@localhost:3307/platinum_casino_test
+
+      - name: Run integration tests
+        run: cd server && npm run test:integration
+        env:
+          DATABASE_URL: mysql://test_user:test_pass@localhost:3307/platinum_casino_test
+          BETTER_AUTH_SECRET: ci-integration-test-secret-that-is-at-least-32-chars
+          BETTER_AUTH_URL: http://localhost:5000
+          CLIENT_URL: http://localhost:3000
+          CRASH_COUNTDOWN_MS: '500'
+          CRASH_NEXT_GAME_MS: '500'
+          ROULETTE_BETTING_DURATION: '2'
+          ROULETTE_SPIN_DURATION: '1000'
+          ROULETTE_RESULT_DISPLAY: '500'
+          WHEEL_BETTING_DURATION: '2'
+          WHEEL_SPIN_DURATION: '1000'
+          WHEEL_RESULT_DISPLAY: '500'
+
+  e2e-test:
+    runs-on: ubuntu-latest
+    needs: build
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test_root
+          MYSQL_DATABASE: platinum_casino_test
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_pass
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install Playwright
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Install server dependencies
+        run: cd server && npm ci && npm install zod seedrandom
+
+      - name: Install client dependencies
+        run: cd client && npm ci
+
+      - name: Push schema to test DB
+        run: cd server && npx drizzle-kit push --force
+        env:
+          DATABASE_URL: mysql://test_user:test_pass@localhost:3307/platinum_casino_test
+
+      - name: Seed test database
+        run: cd server && npm run seed
+        env:
+          DATABASE_URL: mysql://test_user:test_pass@localhost:3307/platinum_casino_test
+          BETTER_AUTH_SECRET: ci-e2e-test-secret-that-is-at-least-32-characters
+          BETTER_AUTH_URL: http://localhost:5000
+
+      - name: Start server
+        run: cd server && npm run start:ts &
+        env:
+          PORT: 5000
+          DATABASE_URL: mysql://test_user:test_pass@localhost:3307/platinum_casino_test
+          BETTER_AUTH_SECRET: ci-e2e-test-secret-that-is-at-least-32-characters
+          BETTER_AUTH_URL: http://localhost:5000
+          CLIENT_URL: http://localhost:5173
+
+      - name: Start client
+        run: cd client && npm run dev &
+        env:
+          VITE_API_URL: http://localhost:5000
+          VITE_SOCKET_URL: http://localhost:5000
+
+      - name: Wait for services
+        run: |
+          npx wait-on http://localhost:5000/health http://localhost:5173 --timeout 60000
+
+      - name: Run E2E tests
+        run: npx playwright test
+        env:
+          BASE_URL: http://localhost:5173
+          CI: true
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
   security:
     runs-on: ubuntu-latest
     steps:

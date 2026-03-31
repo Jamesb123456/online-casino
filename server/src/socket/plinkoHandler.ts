@@ -108,6 +108,10 @@ function initPlinkoHandlers(io, socket, user) {
         plinkoSessionId: gameId
       });
 
+      // Emit balance update to the player
+      const balanceAfterBet = await BalanceService.getBalance(userId);
+      socket.emit('balanceUpdate', { balance: balanceAfterBet });
+
       // Log bet placed
       LoggingService.logBetPlaced('plinko', gameId, userId, betAmount, {
         risk,
@@ -138,6 +142,10 @@ function initPlinkoHandlers(io, socket, user) {
           path: path.join(','),
           profit
         });
+
+        // Emit balance update to the player
+        const balanceAfterWin = await BalanceService.getBalance(userId);
+        socket.emit('balanceUpdate', { balance: balanceAfterWin });
       }
 
       // Create game result

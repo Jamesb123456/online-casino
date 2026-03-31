@@ -50,10 +50,14 @@ class PlinkoSocketService {
    * @param {number} amount - Bet amount
    * @param {number} rows - Number of rows in the plinko board
    * @param {string} risk - Risk level ('low', 'medium', 'high')
+   * @param {Function} callback - Response callback with game result
    */
-  startGame(amount, rows, risk) {
-    if (!this.socket || !this.isConnected) return;
-    this.socket.emit('plinko:drop_ball', { betAmount: amount, rows, risk });
+  startGame(amount, rows, risk, callback) {
+    if (!this.socket || !this.isConnected) {
+      if (callback) callback({ success: false, error: 'Socket not connected' });
+      return;
+    }
+    this.socket.emit('plinko:drop_ball', { betAmount: amount, rows, risk }, callback);
   }
 
   /**

@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import LandminesBoard from './LandminesBoard';
 import LandminesBettingPanel from './LandminesBettingPanel';
 import { formatCurrency, formatTime, getMultiplierColor } from './landminesUtils';
 import landminesSocketService from '../../services/socket/landminesSocketService';
+import { AuthContext } from '../../contexts/AuthContext';
 
 const LandminesGame = () => {
+  const { updateBalance } = useContext(AuthContext);
   // Game state
   const [isGameActive, setIsGameActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,11 +30,19 @@ const LandminesGame = () => {
       }
     });
 
+    const unsubBalance = landminesSocketService.onBalanceUpdate((data) => {
+      if (data?.balance != null) {
+        setBalance(data.balance);
+        updateBalance(data.balance);
+      }
+    });
+
     // Cleanup when component unmounts
     return () => {
+      unsubBalance();
       landminesSocketService.leaveLandminesGame();
     };
-  }, []);
+  }, [updateBalance]);
 
   // Handle starting a new game
   const handleStartGame = useCallback(({ betAmount, mines }) => {

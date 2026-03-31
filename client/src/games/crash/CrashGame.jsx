@@ -215,7 +215,7 @@ const useCrashSocket = (authUser) => {
 };
 
 const CrashGame = () => {
-  const { user, isAuthenticated, loading } = useContext(AuthContext);
+  const { user, isAuthenticated, loading, updateBalance } = useContext(AuthContext);
   const toast = useToast();
   const navigate = useNavigate();
   const [connectionError, setConnectionError] = useState(null);
@@ -233,9 +233,15 @@ const CrashGame = () => {
   const history = socketData.history;
   const activePlayers = socketData.activePlayers || [];
   const activeBets = socketData.activeBets || [];
-  const socketPlaceBet = (data, callback) => crashSocket.placeBet(data, callback);
-  const socketCashOut = (data, callback) => crashSocket.cashOut(data, callback);
   
+  // Listen for balance updates from server
+  useEffect(() => {
+    const unsub = crashSocket.onBalanceUpdate((data) => {
+      if (data?.balance != null) updateBalance(data.balance);
+    });
+    return () => unsub();
+  }, [updateBalance]);
+
   // Listen for authentication errors
   useEffect(() => {
     const handleConnectError = (error) => {
@@ -272,7 +278,7 @@ const CrashGame = () => {
           status: 'placing',
         });
         
-        const result = await socketPlaceBet({
+        const result = await socketData.placeBet({
           amount: bet.amount,
           autoCashout: bet.autoCashout
         });
@@ -301,7 +307,7 @@ const CrashGame = () => {
           status: 'cashing_out',
         }));
         
-        const result = await socketCashOut({
+        const result = await socketData.cashOut({
           betId: activeBet.id,
           amount: bet.amount
         });
@@ -348,20 +354,27 @@ const CrashGame = () => {
   // Handle crash
   useEffect(() => {
     if (
-      activeBet && 
-      activeBet.status === 'placed' && 
+      activeBet &&
+      activeBet.status === 'placed' &&
       gameState.status === 'crashed'
     ) {
       setActiveBet({
         ...activeBet,
         status: 'lost',
       });
-      
+
       setGameResult({
         type: 'loss',
         crashPoint: gameState.crashPoint,
         lost: bet.amount,
       });
+    }
+  }, [gameState.status, activeBet]);
+
+  // Reset active bet when a new round starts so Place Bet becomes available
+  useEffect(() => {
+    if (gameState.status === 'waiting' && activeBet && (activeBet.status === 'lost' || activeBet.status === 'cashed_out')) {
+      setActiveBet(null);
     }
   }, [gameState.status, activeBet]);
 

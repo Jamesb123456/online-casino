@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
@@ -10,6 +11,7 @@ import { FaSort, FaSortUp, FaSortDown } from 'react-icons/fa';
  * Provides interface for administrators to manage players
  */
 const PlayerManagement = () => {
+  const navigate = useNavigate();
   // State for players data
   const [players, setPlayers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -361,6 +363,9 @@ const PlayerManagement = () => {
                       <td className="p-3">{formatDate(player.createdAt)}</td>
                       <td className="p-3">{formatDate(player.lastLogin)}</td>
                       <td className="p-3 space-x-2 whitespace-nowrap">
+                        <Button color="primary" size="small" onClick={() => navigate(`/admin/analytics/players/${player.id}`)}>
+                          Profile
+                        </Button>
                         <Button color="secondary" size="small" onClick={() => handleEditClick(player)}>
                           Edit
                         </Button>

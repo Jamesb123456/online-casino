@@ -16,7 +16,20 @@ import { calculateHouseEdge } from '../utils/gameUtils.js';
 import { validateSocketData, crashPlaceBetSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
 
+/** Safely invoke a socket acknowledgement callback — if the client did not
+ *  supply one (or the connection was severed), this prevents the server from
+ *  crashing with "callback is not a function". */
+function safeCallback(cb: unknown, payload: Record<string, unknown>) {
+  if (typeof cb === 'function') {
+    cb(payload);
+  }
+}
+
 // Namespace crash-specific variables to avoid conflicts
+// Configurable timing constants (overridable via env vars for integration tests)
+const CRASH_COUNTDOWN_MS = parseInt(process.env.CRASH_COUNTDOWN_MS || '5000');
+const CRASH_NEXT_GAME_MS = parseInt(process.env.CRASH_NEXT_GAME_MS || '3000');
+
 const crashGame = {
   activeSessions: new Map(),
   gameHistory: [],
@@ -139,46 +152,49 @@ export default function initCrashHandlers(namespace) {
         // Verify user is still authenticated
         const authenticatedUser = (socket as any).user;
         if (!authenticatedUser) {
-          callback({ success: false, message: 'Authentication required' });
+          safeCallback(callback, { success: false, message: 'Authentication required' });
           return;
         }
 
         // Validate input with Zod
         const validated = validateSocketData(crashPlaceBetSchema, data);
         const { amount, autoCashoutAt } = validated;
-        
+
         if (gameState.isGameRunning) {
-          return callback({ success: false, error: 'Cannot bet while game is running' });
+          return safeCallback(callback, { success: false, error: 'Cannot bet while game is running' });
         }
-        
+
         if (activeBets.has(userId)) {
-          return callback({ success: false, error: 'You already have an active bet' });
+          return safeCallback(callback, { success: false, error: 'You already have an active bet' });
         }
-        
+
         // Check user balance
         try {
           // In production, get the real user balance from database
           const userBalance = await BalanceService.getBalance(userId);
-          
+
           if (amount > userBalance) {
-            return callback({ success: false, error: 'Insufficient balance' });
+            return safeCallback(callback, { success: false, error: 'Insufficient balance' });
           }
         } catch (error) {
           LoggingService.logGameEvent('crash', 'error_checking_balance', { error: String(error), userId });
-          return callback({ success: false, error: 'Could not verify balance' });
+          return safeCallback(callback, { success: false, error: 'Could not verify balance' });
         }
-        
+
         // Use balanceService to record the bet transaction
         try {
           await BalanceService.placeBet(userId, amount, 'crash', {
             autoCashoutAt,
             gameId: gameState.gameId || `game_${Date.now()}`
           });
+          // Emit balance update to the player
+          const newBalance = await BalanceService.getBalance(userId);
+          socket.emit('balanceUpdate', { balance: newBalance });
         } catch (error) {
           LoggingService.logGameEvent('crash', 'error_recording_bet', { error: String(error), userId });
-          return callback({ success: false, error: 'Failed to place bet' });
+          return safeCallback(callback, { success: false, error: 'Failed to place bet' });
         }
-        
+
         // Record the bet
         activeBets.set(userId, {
           amount,
@@ -188,16 +204,16 @@ export default function initCrashHandlers(namespace) {
           cashedOutAt: null,
           profit: 0
         });
-        
+
         // Log bet placed
         LoggingService.logBetPlaced('crash', gameState.gameId, userId, amount, {
           autoCashoutAt,
           timestamp: new Date()
         });
-        
+
         // Get player info for the broadcast
         const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
-        
+
         // Notify everyone about the new bet with player details
         namespace.emit('playerBet', {
           userId,
@@ -206,15 +222,15 @@ export default function initCrashHandlers(namespace) {
           amount,
           autoCashoutAt
         });
-        
+
         // Return success to client
-        callback({
+        safeCallback(callback, {
           success: true,
           message: 'Bet placed successfully'
         });
       } catch (error) {
         LoggingService.logGameEvent('crash', 'error_place_bet', { error: String(error), userId });
-        callback({ success: false, error: 'Server error' });
+        safeCallback(callback, { success: false, error: 'Server error' });
       }
     });
     
@@ -226,35 +242,35 @@ export default function initCrashHandlers(namespace) {
         // Verify user is still authenticated
         const authenticatedUser = (socket as any).user;
         if (!authenticatedUser) {
-          callback({ success: false, message: 'Authentication required' });
+          safeCallback(callback, { success: false, message: 'Authentication required' });
           return;
         }
-        
+
         if (!gameState.isGameRunning) {
-          return callback({ success: false, error: 'Game is not running' });
+          return safeCallback(callback, { success: false, error: 'Game is not running' });
         }
-        
+
         const userId = authenticatedUser.userId;
         const bet = activeBets.get(userId);
         if (!bet) {
-          return callback({ success: false, error: 'No active bet found' });
+          return safeCallback(callback, { success: false, error: 'No active bet found' });
         }
-        
+
         if (bet.cashedOut) {
-          return callback({ success: false, error: 'Already cashed out' });
+          return safeCallback(callback, { success: false, error: 'Already cashed out' });
         }
-        
+
         // Process cashout
         const cashoutMultiplier = gameState.currentMultiplier;
         const winAmount = bet.amount * cashoutMultiplier;
         const profit = winAmount - bet.amount;
-        
+
         // Update bet record
         bet.cashedOut = true;
         bet.cashedOutAt = cashoutMultiplier;
         bet.profit = profit;
         activeBets.set(userId, bet);
-        
+
         // Use balanceService to record the win
         try {
           await BalanceService.recordWin(userId, bet.amount, winAmount, 'crash', {
@@ -262,11 +278,14 @@ export default function initCrashHandlers(namespace) {
             profit,
             gameId: gameState.gameId
           });
+          // Emit balance update to the player
+          const newBalance = await BalanceService.getBalance(userId);
+          socket.emit('balanceUpdate', { balance: newBalance });
         } catch (error) {
           LoggingService.logGameEvent('crash', 'error_recording_win', { error: String(error), userId });
-          return callback({ success: false, error: 'Failed to process cashout' });
+          return safeCallback(callback, { success: false, error: 'Failed to process cashout' });
         }
-        
+
         // Log cash out win
         LoggingService.logBetResult('crash', gameState.gameId, userId, bet.amount, winAmount, true, {
           multiplier: cashoutMultiplier,
@@ -275,7 +294,7 @@ export default function initCrashHandlers(namespace) {
 
         // Get player info for the broadcast
         const playerInfo = activePlayers.get(userId) || { username: 'Unknown', avatar: null };
-        
+
         // Notify everyone about the cashout with player details
         namespace.emit('playerCashout', {
           userId,
@@ -285,9 +304,9 @@ export default function initCrashHandlers(namespace) {
           profit,
           amount: bet.amount
         });
-        
+
         // Return success to client
-        callback({
+        safeCallback(callback, {
           success: true,
           multiplier: cashoutMultiplier,
           winAmount,
@@ -295,7 +314,7 @@ export default function initCrashHandlers(namespace) {
         });
       } catch (error) {
         LoggingService.logGameEvent('crash', 'error_cashout', { error: String(error), userId });
-        callback({ success: false, error: 'Server error' });
+        safeCallback(callback, { success: false, error: 'Server error' });
       }
     });
     
@@ -348,13 +367,13 @@ export default function initCrashHandlers(namespace) {
     // Notify clients game is starting soon
     namespace.emit('gameStarting', {
       gameId: gameState.gameId,
-      startingIn: 5 // Start in 5 seconds
+      startingIn: CRASH_COUNTDOWN_MS / 1000 // Start in N seconds
     });
-    
-    // Set the start time to 5 seconds in the future
-    gameState.startTime = Date.now() + 5000;
-    
-    // Start the game after 5 seconds
+
+    // Set the start time to N seconds in the future
+    gameState.startTime = Date.now() + CRASH_COUNTDOWN_MS;
+
+    // Start the game after countdown
     setTimeout(() => {
       if (!gameState.isGameStarting) return; // Safety check
       
@@ -371,7 +390,7 @@ export default function initCrashHandlers(namespace) {
       
       // Start ticking the multiplier
       gameState.tickInterval = setInterval(() => tickGame(), 100);
-    }, 5000);
+    }, CRASH_COUNTDOWN_MS);
   }
   
   /**
@@ -432,6 +451,12 @@ export default function initCrashHandlers(namespace) {
             gameId: gameState.gameId,
             autoCashout: true
           });
+          // Emit balance update to the player
+          const userConnection2 = connectedUsers.get(userId);
+          if (userConnection2?.socket) {
+            const newBal = await BalanceService.getBalance(userId);
+            userConnection2.socket.emit('balanceUpdate', { balance: newBal });
+          }
         } catch (error) {
           LoggingService.logGameEvent('crash', 'error_auto_cashout', { error: String(error), userId });
         }
@@ -497,16 +522,16 @@ export default function initCrashHandlers(namespace) {
     // Notify clients of crash
     namespace.emit('gameCrashed', {
       crashPoint: gameState.crashPoint,
-      nextGameIn: 3 // Start next game in 3 seconds
+      nextGameIn: CRASH_NEXT_GAME_MS / 1000 // Start next game in N seconds
     });
-    
+
     // Process lost bets
     processLostBets();
-    
+
     // Start a new game after delay
     setTimeout(() => {
       startGame();
-    }, 3000);
+    }, CRASH_NEXT_GAME_MS);
   }
   
   /**

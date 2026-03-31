@@ -80,13 +80,13 @@ class BalanceService {
 
         // Create transaction record
         const insertTxResult = await tx.execute(
-          sql`INSERT INTO transactions (user_id, amount, type, game_type, balance_before, balance_after, status, metadata, created_at, updated_at) VALUES (${userId}, ${changeAmountStr}, ${type}, ${gameType}, ${currentBalanceStr}, ${newBalanceStr}, 'completed', ${JSON.stringify(metadata)}, NOW(), NOW())`
+          sql`INSERT INTO transactions (user_id, amount, transaction_type, game_type, balance_before, balance_after, transaction_status, metadata, created_at, updated_at) VALUES (${userId}, ${changeAmountStr}, ${type}, ${gameType}, ${currentBalanceStr}, ${newBalanceStr}, 'completed', ${JSON.stringify(metadata)}, NOW(), NOW())`
         );
         const transactionId = (insertTxResult as any)[0]?.insertId;
 
         // Create balance history record
         await tx.execute(
-          sql`INSERT INTO balances (user_id, amount, previous_balance, change_amount, type, game_type, transaction_id, created_at, updated_at) VALUES (${userId}, ${newBalanceStr}, ${currentBalanceStr}, ${changeAmountStr}, ${this._mapTransactionTypeToBalanceType(type)}, ${gameType}, ${transactionId}, NOW(), NOW())`
+          sql`INSERT INTO balances (user_id, amount, previous_balance, change_amount, balance_type, game_type, transaction_id, created_at, updated_at) VALUES (${userId}, ${newBalanceStr}, ${currentBalanceStr}, ${changeAmountStr}, ${this._mapTransactionTypeToBalanceType(type)}, ${gameType}, ${transactionId}, NOW(), NOW())`
         );
 
         // Fetch the updated user and transaction to return

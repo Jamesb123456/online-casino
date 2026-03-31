@@ -28,7 +28,7 @@ services:
       - "5000:5000"
     environment:
       PORT: 5000
-      CLIENT_URL: ${CLIENT_URL:-http://localhost:5174}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
       DATABASE_URL: mysql://${DB_USER:-casino_user}:${DB_PASSWORD:-casino_pass}@db:3306/${DB_NAME:-platinum_casino}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-this-to-a-secure-secret-in-production}
       BETTER_AUTH_URL: http://localhost:5000

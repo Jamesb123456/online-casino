@@ -22,25 +22,40 @@ const BlackjackGame = () => {
 
   // Initialize the game and socket connection
   useEffect(() => {
+    const unsubs = [];
+    let cancelled = false;
+
     if (user) {
       setBalance(user.balance);
     }
 
-    // Connect to socket
-    blackjackSocketService.connect();
+    // Connect to socket and subscribe to events after connection is ready
+    const init = async () => {
+      try {
+        await blackjackSocketService.connect();
+      } catch (err) {
+        console.error('Blackjack socket connection failed:', err);
+        return;
+      }
 
-    // Event listeners - collect unsubscribe functions
-    const unsubs = [];
-    unsubs.push(blackjackSocketService.onGameStarted(handleGameStarted));
-    unsubs.push(blackjackSocketService.onCardDealt(handleCardDealt));
-    unsubs.push(blackjackSocketService.onPlayerTurn(handlePlayerTurn));
-    unsubs.push(blackjackSocketService.onDealerTurn(handleDealerTurn));
-    unsubs.push(blackjackSocketService.onGameResult(handleGameResult));
-    unsubs.push(blackjackSocketService.onBalanceUpdate(handleBalanceUpdate));
-    unsubs.push(blackjackSocketService.onError(handleError));
+      // Guard against subscribing after unmount
+      if (cancelled) return;
+
+      // Event listeners - collect unsubscribe functions
+      unsubs.push(blackjackSocketService.onGameStarted(handleGameStarted));
+      unsubs.push(blackjackSocketService.onCardDealt(handleCardDealt));
+      unsubs.push(blackjackSocketService.onPlayerTurn(handlePlayerTurn));
+      unsubs.push(blackjackSocketService.onDealerTurn(handleDealerTurn));
+      unsubs.push(blackjackSocketService.onGameResult(handleGameResult));
+      unsubs.push(blackjackSocketService.onBalanceUpdate(handleBalanceUpdate));
+      unsubs.push(blackjackSocketService.onError(handleError));
+    };
+
+    init();
 
     return () => {
       // Clean up individual listeners, then disconnect
+      cancelled = true;
       unsubs.forEach(unsub => unsub());
       blackjackSocketService.disconnect();
     };

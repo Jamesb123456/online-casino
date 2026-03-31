@@ -52,9 +52,16 @@ export interface AppInstance {
 export async function createApp(): Promise<AppInstance> {
   const app = express();
   const httpServer = http.createServer(app);
+
+  // Support comma-separated CLIENT_URL for multiple allowed origins
+  // e.g. CLIENT_URL=http://localhost,http://localhost:5173
+  const rawOrigins = process.env.CLIENT_URL || 'http://localhost';
+  const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+  const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
+
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost',
+      origin: corsOrigin,
       methods: ['GET', 'POST'],
       credentials: true
     }
@@ -75,7 +82,7 @@ export async function createApp(): Promise<AppInstance> {
 
   // CORS must be before Better Auth handler
   app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost',
+    origin: corsOrigin,
     credentials: true
   }));
 

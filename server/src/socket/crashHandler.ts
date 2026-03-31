@@ -406,11 +406,18 @@ export default function initCrashHandlers(namespace) {
     // This formula can be adjusted for game balance
     gameState.currentMultiplier = Math.pow(Math.E, 0.06 * elapsed);
     
+    // Cap multiplier at 50x — force crash if reached
+    if (gameState.currentMultiplier >= 50) {
+      gameState.currentMultiplier = 50;
+      gameOver();
+      return;
+    }
+
     // Check for auto-cashouts (async, catch errors to prevent crashing the server)
     processAutoCashouts().catch(err => {
       LoggingService.logSystemEvent('crash_auto_cashout_error', { error: String(err) }, 'error');
     });
-    
+
     // Check if game should crash
     if (gameState.currentMultiplier >= gameState.crashPoint) {
       gameOver();
@@ -499,7 +506,8 @@ export default function initCrashHandlers(namespace) {
     
     // Update game state
     gameState.isGameRunning = false;
-    
+    gameState.isGameStarting = false; // Safety reset to prevent startGame guard from blocking
+
     // Record game in history
     const gameResult = {
       gameId: gameState.gameId,
@@ -525,10 +533,14 @@ export default function initCrashHandlers(namespace) {
       nextGameIn: CRASH_NEXT_GAME_MS / 1000 // Start next game in N seconds
     });
 
-    // Process lost bets
-    processLostBets();
+    // Process lost bets — wrapped in try-catch so the next game always starts
+    try {
+      processLostBets();
+    } catch (err) {
+      LoggingService.logSystemEvent('crash_process_lost_bets_error', { error: String(err) }, 'error');
+    }
 
-    // Start a new game after delay
+    // Start a new game after delay — always schedule regardless of errors above
     setTimeout(() => {
       startGame();
     }, CRASH_NEXT_GAME_MS);
@@ -567,29 +579,21 @@ export default function initCrashHandlers(namespace) {
    * @param {Number} houseEdge - House edge percentage
    * @returns {Number} - Crash point value
    */
-  function generateCrashPoint(houseEdge) {
-    // Base algorithm for crash point (simplified)
-    // A more sophisticated implementation would use provably fair algorithms
-    const edge = 1 - houseEdge;
+  function generateCrashPoint(houseEdge: number): number {
+    // Generate cryptographically secure random in [0, 1)
+    const r = crypto.randomBytes(4).readUInt32BE(0) / 0x100000000;
 
-    // Generate a cryptographically secure random value between 0 and 1
-    const r = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
-
-    // Apply mathematical formula to create house edge
-    // This is a simplified version; real casinos use more complex formulas
+    // With probability = houseEdge, crash at 1.00x (instant crash)
     if (r < houseEdge) {
-      // House edge forces early crash (with 1-5x multiplier)
-      const r2 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
-      return 1 + (r2 * 4);
-    } else {
-      // Normal distribution centered around 2x with variance
-      // This creates a bell curve with most values between 1.5x and 10x
-      // but still allows for rare high multipliers
-      const r3 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
-      const r4 = crypto.randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
-      const variance = r3 * r4 * 20; // Higher variance for occasional big crashes
-      return 1 + variance;
+      return 1.0;
     }
+
+    // Otherwise crashPoint = (1 - houseEdge) / (1 - r)
+    // This gives exactly `houseEdge` house edge at any cashout target.
+    const crashPoint = (1 - houseEdge) / (1 - r);
+
+    // Cap at 50x max payout, floor to 2 decimal places
+    return Math.min(50, Math.max(1.0, Math.floor(crashPoint * 100) / 100));
   }
   
   // Log service initialization

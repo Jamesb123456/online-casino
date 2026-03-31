@@ -160,10 +160,10 @@ describe('Security: Input validation', () => {
       expect(result.data).toBe(2.00);
     });
 
-    it('should round 0.015 correctly', () => {
-      const result = betAmountSchema.safeParse(0.015);
+    it('should round 0.115 correctly', () => {
+      const result = betAmountSchema.safeParse(0.115);
       expect(result.success).toBe(true);
-      expect(result.data).toBe(0.02);
+      expect(result.data).toBe(0.12);
     });
 
     it('should handle floating point edge: 0.1 + 0.2', () => {

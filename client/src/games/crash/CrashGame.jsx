@@ -261,7 +261,7 @@ const CrashGame = () => {
   }, [navigate]);
   
   const [bet, setBet] = useState({
-    amount: 10,
+    amount: 1,
     autoCashout: 2.00,
   });
   const [activeBet, setActiveBet] = useState(null);

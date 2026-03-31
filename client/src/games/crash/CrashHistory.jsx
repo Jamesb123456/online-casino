@@ -39,7 +39,7 @@ const CrashHistory = ({ history = [] }) => {
         <div className="grid grid-cols-3 gap-3">
           <StatCard
             title="Highest"
-            value={Math.max(...history.map(g => g.crashPoint)).toFixed(2) + 'x'}
+            value={history.length > 0 ? Math.max(...history.map(g => g.crashPoint)).toFixed(2) + 'x' : '0.00x'}
             color="text-status-success"
           />
           <StatCard

@@ -7,6 +7,7 @@ import { users, transactions } from '../../drizzle/schema.js';
 import { eq, sql } from 'drizzle-orm';
 import LoggingService from './loggingService.js';
 import RedisService from './redisService.js';
+import { MAX_PAYOUT_MULTIPLIER } from '../utils/gameUtils.js';
 
 // Configure Decimal.js for financial precision
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
@@ -144,9 +145,24 @@ class BalanceService {
    * @returns {Promise<Object>} Updated user and transaction
    */
   async recordWin(userId, betAmount, winAmount, gameType, metadata = {}) {
+    // Defense-in-depth: cap winAmount to MAX_PAYOUT_MULTIPLIER * betAmount
+    const maxPayout = new Decimal(betAmount).times(MAX_PAYOUT_MULTIPLIER);
+    const cappedWinAmount = Decimal.min(new Decimal(winAmount), maxPayout).toNumber();
+
+    if (cappedWinAmount < winAmount) {
+      LoggingService.logSystemEvent('payout_capped', {
+        userId,
+        gameType,
+        originalWinAmount: winAmount,
+        cappedWinAmount,
+        betAmount,
+        maxMultiplier: MAX_PAYOUT_MULTIPLIER,
+      }, 'warn');
+    }
+
     return this.updateBalance(
       userId,
-      winAmount,
+      cappedWinAmount,
       'game_win',
       gameType,
       { ...metadata, betAmount }

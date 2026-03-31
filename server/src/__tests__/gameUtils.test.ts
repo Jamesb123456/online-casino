@@ -340,29 +340,33 @@ describe('calculatePayout()', () => {
 // calculateHouseEdge
 // ---------------------------------------------------------------------------
 describe('calculateHouseEdge()', () => {
-  it('should return 0.005 for blackjack', () => {
-    expect(calculateHouseEdge('blackjack')).toBe(0.005);
+  it('should return 0.02 for blackjack', () => {
+    expect(calculateHouseEdge('blackjack')).toBe(0.02);
   });
 
   it('should return 0.027 for roulette', () => {
     expect(calculateHouseEdge('roulette')).toBe(0.027);
   });
 
-  it('should return 0.01 for crash', () => {
-    expect(calculateHouseEdge('crash')).toBe(0.01);
+  it('should return 0.04 for crash', () => {
+    expect(calculateHouseEdge('crash')).toBe(0.04);
   });
 
-  it('should return 0.04 for wheel', () => {
-    expect(calculateHouseEdge('wheel')).toBe(0.04);
+  it('should return 0.07 for wheel', () => {
+    expect(calculateHouseEdge('wheel')).toBe(0.07);
   });
 
-  it('should return 0.02 for plinko', () => {
-    expect(calculateHouseEdge('plinko')).toBe(0.02);
+  it('should return 0.065 for plinko', () => {
+    expect(calculateHouseEdge('plinko')).toBe(0.065);
   });
 
-  it('should return the default 0.02 for unknown game types', () => {
-    expect(calculateHouseEdge('slots')).toBe(0.02);
-    expect(calculateHouseEdge('')).toBe(0.02);
+  it('should return 0.05 for landmines', () => {
+    expect(calculateHouseEdge('landmines')).toBe(0.05);
+  });
+
+  it('should return the default 0.05 for unknown game types', () => {
+    expect(calculateHouseEdge('slots')).toBe(0.05);
+    expect(calculateHouseEdge('')).toBe(0.05);
   });
 });
 

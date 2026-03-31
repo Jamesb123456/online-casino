@@ -37,7 +37,7 @@ export const generateCrashPoint = (serverSeed = '', clientSeed = '', houseEdge =
   const crashPoint = 100 / (1 - randomValue * houseEdgeFactor);
   
   // Round to 2 decimal places
-  return Math.max(1, Math.floor(crashPoint * 100) / 100);
+  return Math.min(50, Math.max(1, Math.floor(crashPoint * 100) / 100));
 };
 
 /**

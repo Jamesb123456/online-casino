@@ -11,9 +11,21 @@ class PlinkoSocketService {
 
   /**
    * Initialize socket connection to plinko namespace
+   * @returns {Promise} Promise that resolves when connection is established
    */
   connect() {
-    if (!this.socket) {
+    return new Promise((resolve, reject) => {
+      // If already connected, resolve immediately
+      if (this.socket && this.isConnected) {
+        return resolve();
+      }
+
+      // If socket exists but not connected, disconnect and reconnect
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],
         autoConnect: true,
@@ -23,15 +35,29 @@ class PlinkoSocketService {
         withCredentials: true,
       });
 
+      // Set a connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (!this.isConnected) {
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000);
+
       // Socket connection event listeners
       this.socket.on('connect', () => {
         this.isConnected = true;
+        clearTimeout(connectionTimeout);
+        resolve();
       });
 
       this.socket.on('disconnect', () => {
         this.isConnected = false;
       });
-    }
+
+      this.socket.on('connect_error', (error) => {
+        clearTimeout(connectionTimeout);
+        reject(error);
+      });
+    });
   }
 
   /**

@@ -1,21 +1,22 @@
 // @ts-nocheck
 /**
- * Wheel game handler tests
+ * Wheel game handler tests (namespace-level pattern)
  *
- * The wheel handler uses a per-connection pattern (io, socket, user).
- * It combines bet placement and spin into a single event (wheel:place_bet).
+ * The wheel handler takes a single `namespace` argument, attaches a
+ * connection handler, and runs an automated game loop:
+ *   betting phase → spin → results → repeat
+ *
  * Tests cover:
- *   - Authentication & connection
- *   - place_bet: valid bet, insufficient balance, difficulty levels (easy/medium/hard)
- *   - Win/loss resolution with correct multipliers
- *   - Player disconnect and cleanup
- *   - Balance service failures
- *   - Multiplayer broadcasts
+ *   - Namespace initialization & connection handling
+ *   - placeBet during betting phase (valid, duplicate, phase check, errors)
+ *   - Automated game loop: countdown, spin, result, round_complete
+ *   - get_history
+ *   - Player disconnect
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Mocks -- use vi.hoisted for variables referenced inside vi.mock factories
+// Mocks
 // ---------------------------------------------------------------------------
 
 const {
@@ -54,8 +55,6 @@ vi.mock('../validation/schemas.js', () => ({
 }));
 
 // Mock crypto for deterministic results
-// crypto.randomInt(n) => Math.floor(n/2) returns the middle segment
-// crypto.randomUUID returns a fixed UUID
 vi.mock('crypto', () => ({
   default: {
     randomBytes: vi.fn().mockReturnValue({
@@ -80,13 +79,12 @@ vi.mock('crypto', () => ({
 import initWheelHandlers from '../socket/wheelHandler.js';
 
 // ---------------------------------------------------------------------------
-// Helpers to create mock Socket.IO objects
+// Helpers
 // ---------------------------------------------------------------------------
 
-function createMockSocket(user = { userId: 1, username: 'testplayer', balance: '1000', avatar: null }) {
+function createMockSocket(user) {
   const eventHandlers = new Map();
-
-  const socket = {
+  return {
     id: `socket_${Math.random().toString(36).slice(2)}`,
     user,
     emit: vi.fn(),
@@ -95,22 +93,20 @@ function createMockSocket(user = { userId: 1, username: 'testplayer', balance: '
     disconnect: vi.fn(),
     join: vi.fn(),
     leave: vi.fn(),
-    on: vi.fn((event, handler) => {
-      eventHandlers.set(event, handler);
-    }),
+    on: vi.fn((event, handler) => { eventHandlers.set(event, handler); }),
     _trigger: async (event, ...args) => {
-      const handler = eventHandlers.get(event);
-      if (handler) return handler(...args);
+      const h = eventHandlers.get(event);
+      if (h) return h(...args);
     },
   };
-
-  return socket;
 }
 
-function createMockIo() {
+function createMockNamespace() {
+  const handlers = new Map();
   return {
     emit: vi.fn(),
-    to: vi.fn().mockReturnThis(),
+    on: vi.fn((event, handler) => { handlers.set(event, handler); }),
+    _connect: (socket) => { handlers.get('connection')?.(socket); },
   };
 }
 
@@ -118,74 +114,83 @@ function createMockIo() {
 // Tests
 // ---------------------------------------------------------------------------
 
-let wheelTestCounter = 200000;
-
 describe('Wheel game handler', () => {
-  let io;
+  let namespace;
   let socket;
-  let user;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
 
-    io = createMockIo();
-    // Use a monotonically increasing userId per test to avoid module-scoped state conflicts
-    wheelTestCounter++;
-    const uniqueUserId = wheelTestCounter;
-    user = { userId: uniqueUserId, username: 'testplayer', balance: 1000, avatar: null };
-    socket = createMockSocket({ userId: uniqueUserId, username: 'testplayer', balance: '1000' });
-
+    mockGetBalance.mockResolvedValue(1000);
     mockPlaceBet.mockResolvedValue({ user: { balance: '900' }, transaction: {} });
     mockRecordWin.mockResolvedValue({ user: { balance: '1100' }, transaction: {} });
+
+    namespace = createMockNamespace();
+    initWheelHandlers(namespace);
   });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  function connectUser(user = { userId: 1, username: 'testplayer' }) {
+    const s = createMockSocket(user);
+    namespace._connect(s);
+    return s;
+  }
 
   // -----------------------------------------------------------------------
   // Initialization & connection
   // -----------------------------------------------------------------------
   describe('initialization and connection', () => {
-    it('should register event handlers on the socket', () => {
-      initWheelHandlers(io, socket, user);
-
-      const registeredEvents = socket.on.mock.calls.map(([event]) => event);
-      expect(registeredEvents).toContain('wheel:join');
-      expect(registeredEvents).toContain('wheel:place_bet');
-      expect(registeredEvents).toContain('wheel:get_history');
-      expect(registeredEvents).toContain('wheel:leave');
-      expect(registeredEvents).toContain('disconnect');
+    it('should register connection handler on namespace', () => {
+      expect(namespace.on).toHaveBeenCalledWith('connection', expect.any(Function));
     });
 
-    it('should join the wheel room', () => {
-      initWheelHandlers(io, socket, user);
-      expect(socket.join).toHaveBeenCalledWith('wheel');
+    it('should start the game loop in betting phase', () => {
+      expect(namespace.emit).toHaveBeenCalledWith('gameStarting', expect.objectContaining({
+        countdown: expect.any(Number),
+        roundId: expect.any(String),
+      }));
     });
 
-    it('should emit active players to the connecting socket', () => {
-      initWheelHandlers(io, socket, user);
+    it('should register event handlers on connected socket', () => {
+      socket = connectUser();
+      const events = socket.on.mock.calls.map(([e]) => e);
+      expect(events).toContain('wheel:join');
+      expect(events).toContain('wheel:place_bet');
+      expect(events).toContain('wheel:get_history');
+      expect(events).toContain('disconnect');
+    });
+
+    it('should emit game state to connecting socket', () => {
+      socket = connectUser();
+      expect(socket.emit).toHaveBeenCalledWith('wheel:gameState', expect.objectContaining({
+        phase: 'betting',
+        segmentsByDifficulty: expect.any(Object),
+        activePlayers: expect.any(Array),
+      }));
+    });
+
+    it('should emit active players to connecting socket', () => {
+      socket = connectUser();
       expect(socket.emit).toHaveBeenCalledWith('wheel:activePlayers', expect.any(Array));
     });
 
-    it('should emit current bets to the connecting socket', () => {
-      initWheelHandlers(io, socket, user);
-      expect(socket.emit).toHaveBeenCalledWith('wheel:currentBets', expect.any(Array));
-    });
-
     it('should broadcast playerJoined to other clients', () => {
-      initWheelHandlers(io, socket, user);
+      socket = connectUser({ userId: 1, username: 'testplayer' });
       expect(socket.broadcast.emit).toHaveBeenCalledWith('wheel:playerJoined', expect.objectContaining({
-        id: user.userId,
+        id: 1,
         username: 'testplayer',
       }));
     });
 
     it('should disconnect unauthenticated sockets', () => {
-      const unauthedSocket = createMockSocket(null);
-      unauthedSocket.user = undefined;
-      initWheelHandlers(io, unauthedSocket, user);
-
-      expect(unauthedSocket.emit).toHaveBeenCalledWith('wheel:error', expect.objectContaining({
-        message: 'Authentication required',
-      }));
-      expect(unauthedSocket.disconnect).toHaveBeenCalled();
+      const unauthed = createMockSocket(undefined);
+      namespace._connect(unauthed);
+      expect(unauthed.disconnect).toHaveBeenCalled();
     });
   });
 
@@ -193,15 +198,13 @@ describe('Wheel game handler', () => {
   // wheel:join
   // -----------------------------------------------------------------------
   describe('wheel:join event', () => {
-    it('should return game state with balance and history', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:join', {}, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+    it('should return success with segments and history', async () => {
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:join', {}, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
-        balance: expect.any(Number),
+        segmentsByDifficulty: expect.any(Object),
         history: expect.any(Array),
       }));
     });
@@ -211,148 +214,133 @@ describe('Wheel game handler', () => {
   // wheel:place_bet
   // -----------------------------------------------------------------------
   describe('wheel:place_bet event', () => {
-    it('should successfully place a bet and return result', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+    it('should successfully place a bet during betting phase', async () => {
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
-        gameId: expect.any(String),
-        segmentIndex: expect.any(Number),
-        multiplier: expect.any(Number),
-        winAmount: expect.any(Number),
-        profit: expect.any(Number),
-        balance: expect.any(Number),
+        balance: 1000,
       }));
     });
 
     it('should call BalanceService.placeBet with correct arguments', async () => {
-      initWheelHandlers(io, socket, user);
-
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, vi.fn());
-
-      expect(mockPlaceBet).toHaveBeenCalledWith(user.userId, 100, 'wheel', expect.objectContaining({
-        difficulty: 'medium',
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
+      expect(mockPlaceBet).toHaveBeenCalledWith(1, 100, 'wheel', expect.objectContaining({
+        roundId: expect.any(String),
       }));
     });
 
-    it('should call BalanceService.recordWin when winAmount > 0', async () => {
-      initWheelHandlers(io, socket, user);
-
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, vi.fn());
-
-      // All segments have multiplier > 0 so winAmount is always > 0
-      expect(mockRecordWin).toHaveBeenCalled();
+    it('should broadcast bet to all players via namespace', async () => {
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
+      expect(namespace.emit).toHaveBeenCalledWith('wheel:playerBet', expect.objectContaining({
+        userId: 1,
+        username: 'testplayer',
+        amount: 100,
+      }));
     });
 
-    it('should reject bet when balance is insufficient', async () => {
-      // Use a fresh unique userId so the session gets initialized with balance 50
-      const lowBalanceUserId = Math.floor(Math.random() * 1000000) + 2000000;
-      const lowBalanceSocket = createMockSocket({ userId: lowBalanceUserId, username: 'testplayer', balance: '50' });
-      initWheelHandlers(io, lowBalanceSocket, { userId: lowBalanceUserId, username: 'testplayer', balance: 50, avatar: null });
+    it('should reject duplicate bet in same round', async () => {
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
 
-      const callback = vi.fn();
-      await lowBalanceSocket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, callback);
+      const cb2 = vi.fn();
+      await socket._trigger('wheel:place_bet', { betAmount: 50 }, cb2);
+      expect(cb2).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        error: 'You already placed a bet this round',
+      }));
+    });
 
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+    it('should reject bet when not in betting phase', async () => {
+      // Advance past the 10s betting countdown
+      vi.advanceTimersByTime(11000);
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        error: 'Betting is closed',
+      }));
+    });
+
+    it('should handle BalanceService.placeBet failure', async () => {
+      mockPlaceBet.mockRejectedValueOnce(new Error('Insufficient balance'));
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({
         success: false,
         error: 'Insufficient balance',
       }));
     });
 
-    it('should work with easy difficulty', async () => {
-      initWheelHandlers(io, socket, user);
+    it('should emit balanceUpdate to the player after placing bet', async () => {
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
+      expect(socket.emit).toHaveBeenCalledWith('balanceUpdate', expect.objectContaining({
+        balance: 1000,
+      }));
+    });
+  });
 
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'easy' }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        multiplier: expect.any(Number),
+  // -----------------------------------------------------------------------
+  // Automated game loop
+  // -----------------------------------------------------------------------
+  describe('automated game loop', () => {
+    it('should emit countdown during betting phase', () => {
+      vi.advanceTimersByTime(1000);
+      expect(namespace.emit).toHaveBeenCalledWith('countdown', expect.objectContaining({
+        countdown: expect.any(Number),
       }));
     });
 
-    it('should work with hard difficulty', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'hard' }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        multiplier: expect.any(Number),
+    it('should transition to spinning after betting countdown', () => {
+      // Betting duration is 10s
+      vi.advanceTimersByTime(11000);
+      expect(namespace.emit).toHaveBeenCalledWith('wheelSpinning', expect.objectContaining({
+        roundId: expect.any(String),
+        targetAngle: expect.any(Number),
+        segmentIndex: expect.any(Number),
       }));
     });
 
-    it('should default to medium difficulty when not specified', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100 }, callback);
-
-      // validateSocketData is mocked to pass through, so difficulty will be undefined
-      // getWheelSegments defaults to 'medium' when not found
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
+    it('should emit game result after spin duration', async () => {
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
+      // betting (10s) + spin (5s) = 15s
+      await vi.advanceTimersByTimeAsync(16000);
+      expect(namespace.emit).toHaveBeenCalledWith('wheel:game_result', expect.objectContaining({
+        roundId: expect.any(String),
+        segmentIndex: expect.any(Number),
       }));
     });
 
-    it('should broadcast bet to other players', async () => {
-      initWheelHandlers(io, socket, user);
+    it('should call BalanceService.recordWin for winning bets', async () => {
+      socket = connectUser();
+      await socket._trigger('wheel:place_bet', { betAmount: 100 }, vi.fn());
+      // All segments have multiplier > 0, so every bet wins
+      await vi.advanceTimersByTimeAsync(16000);
+      expect(mockRecordWin).toHaveBeenCalled();
+    });
 
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, vi.fn());
-
-      expect(socket.broadcast.emit).toHaveBeenCalledWith('wheel:playerBet', expect.objectContaining({
-        userId: user.userId,
-        username: 'testplayer',
-        betAmount: 100,
+    it('should emit round_complete after result display', async () => {
+      // betting (10s) + spin (5s) + result display (4s) = 19s
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(namespace.emit).toHaveBeenCalledWith('wheel:round_complete', expect.objectContaining({
+        message: expect.any(String),
       }));
     });
 
-    it('should broadcast game result to room', async () => {
-      initWheelHandlers(io, socket, user);
-
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, vi.fn());
-
-      expect(socket.to).toHaveBeenCalledWith('wheel');
-    });
-
-    it('should handle BalanceService.placeBet failure', async () => {
-      mockPlaceBet.mockRejectedValueOnce(new Error('DB error'));
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: false,
+    it('should start next betting phase after round_complete', async () => {
+      namespace.emit.mockClear();
+      await vi.advanceTimersByTimeAsync(20000);
+      // After round_complete, startBettingPhase fires again
+      expect(namespace.emit).toHaveBeenCalledWith('gameStarting', expect.objectContaining({
+        countdown: expect.any(Number),
       }));
-    });
-
-    it('should handle BalanceService.recordWin failure', async () => {
-      mockRecordWin.mockRejectedValueOnce(new Error('DB error'));
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: false,
-      }));
-    });
-
-    it('should correctly deduct and add balance for a bet', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:place_bet', { betAmount: 100, difficulty: 'medium' }, callback);
-
-      const result = callback.mock.calls[0][0];
-      expect(result.success).toBe(true);
-      // Balance should be: 1000 - 100 + winAmount
-      expect(result.balance).toBe(1000 - 100 + result.winAmount);
     });
   });
 
@@ -360,41 +348,21 @@ describe('Wheel game handler', () => {
   // wheel:get_history
   // -----------------------------------------------------------------------
   describe('wheel:get_history event', () => {
-    it('should return user and global history', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:get_history', { limit: 5 }, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+    it('should return global history', async () => {
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:get_history', { limit: 5 }, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({
         success: true,
-        userHistory: expect.any(Array),
         globalHistory: expect.any(Array),
       }));
     });
 
     it('should default to 10 items when no limit specified', async () => {
-      initWheelHandlers(io, socket, user);
-
-      const callback = vi.fn();
-      await socket._trigger('wheel:get_history', {}, callback);
-
-      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-      }));
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // wheel:leave
-  // -----------------------------------------------------------------------
-  describe('wheel:leave event', () => {
-    it('should leave the wheel room', async () => {
-      initWheelHandlers(io, socket, user);
-
-      await socket._trigger('wheel:leave');
-
-      expect(socket.leave).toHaveBeenCalledWith('wheel');
+      socket = connectUser();
+      const cb = vi.fn();
+      await socket._trigger('wheel:get_history', {}, cb);
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
 
@@ -402,28 +370,20 @@ describe('Wheel game handler', () => {
   // disconnect
   // -----------------------------------------------------------------------
   describe('disconnect event', () => {
-    it('should broadcast playerLeft when a connected user disconnects', async () => {
-      initWheelHandlers(io, socket, user);
-
-      // Clear mocks from initialization
-      socket.broadcast.emit.mockClear();
-
+    it('should broadcast playerLeft via namespace', async () => {
+      socket = connectUser({ userId: 1, username: 'testplayer' });
+      namespace.emit.mockClear();
       await socket._trigger('disconnect');
-
-      expect(socket.broadcast.emit).toHaveBeenCalledWith('wheel:playerLeft', expect.objectContaining({
-        id: user.userId,
+      expect(namespace.emit).toHaveBeenCalledWith('wheel:playerLeft', expect.objectContaining({
+        id: 1,
         username: 'testplayer',
       }));
     });
 
-    it('should mark the session as inactive on disconnect', async () => {
-      initWheelHandlers(io, socket, user);
-
-      // Disconnect should not throw
+    it('should handle cleanup without errors', async () => {
+      socket = connectUser();
       await socket._trigger('disconnect');
-
-      // Verify cleanup happened (playerLeft broadcast is evidence)
-      expect(socket.broadcast.emit).toHaveBeenCalledWith('wheel:playerLeft', expect.any(Object));
+      expect(namespace.emit).toHaveBeenCalledWith('wheel:playerLeft', expect.any(Object));
     });
   });
 });

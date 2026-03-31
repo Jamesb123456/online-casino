@@ -2,10 +2,12 @@
  * Wheel Game Socket Handler - LIVE multiplayer version
  * Automated game loop: betting phase → spin → results → repeat
  * All players share the same wheel and see the same spin result.
+ * Each player's payout is based on their chosen difficulty.
  */
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
 import { validateSocketData, wheelPlaceBetSchema } from '../validation/schemas.js';
+import { MAX_PAYOUT_MULTIPLIER } from '../utils/gameUtils.js';
 import crypto from 'crypto';
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -13,22 +15,58 @@ const BETTING_DURATION = parseInt(process.env.WHEEL_BETTING_DURATION || '10');  
 const SPIN_DURATION = parseInt(process.env.WHEEL_SPIN_DURATION || '5000');      // ms for spin animation
 const RESULT_DISPLAY = parseInt(process.env.WHEEL_RESULT_DISPLAY || '4000');    // ms to show results
 const MAX_HISTORY = 100;
+const SEGMENT_COUNT = 12;
 
-// Fixed shared wheel segments (medium difficulty)
-const WHEEL_SEGMENTS = [
-  { multiplier: 0.2, color: '#e74c3c', label: '0.2x' },   // Red
-  { multiplier: 1,   color: '#f1c40f', label: '1x' },      // Yellow
-  { multiplier: 0.5, color: '#e67e22', label: '0.5x' },    // Orange
-  { multiplier: 2,   color: '#3498db', label: '2x' },      // Blue
-  { multiplier: 0.2, color: '#e74c3c', label: '0.2x' },    // Red
-  { multiplier: 1,   color: '#f1c40f', label: '1x' },      // Yellow
-  { multiplier: 3,   color: '#2ecc71', label: '3x' },      // Green
-  { multiplier: 0.2, color: '#e74c3c', label: '0.2x' },    // Red
-  { multiplier: 1,   color: '#f1c40f', label: '1x' },      // Yellow
-  { multiplier: 0.5, color: '#e67e22', label: '0.5x' },    // Orange
-  { multiplier: 5,   color: '#9b59b6', label: '5x' },      // Purple
-  { multiplier: 2,   color: '#3498db', label: '2x' },      // Blue
-];
+// ── Difficulty-based segment tables ────────────────────────────────────
+// Each difficulty has 12 segments. House edge varies by difficulty.
+// Easy  → sum 11.5 / 12 = 0.958 EV → 4.2% house edge, max 3x
+// Medium→ sum 11.1 / 12 = 0.925 EV → 7.5% house edge, max 5x
+// Hard  → sum 10.8 / 12 = 0.900 EV → 10%  house edge, max 7x
+
+const WHEEL_SEGMENTS_BY_DIFFICULTY = {
+  easy: [
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0.2, color: '#e74c3c', label: '0.2x' },
+    { multiplier: 0.3, color: '#e67e22', label: '0.3x' },
+    { multiplier: 0.5, color: '#f1c40f', label: '0.5x' },
+    { multiplier: 0.5, color: '#f1c40f', label: '0.5x' },
+    { multiplier: 0.8, color: '#e67e22', label: '0.8x' },
+    { multiplier: 1.0, color: '#3498db', label: '1x' },
+    { multiplier: 1.0, color: '#3498db', label: '1x' },
+    { multiplier: 1.2, color: '#2ecc71', label: '1.2x' },
+    { multiplier: 1.5, color: '#2ecc71', label: '1.5x' },
+    { multiplier: 1.5, color: '#2ecc71', label: '1.5x' },
+    { multiplier: 3.0, color: '#9b59b6', label: '3x' },
+  ],
+  medium: [
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0.1, color: '#e74c3c', label: '0.1x' },
+    { multiplier: 0.2, color: '#e74c3c', label: '0.2x' },
+    { multiplier: 0.3, color: '#e67e22', label: '0.3x' },
+    { multiplier: 0.5, color: '#f1c40f', label: '0.5x' },
+    { multiplier: 0.5, color: '#f1c40f', label: '0.5x' },
+    { multiplier: 1.0, color: '#3498db', label: '1x' },
+    { multiplier: 1.5, color: '#2ecc71', label: '1.5x' },
+    { multiplier: 2.0, color: '#2ecc71', label: '2x' },
+    { multiplier: 5.0, color: '#9b59b6', label: '5x' },
+  ],
+  hard: [
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0,   color: '#374151', label: '0x' },
+    { multiplier: 0.1, color: '#e74c3c', label: '0.1x' },
+    { multiplier: 0.2, color: '#e67e22', label: '0.2x' },
+    { multiplier: 0.5, color: '#f1c40f', label: '0.5x' },
+    { multiplier: 1.0, color: '#3498db', label: '1x' },
+    { multiplier: 2.0, color: '#2ecc71', label: '2x' },
+    { multiplier: 7.0, color: '#9b59b6', label: '7x' },
+  ],
+};
 
 // ── Main Handler ──────────────────────────────────────────────────────
 
@@ -37,12 +75,12 @@ export default function initWheelHandlers(namespace) {
     phase: 'waiting' as 'betting' | 'spinning' | 'result' | 'waiting',
     roundId: null as string | null,
     countdown: 0,
-    bets: new Map<number, any>(),   // userId → { amount, username }
+    bets: new Map<number, any>(),   // userId → { amount, username, difficulty }
     result: null as any,
     timer: null as any,
   };
 
-  const connectedUsers = new Map();   // userId → { socket, username }
+  const connectedUsers = new Map();   // userId → { socket, username, difficulty }
   const activePlayers = new Map();    // userId → player info
   const gameHistory: any[] = [];
 
@@ -55,15 +93,15 @@ export default function initWheelHandlers(namespace) {
     const userId = user.userId;
     const username = user.username;
 
-    connectedUsers.set(userId, { socket, username });
+    connectedUsers.set(userId, { socket, username, difficulty: 'medium' });
     activePlayers.set(userId, { id: userId, username, avatar: null, joinedAt: Date.now() });
 
-    // Send full game state
+    // Send full game state — client uses its own difficulty to render segments
     socket.emit('wheel:gameState', {
       phase: gameState.phase,
       countdown: gameState.countdown,
       roundId: gameState.roundId,
-      segments: WHEEL_SEGMENTS,
+      segmentsByDifficulty: WHEEL_SEGMENTS_BY_DIFFICULTY,
       history: gameHistory.slice(-10),
       currentBets: allBetsFlat(),
       activePlayers: Array.from(activePlayers.values()),
@@ -73,7 +111,7 @@ export default function initWheelHandlers(namespace) {
       socket.emit('wheelSpinning', {
         roundId: gameState.roundId,
         targetAngle: gameState.result.targetAngle,
-        segments: WHEEL_SEGMENTS,
+        segmentIndex: gameState.result.segmentIndex,
       });
     }
 
@@ -83,7 +121,7 @@ export default function initWheelHandlers(namespace) {
     // ── Client events ─────────────────────────────────────────────────
 
     socket.on('wheel:join', (_data, callback) => {
-      if (callback) callback({ success: true, segments: WHEEL_SEGMENTS, history: gameHistory.slice(-10) });
+      if (callback) callback({ success: true, segmentsByDifficulty: WHEEL_SEGMENTS_BY_DIFFICULTY, history: gameHistory.slice(-10) });
     });
 
     socket.on('wheel:place_bet', async (data, callback) => {
@@ -93,7 +131,7 @@ export default function initWheelHandlers(namespace) {
         }
 
         const validated = validateSocketData(wheelPlaceBetSchema, data);
-        const { betAmount } = validated;
+        const { betAmount, difficulty } = validated;
 
         if (gameState.bets.has(userId)) {
           return callback?.({ success: false, error: 'You already placed a bet this round' });
@@ -102,15 +140,21 @@ export default function initWheelHandlers(namespace) {
         // Deduct via BalanceService
         await BalanceService.placeBet(userId, betAmount, 'wheel', {
           roundId: gameState.roundId,
+          difficulty,
         });
 
         const newBalance = await BalanceService.getBalance(userId);
 
-        gameState.bets.set(userId, { userId, username, amount: betAmount, timestamp: new Date() });
+        // Store difficulty with the bet for payout lookup
+        gameState.bets.set(userId, { userId, username, amount: betAmount, difficulty, timestamp: new Date() });
+
+        // Track this user's difficulty selection
+        const conn = connectedUsers.get(userId);
+        if (conn) conn.difficulty = difficulty;
 
         socket.emit('balanceUpdate', { balance: newBalance });
 
-        const betInfo = { userId, username, amount: betAmount, timestamp: new Date() };
+        const betInfo = { userId, username, amount: betAmount, difficulty, timestamp: new Date() };
         namespace.emit('wheel:playerBet', betInfo);
 
         callback?.({ success: true, balance: newBalance });
@@ -140,7 +184,7 @@ export default function initWheelHandlers(namespace) {
     gameState.bets = new Map();
     gameState.result = null;
 
-    namespace.emit('gameStarting', { countdown: BETTING_DURATION, roundId: gameState.roundId, segments: WHEEL_SEGMENTS });
+    namespace.emit('gameStarting', { countdown: BETTING_DURATION, roundId: gameState.roundId });
     namespace.emit('countdown', { countdown: gameState.countdown });
 
     gameState.timer = setInterval(() => {
@@ -157,12 +201,11 @@ export default function initWheelHandlers(namespace) {
   function startSpinPhase() {
     gameState.phase = 'spinning';
 
-    // Generate result
-    const segmentIndex = crypto.randomInt(WHEEL_SEGMENTS.length);
-    const segment = WHEEL_SEGMENTS[segmentIndex];
+    // Generate result — a single segment index shared by all players
+    const segmentIndex = crypto.randomInt(SEGMENT_COUNT);
 
     // Calculate animation angle
-    const segmentAngle = 360 / WHEEL_SEGMENTS.length;
+    const segmentAngle = 360 / SEGMENT_COUNT;
     const baseRotation = 270;
     const targetAngle = baseRotation - (segmentIndex * segmentAngle);
     const randomOffset = Math.random() * (segmentAngle * 0.6) - (segmentAngle * 0.3);
@@ -171,15 +214,14 @@ export default function initWheelHandlers(namespace) {
 
     gameState.result = {
       segmentIndex,
-      multiplier: segment.multiplier,
-      color: segment.color,
       targetAngle: finalAngle,
     };
 
+    // Broadcast segmentIndex — each client looks up their own difficulty's multiplier
     namespace.emit('wheelSpinning', {
       roundId: gameState.roundId,
       targetAngle: finalAngle,
-      segments: WHEEL_SEGMENTS,
+      segmentIndex,
     });
 
     LoggingService.logGameEvent('wheel', 'spin_started', { roundId: gameState.roundId });
@@ -189,17 +231,21 @@ export default function initWheelHandlers(namespace) {
 
   async function processResults() {
     gameState.phase = 'result';
-    const { segmentIndex, multiplier, color } = gameState.result;
+    const { segmentIndex } = gameState.result;
 
-    // Process each player's bet
+    // Process each player's bet using their chosen difficulty
     for (const [userId, bet] of gameState.bets) {
+      const diff = bet.difficulty || 'medium';
+      const segments = WHEEL_SEGMENTS_BY_DIFFICULTY[diff] || WHEEL_SEGMENTS_BY_DIFFICULTY.medium;
+      const segment = segments[segmentIndex];
+      const multiplier = Math.min(segment.multiplier, MAX_PAYOUT_MULTIPLIER);
       const winAmount = bet.amount * multiplier;
       const profit = winAmount - bet.amount;
 
       if (winAmount > 0) {
         try {
           await BalanceService.recordWin(userId, bet.amount, winAmount, 'wheel', {
-            multiplier, segmentIndex, roundId: gameState.roundId,
+            multiplier, segmentIndex, roundId: gameState.roundId, difficulty: diff,
           });
         } catch (err) {
           LoggingService.logGameEvent('wheel', 'error_recording_win', { error: String(err), userId });
@@ -214,15 +260,15 @@ export default function initWheelHandlers(namespace) {
         } catch (_) { /* ignore */ }
 
         conn.socket.emit('wheel:personal_result', {
-          betAmount: bet.amount, multiplier, winAmount, profit,
+          betAmount: bet.amount, multiplier, winAmount, profit, difficulty: diff,
         });
       }
     }
 
-    // Global result
+    // Global result — segmentIndex only; each client resolves their own multiplier
     const gameResult = {
       roundId: gameState.roundId,
-      segmentIndex, multiplier, color,
+      segmentIndex,
       timestamp: new Date(),
     };
     gameHistory.push(gameResult);
@@ -230,12 +276,12 @@ export default function initWheelHandlers(namespace) {
 
     namespace.emit('wheel:game_result', {
       roundId: gameState.roundId,
-      segmentIndex, multiplier, color,
+      segmentIndex,
       timestamp: new Date(),
     });
 
     LoggingService.logGameEvent('wheel', 'spin_result', {
-      roundId: gameState.roundId, multiplier, segmentIndex,
+      roundId: gameState.roundId, segmentIndex,
     });
 
     setTimeout(() => {

@@ -189,18 +189,28 @@ function calculatePayout(bet, result) {
 function calculateHouseEdge(gameType: any) {
   switch (gameType) {
     case 'blackjack':
-      return 0.005; // ~0.5% with perfect strategy
+      return 0.02; // ~2% average player
     case 'roulette':
       return 0.027; // ~2.7% for European roulette
     case 'crash':
-      return 0.01; // ~1%
-    case 'wheel':
       return 0.04; // ~4%
+    case 'wheel':
+      return 0.07; // ~4-10% depending on difficulty (weighted avg)
     case 'plinko':
-      return 0.02; // ~2%
+      return 0.065; // ~4-8.5% depending on risk (weighted avg)
+    case 'landmines':
+      return 0.05; // ~5%
     default:
-      return 0.02; // Default house edge
+      return 0.05; // Default house edge
   }
+}
+
+/** Global maximum payout multiplier across all games. */
+const MAX_PAYOUT_MULTIPLIER = 50;
+
+/** Clamp a multiplier to the global ceiling. */
+function capMultiplier(m: number): number {
+  return Math.min(m, MAX_PAYOUT_MULTIPLIER);
 }
 
 /**
@@ -235,5 +245,7 @@ export {
   shouldDealerHit,
   calculatePayout,
   calculateHouseEdge,
-  generateGameStats
+  generateGameStats,
+  MAX_PAYOUT_MULTIPLIER,
+  capMultiplier
 };

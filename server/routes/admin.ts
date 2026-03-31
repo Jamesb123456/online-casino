@@ -327,7 +327,8 @@ router.get('/transactions', auth, adminOnly, async (req: Request, res: Response)
     const skip = (pageNumber - 1) * safeLimit;
     const transactions = await Transaction.find(filter as any, {
       limit: safeLimit,
-      sort: { createdAt: sortOrderStr === 'asc' ? 1 : -1 }
+      sort: { createdAt: sortOrderStr === 'asc' ? 1 : -1 },
+      populate: ['userId']
     } as any);
 
     const total = await Transaction.count(filter as any);

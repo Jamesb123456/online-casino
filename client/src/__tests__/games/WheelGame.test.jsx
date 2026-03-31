@@ -19,6 +19,7 @@ vi.mock('@/services/socket/wheelSocketService', () => ({
     onError: vi.fn(() => vi.fn()),
     onBetsUpdate: vi.fn(() => vi.fn()),
     onPlayersUpdate: vi.fn(() => vi.fn()),
+    onBalanceUpdate: vi.fn(() => vi.fn()),
   },
 }));
 

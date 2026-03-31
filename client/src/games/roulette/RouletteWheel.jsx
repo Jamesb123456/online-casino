@@ -325,7 +325,7 @@ const RouletteWheel = ({
         aria-label="Roulette wheel with numbered pockets"
         className="mx-auto bg-bg-base rounded-full shadow-card"
       />
-      {winningNumber !== null && showResult && !spinning && (
+      {winningNumber !== null && showResult && !isSpinning && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-bg-card/95 backdrop-blur-xl border border-border rounded-xl px-6 py-4 shadow-card">
           <div className="text-center">
             <span className="text-sm text-text-muted">Number</span>

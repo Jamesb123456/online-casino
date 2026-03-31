@@ -12,8 +12,8 @@ const BlackjackBettingPanel = ({
   userBalance = 0,
   disabled = false
 }) => {
-  const [betAmount, setBetAmount] = useState(10);
-  const betOptions = [10, 25, 50, 100, 250, 500];
+  const [betAmount, setBetAmount] = useState(1);
+  const betOptions = [1, 5, 10, 25, 50, 100, 500];
   
   // Reset bet amount if it exceeds balance
   useEffect(() => {

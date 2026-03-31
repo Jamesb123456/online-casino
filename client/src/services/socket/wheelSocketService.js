@@ -21,30 +21,42 @@ class WheelSocketService {
   /**
    * Initialize socket connection to wheel namespace
    * @param {Object} userInfo - Optional user info to override this.user
+   * @returns {Promise} Resolves when connected, rejects on timeout or error
    */
   connect(userInfo = null) {
-    if (!this.socket) {
-      // Use provided userInfo or fallback to this.user
-      const user = userInfo || this.user || {};
-      
-      this.socket = io(`${this.apiUrl}${this.namespace}`, {
-        transports: ['websocket'],
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        withCredentials: true,
+    if (this.socket?.connected) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      if (!this.socket) {
+        this.socket = io(`${this.apiUrl}${this.namespace}`, {
+          transports: ['websocket'],
+          autoConnect: true,
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          withCredentials: true,
+        });
+      }
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Socket connection timeout'));
+      }, 5000);
+
+      this.socket.on('connect', () => {
+        clearTimeout(timeout);
+        this.isConnected = true;
+        resolve();
       });
 
-      // Socket connection event listeners
-      this.socket.on('connect', () => {
-        this.isConnected = true;
+      this.socket.on('connect_error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
       });
 
       this.socket.on('disconnect', () => {
         this.isConnected = false;
       });
-    }
+    });
   }
 
   /**

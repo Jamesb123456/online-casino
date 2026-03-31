@@ -83,10 +83,10 @@ const LandminesBettingPanel = ({
                 <input
                   type="number"
                   id="landmines-bet-amount"
-                  min="1"
-                  step="1"
+                  min="0.10"
+                  step="0.10"
                   value={betAmount}
-                  onChange={(e) => setBetAmount(Math.max(1, parseInt(e.target.value) || 0))}
+                  onChange={(e) => setBetAmount(Math.max(0.10, parseFloat(e.target.value) || 0))}
                   className="w-full bg-bg-surface border border-border rounded-lg text-text-primary p-2 focus:ring-2 focus:ring-accent-gold/50 focus:border-accent-gold"
                 />
               </div>

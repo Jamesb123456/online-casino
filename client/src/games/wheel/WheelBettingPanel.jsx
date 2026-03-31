@@ -18,7 +18,7 @@ const WheelBettingPanel = ({
   };
   
   // Preset bet amounts
-  const betPresets = [10, 25, 50, 100, 200];
+  const betPresets = [1, 5, 10, 25, 50, 100];
   
   return (
     <div className="bg-bg-card border border-border rounded-xl p-5 sticky top-20">
@@ -33,7 +33,7 @@ const WheelBettingPanel = ({
             type="number"
             id="wheel-bet-amount"
             name="wheel-bet-amount"
-            min="1"
+            min="0.10"
             value={betAmount}
             onChange={handleAmountChange}
             className="mb-2"

@@ -316,10 +316,10 @@ router.get('/players/:userId/profile', auth, adminOnly, async (req: Request, res
       // 4. Deposit/withdrawal totals
       db.execute(sql`
         SELECT
-          COALESCE(SUM(CASE WHEN t.type = 'deposit' THEN t.amount ELSE 0 END), 0) AS totalDeposits,
-          COALESCE(SUM(CASE WHEN t.type = 'withdrawal' THEN t.amount ELSE 0 END), 0) AS totalWithdrawals
+          COALESCE(SUM(CASE WHEN t.transaction_type = 'deposit' THEN t.amount ELSE 0 END), 0) AS totalDeposits,
+          COALESCE(SUM(CASE WHEN t.transaction_type = 'withdrawal' THEN t.amount ELSE 0 END), 0) AS totalWithdrawals
         FROM transactions t
-        WHERE t.user_id = ${userId} AND t.status = 'completed'
+        WHERE t.user_id = ${userId} AND t.transaction_status = 'completed'
       `),
       // 5. Recent 10 sessions
       db.execute(sql`
@@ -362,7 +362,7 @@ router.get('/players/:userId/profile', auth, adminOnly, async (req: Request, res
       db.execute(sql`
         SELECT COUNT(*) AS cnt
         FROM transactions t
-        WHERE t.user_id = ${userId} AND t.type = 'deposit' AND t.status = 'completed'
+        WHERE t.user_id = ${userId} AND t.transaction_type = 'deposit' AND t.transaction_status = 'completed'
           AND t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
       `),
     ]);
@@ -650,7 +650,7 @@ router.get('/top-players', auth, adminOnly, async (req: Request, res: Response) 
           COALESCE(SUM(t.amount), 0) AS totalDeposits,
           u.last_login AS lastActive
         FROM users u
-        JOIN transactions t ON t.user_id = u.id AND t.type = 'deposit' AND t.status = 'completed' ${depositCutoff}
+        JOIN transactions t ON t.user_id = u.id AND t.transaction_type = 'deposit' AND t.transaction_status = 'completed' ${depositCutoff}
         GROUP BY u.id, u.username, u.balance, u.last_login
         ORDER BY totalDeposits DESC
         LIMIT ${limit}
@@ -792,19 +792,19 @@ router.get('/revenue', auth, adminOnly, async (req: Request, res: Response) => {
       db.execute(sql`
         SELECT COALESCE(SUM(t.amount), 0) AS totalDeposits
         FROM transactions t
-        WHERE t.type = 'deposit' AND t.status = 'completed' ${periodClauseTx}
+        WHERE t.transaction_type = 'deposit' AND t.transaction_status = 'completed' ${periodClauseTx}
       `),
       // Total withdrawals
       db.execute(sql`
         SELECT COALESCE(SUM(t.amount), 0) AS totalWithdrawals
         FROM transactions t
-        WHERE t.type = 'withdrawal' AND t.status = 'completed' ${periodClauseTx}
+        WHERE t.transaction_type = 'withdrawal' AND t.transaction_status = 'completed' ${periodClauseTx}
       `),
       // Total bonuses paid
       db.execute(sql`
         SELECT COALESCE(SUM(t.amount), 0) AS totalBonuses
         FROM transactions t
-        WHERE t.type IN ('bonus', 'login_reward') AND t.status = 'completed' ${periodClauseTx}
+        WHERE t.transaction_type IN ('bonus', 'login_reward') AND t.transaction_status = 'completed' ${periodClauseTx}
       `),
       // Active player count (players who played at least once in the period)
       db.execute(sql`
@@ -883,21 +883,19 @@ router.get('/revenue', auth, adminOnly, async (req: Request, res: Response) => {
       ) sub
       LEFT JOIN (
         SELECT
-          ${dateGroupExpr.replace(/gs\./g, 't.')} AS date,
+          ${dateGroupExpr.replace(/gs\.start_time/g, 't.created_at')} AS date,
           COALESCE(SUM(t.amount), 0) AS deposits
         FROM transactions t
-        INNER JOIN game_sessions gs ON 1=0
-        WHERE t.type = 'deposit' AND t.status = 'completed'
+        WHERE t.transaction_type = 'deposit' AND t.transaction_status = 'completed'
           ${cutoffStr ? `AND t.created_at >= '${cutoffStr}'` : ''}
         GROUP BY date
       ) dep ON dep.date = sub.date
       LEFT JOIN (
         SELECT
-          ${dateGroupExpr.replace(/gs\./g, 't.')} AS date,
+          ${dateGroupExpr.replace(/gs\.start_time/g, 't.created_at')} AS date,
           COALESCE(SUM(t.amount), 0) AS withdrawals
         FROM transactions t
-        INNER JOIN game_sessions gs ON 1=0
-        WHERE t.type = 'withdrawal' AND t.status = 'completed'
+        WHERE t.transaction_type = 'withdrawal' AND t.transaction_status = 'completed'
           ${cutoffStr ? `AND t.created_at >= '${cutoffStr}'` : ''}
         GROUP BY date
       ) wd ON wd.date = sub.date

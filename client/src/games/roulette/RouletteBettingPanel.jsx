@@ -60,7 +60,7 @@ const RouletteBettingPanel = ({
   };
   
   // Preset bet amounts
-  const betPresets = [5, 10, 25, 50, 100];
+  const betPresets = [1, 5, 10, 25, 50, 100];
   
   // Group bet types by category
   const betTypeCategories = {
@@ -81,7 +81,7 @@ const RouletteBettingPanel = ({
             type="number"
             id="roulette-bet-amount"
             name="roulette-bet-amount"
-            min="1"
+            min="0.10"
             value={betAmount}
             onChange={handleAmountChange}
             className="mb-2"

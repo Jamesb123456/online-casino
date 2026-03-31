@@ -9,11 +9,24 @@ const NAMESPACE = '/landmines';
 const API_URL = getSocketBaseUrl();
 
 /**
- * Ensure the landmines namespace socket is connected
- * @returns {Object} The socket instance
+ * Connect to the landmines namespace socket.
+ * Returns a Promise that resolves when the socket is connected
+ * and rejects after a 5-second timeout.
+ * @returns {Promise<void>}
  */
-const ensureSocket = () => {
-  if (!socket) {
+const connect = () => {
+  return new Promise((resolve, reject) => {
+    // If already connected, resolve immediately
+    if (socket && isConnected) {
+      return resolve();
+    }
+
+    // If socket exists but not connected, disconnect and reconnect
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+
     socket = io(`${API_URL}${NAMESPACE}`, {
       transports: ['websocket'],
       autoConnect: true,
@@ -23,25 +36,35 @@ const ensureSocket = () => {
       withCredentials: true,
     });
 
+    // Set a connection timeout
+    const connectionTimeout = setTimeout(() => {
+      if (!isConnected) {
+        reject(new Error('Connection timeout'));
+      }
+    }, 5000);
+
     socket.on('connect', () => {
       isConnected = true;
+      clearTimeout(connectionTimeout);
+      resolve();
     });
 
-    socket.on('connect_error', () => {
+    socket.on('connect_error', (error) => {
       isConnected = false;
+      clearTimeout(connectionTimeout);
+      reject(error);
     });
 
     socket.on('disconnect', () => {
       isConnected = false;
     });
-  }
-  return socket;
+  });
 };
 
 /**
- * Disconnect the landmines socket
+ * Disconnect the landmines socket and clean up
  */
-const disconnectSocket = () => {
+const disconnect = () => {
   if (socket) {
     socket.disconnect();
     socket = null;
@@ -54,14 +77,20 @@ const disconnectSocket = () => {
  * @param {Function} callback - Callback function with response data
  */
 const joinLandminesGame = (callback) => {
-  ensureSocket().emit('landmines:join', {}, callback);
+  if (!socket) {
+    if (callback) callback({ success: false, message: 'Socket not connected' });
+    return;
+  }
+  socket.emit('landmines:join', {}, callback);
 };
 
 /**
  * Leave the landmines game room
  */
 const leaveLandminesGame = () => {
-  ensureSocket().emit('landmines:leave');
+  if (socket) {
+    socket.emit('landmines:leave');
+  }
 };
 
 /**
@@ -70,7 +99,11 @@ const leaveLandminesGame = () => {
  * @param {Function} callback - Callback function with response data
  */
 const startGame = (gameData, callback) => {
-  ensureSocket().emit('landmines:start', gameData, callback);
+  if (!socket) {
+    if (callback) callback({ success: false, message: 'Socket not connected' });
+    return;
+  }
+  socket.emit('landmines:start', gameData, callback);
 };
 
 /**
@@ -79,7 +112,11 @@ const startGame = (gameData, callback) => {
  * @param {Function} callback - Callback function with response data
  */
 const pickCell = (pickData, callback) => {
-  ensureSocket().emit('landmines:pick', pickData, callback);
+  if (!socket) {
+    if (callback) callback({ success: false, message: 'Socket not connected' });
+    return;
+  }
+  socket.emit('landmines:pick', pickData, callback);
 };
 
 /**
@@ -87,7 +124,11 @@ const pickCell = (pickData, callback) => {
  * @param {Function} callback - Callback function with response data
  */
 const cashOut = (callback) => {
-  ensureSocket().emit('landmines:cashout', {}, callback);
+  if (!socket) {
+    if (callback) callback({ success: false, message: 'Socket not connected' });
+    return;
+  }
+  socket.emit('landmines:cashout', {}, callback);
 };
 
 /**
@@ -96,7 +137,11 @@ const cashOut = (callback) => {
  * @param {Function} callback - Callback function with response data
  */
 const getGameHistory = (options, callback) => {
-  ensureSocket().emit('landmines:get_history', options, callback);
+  if (!socket) {
+    if (callback) callback({ success: false, message: 'Socket not connected' });
+    return;
+  }
+  socket.emit('landmines:get_history', options, callback);
 };
 
 /**
@@ -105,9 +150,9 @@ const getGameHistory = (options, callback) => {
  * @returns {Function} Unsubscribe function
  */
 const onPlayerCashout = (callback) => {
-  const s = ensureSocket();
-  s.on('landmines:player_cashout', callback);
-  return () => { s.off('landmines:player_cashout', callback); };
+  if (!socket) return () => {};
+  socket.on('landmines:player_cashout', callback);
+  return () => { socket.off('landmines:player_cashout', callback); };
 };
 
 /**
@@ -116,14 +161,14 @@ const onPlayerCashout = (callback) => {
  * @returns {Function} Unsubscribe function
  */
 const onBalanceUpdate = (callback) => {
-  const s = ensureSocket();
-  s.on('balanceUpdate', callback);
-  return () => { s.off('balanceUpdate', callback); };
+  if (!socket) return () => {};
+  socket.on('balanceUpdate', callback);
+  return () => { socket.off('balanceUpdate', callback); };
 };
 
 export default {
-  ensureSocket,
-  disconnectSocket,
+  connect,
+  disconnect,
   joinLandminesGame,
   leaveLandminesGame,
   startGame,

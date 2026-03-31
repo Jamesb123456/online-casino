@@ -100,12 +100,26 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       await authClient.signOut();
-
-      // Disconnect socket
-      socketService.disconnectSocket();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      // Clear Better Auth session cookies client-side as a fallback.
+      // The session_token cookie is httpOnly so the browser will ignore
+      // this for it, but session_data (cookie cache) may not be httpOnly
+      // in all configurations.  This also covers any edge case where the
+      // server's Set-Cookie clearing headers were lost (e.g., network
+      // error or signOut threw above).
+      const cookieNames = [
+        'better-auth.session_token',
+        'better-auth.session_data',
+      ];
+      cookieNames.forEach((name) => {
+        document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0;`;
+      });
+
+      // Disconnect socket
+      socketService.disconnectSocket();
+
       setUser(null);
       setError(null);
       setLoading(false);

@@ -24,20 +24,20 @@ import {
 
 describe('betAmountSchema', () => {
   describe('valid values', () => {
-    it('should accept 0.01 (minimum positive)', () => {
-      expect(betAmountSchema.parse(0.01)).toBe(0.01);
+    it('should accept 0.10 (minimum positive)', () => {
+      expect(betAmountSchema.parse(0.10)).toBe(0.10);
     });
 
     it('should accept 100', () => {
       expect(betAmountSchema.parse(100)).toBe(100);
     });
 
-    it('should accept 9999.99', () => {
-      expect(betAmountSchema.parse(9999.99)).toBe(9999.99);
+    it('should accept 4999.99', () => {
+      expect(betAmountSchema.parse(4999.99)).toBe(4999.99);
     });
 
-    it('should accept 10000 (maximum)', () => {
-      expect(betAmountSchema.parse(10000)).toBe(10000);
+    it('should accept 5000 (maximum)', () => {
+      expect(betAmountSchema.parse(5000)).toBe(5000);
     });
 
     it('should accept 1', () => {
@@ -191,9 +191,9 @@ describe('crashPlaceBetSchema', () => {
       expect(result.autoCashoutAt).toBe(1.01);
     });
 
-    it('should accept maximum autoCashoutAt of 1000000', () => {
-      const result = crashPlaceBetSchema.parse({ amount: 50, autoCashoutAt: 1000000 });
-      expect(result.autoCashoutAt).toBe(1000000);
+    it('should accept maximum autoCashoutAt of 50', () => {
+      const result = crashPlaceBetSchema.parse({ amount: 50, autoCashoutAt: 50 });
+      expect(result.autoCashoutAt).toBe(50);
     });
   });
 
@@ -635,14 +635,14 @@ describe('blackjackStartSchema', () => {
       expect(result.betAmount).toBe(100);
     });
 
-    it('should accept { betAmount: 0.01 }', () => {
-      const result = blackjackStartSchema.parse({ betAmount: 0.01 });
-      expect(result.betAmount).toBe(0.01);
+    it('should accept { betAmount: 0.10 }', () => {
+      const result = blackjackStartSchema.parse({ betAmount: 0.10 });
+      expect(result.betAmount).toBe(0.10);
     });
 
-    it('should accept { betAmount: 10000 }', () => {
-      const result = blackjackStartSchema.parse({ betAmount: 10000 });
-      expect(result.betAmount).toBe(10000);
+    it('should accept { betAmount: 5000 }', () => {
+      const result = blackjackStartSchema.parse({ betAmount: 5000 });
+      expect(result.betAmount).toBe(5000);
     });
   });
 

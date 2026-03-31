@@ -27,31 +27,48 @@ const PlinkoGame = () => {
 
   // Connect to socket when component mounts
   useEffect(() => {
-    // Connect and join the Plinko game room
-    plinkoSocketService.connect();
+    let cancelled = false;
+    let unsubGameResult = () => {};
+    let unsubError = () => {};
+    let unsubBalance = () => {};
 
-    // Listen for game results
-    plinkoSocketService.onGameResult((result) => {
-      if (result && result.path) {
-        setAnimationPath(result.path);
-        setIsAnimating(true);
-
-        // The actual game result will be processed when animation completes
-        // See handleAnimationComplete function
+    const init = async () => {
+      try {
+        await plinkoSocketService.connect();
+      } catch (err) {
+        if (!cancelled) {
+          toast.error('Failed to connect to Plinko server. Please refresh.');
+        }
+        return;
       }
-    });
 
-    plinkoSocketService.onError?.((error) => {
-      setIsAnimating(false);
-      toast.error(error?.message || 'An error occurred. Please try again.');
-    });
+      if (cancelled) return;
 
-    const unsubBalance = plinkoSocketService.onBalanceUpdate((data) => {
-      if (data?.balance != null) updateBalance(data.balance);
-    });
+      // Listen for game results
+      unsubGameResult = plinkoSocketService.onGameResult((result) => {
+        if (result && result.path) {
+          setAnimationPath(result.path);
+          setIsAnimating(true);
+        }
+      });
+
+      unsubError = plinkoSocketService.onError((error) => {
+        setIsAnimating(false);
+        toast.error(error?.message || 'An error occurred. Please try again.');
+      });
+
+      unsubBalance = plinkoSocketService.onBalanceUpdate((data) => {
+        if (data?.balance != null) updateBalance(data.balance);
+      });
+    };
+
+    init();
 
     // Cleanup when component unmounts
     return () => {
+      cancelled = true;
+      unsubGameResult();
+      unsubError();
       unsubBalance();
       plinkoSocketService.disconnect();
     };

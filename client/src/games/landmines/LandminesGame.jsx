@@ -22,25 +22,46 @@ const LandminesGame = () => {
 
   // Connect to socket when component mounts
   useEffect(() => {
-    // Join the Landmines game room
-    landminesSocketService.joinLandminesGame((response) => {
-      if (response.success) {
-        setBalance(response.balance);
-        setGameHistory(response.history || []);
-      }
-    });
+    let unsubBalance = () => {};
+    let cancelled = false;
 
-    const unsubBalance = landminesSocketService.onBalanceUpdate((data) => {
-      if (data?.balance != null) {
-        setBalance(data.balance);
-        updateBalance(data.balance);
+    const init = async () => {
+      try {
+        await landminesSocketService.connect();
+
+        // If the component unmounted while we were connecting, clean up
+        if (cancelled) {
+          landminesSocketService.disconnect();
+          return;
+        }
+
+        unsubBalance = landminesSocketService.onBalanceUpdate((data) => {
+          if (data?.balance != null) {
+            setBalance(data.balance);
+            updateBalance(data.balance);
+          }
+        });
+
+        // Join the Landmines game room after connection is established
+        landminesSocketService.joinLandminesGame((response) => {
+          if (response && response.success) {
+            setBalance(response.balance);
+            setGameHistory(response.history || []);
+          }
+        });
+      } catch (error) {
+        console.error('Failed to connect to landmines socket:', error);
       }
-    });
+    };
+
+    init();
 
     // Cleanup when component unmounts
     return () => {
+      cancelled = true;
       unsubBalance();
       landminesSocketService.leaveLandminesGame();
+      landminesSocketService.disconnect();
     };
   }, [updateBalance]);
 

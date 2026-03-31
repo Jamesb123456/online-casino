@@ -19,29 +19,36 @@ const MAX_HISTORY = 100;
  * Game constants
  */
 const GRID_SIZE = 5; // 5x5 grid
+const TOTAL_CELLS = GRID_SIZE * GRID_SIZE; // 25
 const MAX_MINES = 24; // Maximum number of mines allowed
 const MIN_MINES = 1;  // Minimum number of mines allowed
+const HOUSE_EDGE = 0.05; // 5% house edge
+const MAX_MULTIPLIER = 50; // 50x cap
 
 /**
  * Calculate the multiplier based on the number of mines and cells revealed
- * More mines = higher risk = higher multiplier
- * Multiplier increases with each successful reveal
+ * Uses a probability-based formula: fair payout = 1 / P(survive), then applies house edge.
+ * P(survive r reveals) = product(i=0..r-1) of (safeCells - i) / (TOTAL_CELLS - i)
  * @param {Number} mines - Number of mines in the grid
  * @param {Number} revealed - Number of cells successfully revealed
  * @returns {Number} - Current multiplier
  */
 const calculateMultiplier = (mines, revealed) => {
-  // Base multiplier depends on the number of mines (higher risk = higher reward)
-  // For 1 mine: ~1.05x base, for 24 mines: ~24x base
-  const baseMultiplier = 1 + (mines / 12);
+  if (revealed <= 0) return 1; // Starting multiplier before any reveals
 
-  // Growth constant: how quickly the multiplier increases with each reveal
-  // For fewer mines, growth is slower. For many mines, growth is faster.
-  const growthFactor = 1 + (mines / 25);
+  const safeCells = TOTAL_CELLS - mines;
 
-  // Calculate the multiplier with exponential growth
-  // First reveal gives the base multiplier, then it grows exponentially
-  return Math.round((baseMultiplier * Math.pow(growthFactor, revealed)) * 100) / 100;
+  // P(survive r reveals) = product(i=0..r-1) of (safeCells-i)/(TOTAL_CELLS-i)
+  let survivalProbability = 1;
+  for (let i = 0; i < revealed; i++) {
+    survivalProbability *= (safeCells - i) / (TOTAL_CELLS - i);
+  }
+
+  // Fair multiplier with house edge applied
+  const multiplier = (1 - HOUSE_EDGE) / survivalProbability;
+
+  // Cap at 50x and round to 2 decimal places
+  return Math.min(Math.round(multiplier * 100) / 100, MAX_MULTIPLIER);
 };
 
 /**
@@ -319,10 +326,10 @@ function initLandminesHandlers(io, socket, user) {
 
       } else {
         // Success - found a diamond
-        // Number of diamonds revealed (excluding the current one)
-        const revealedCount = game.revealedCells.length - 1;
+        // Number of diamonds revealed so far (current cell is already in the array)
+        const revealedCount = game.revealedCells.length;
 
-        // Calculate current multiplier
+        // Calculate current multiplier (based on total revealed including this one)
         const multiplier = calculateMultiplier(game.mines, revealedCount);
 
         // Calculate potential win if cashed out now
@@ -333,8 +340,29 @@ function initLandminesHandlers(io, socket, user) {
         game.potentialWin = potentialWin;
 
         // Get number of remaining cells that aren't mines
-        const totalCells = GRID_SIZE * GRID_SIZE;
-        const remainingSafeCells = totalCells - game.mines - game.revealedCells.length;
+        const remainingSafeCells = TOTAL_CELLS - game.mines - game.revealedCells.length;
+
+        // Check if next reveal would exceed the multiplier cap — force cashout
+        const nextMultiplier = calculateMultiplier(game.mines, revealedCount + 1);
+        if (nextMultiplier >= MAX_MULTIPLIER || remainingSafeCells === 0) {
+          // Auto-cashout: respond with the current pick result then trigger cashout
+          const response = {
+            success: true,
+            hit: false,
+            position: cellPosition,
+            multiplier,
+            potentialWin,
+            remainingSafeCells,
+            balance: session.balance,
+            gameOver: false
+          };
+
+          if (callback) callback(response);
+
+          // Auto cash-out since max multiplier reached or all diamonds found
+          handleCashout(socket, session, game, null);
+          return;
+        }
 
         // Return result to client
         const response = {
@@ -349,12 +377,6 @@ function initLandminesHandlers(io, socket, user) {
         };
 
         if (callback) callback(response);
-
-        // If all diamonds have been found
-        if (remainingSafeCells === 0) {
-          // Auto cash-out since all diamonds have been found
-          handleCashout(socket, session, game, callback);
-        }
       }
 
     } catch (error) {

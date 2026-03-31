@@ -8,49 +8,53 @@
  * @returns {Array<Object>} - Array of wheel segment configurations with multipliers and colors
  */
 export const getWheelSegments = (difficulty = 'medium') => {
-  // Predefined wheel segments for different difficulty levels
+  // Flat 12-segment arrays matching the server difficulty tables exactly
   const wheelSegments = {
     easy: [
-      { multiplier: 1.5, color: '#3498db', weight: 3 }, // Blue
-      { multiplier: 2, color: '#2ecc71', weight: 2 },   // Green
-      { multiplier: 0.5, color: '#e74c3c', weight: 2 }, // Red
-      { multiplier: 1, color: '#f1c40f', weight: 4 },   // Yellow
-      { multiplier: 0.2, color: '#e67e22', weight: 2 }, // Orange
-      { multiplier: 3, color: '#9b59b6', weight: 1 }    // Purple
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0.2, color: '#e74c3c' },
+      { multiplier: 0.3, color: '#e67e22' },
+      { multiplier: 0.5, color: '#f1c40f' },
+      { multiplier: 0.5, color: '#f1c40f' },
+      { multiplier: 0.8, color: '#e67e22' },
+      { multiplier: 1.0, color: '#3498db' },
+      { multiplier: 1.0, color: '#3498db' },
+      { multiplier: 1.2, color: '#2ecc71' },
+      { multiplier: 1.5, color: '#2ecc71' },
+      { multiplier: 1.5, color: '#2ecc71' },
+      { multiplier: 3.0, color: '#9b59b6' },
     ],
     medium: [
-      { multiplier: 2, color: '#3498db', weight: 2 },   // Blue
-      { multiplier: 3, color: '#2ecc71', weight: 1 },   // Green
-      { multiplier: 0.2, color: '#e74c3c', weight: 3 }, // Red
-      { multiplier: 1, color: '#f1c40f', weight: 3 },   // Yellow
-      { multiplier: 0.5, color: '#e67e22', weight: 2 }, // Orange
-      { multiplier: 5, color: '#9b59b6', weight: 1 }    // Purple
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0.1, color: '#e74c3c' },
+      { multiplier: 0.2, color: '#e74c3c' },
+      { multiplier: 0.3, color: '#e67e22' },
+      { multiplier: 0.5, color: '#f1c40f' },
+      { multiplier: 0.5, color: '#f1c40f' },
+      { multiplier: 1.0, color: '#3498db' },
+      { multiplier: 1.5, color: '#2ecc71' },
+      { multiplier: 2.0, color: '#2ecc71' },
+      { multiplier: 5.0, color: '#9b59b6' },
     ],
     hard: [
-      { multiplier: 3, color: '#3498db', weight: 1 },   // Blue
-      { multiplier: 5, color: '#2ecc71', weight: 1 },   // Green
-      { multiplier: 0.1, color: '#e74c3c', weight: 4 }, // Red
-      { multiplier: 0.5, color: '#f1c40f', weight: 2 }, // Yellow
-      { multiplier: 0.2, color: '#e67e22', weight: 2 }, // Orange
-      { multiplier: 10, color: '#9b59b6', weight: 1 }   // Purple
-    ]
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0,   color: '#374151' },
+      { multiplier: 0.1, color: '#e74c3c' },
+      { multiplier: 0.2, color: '#e67e22' },
+      { multiplier: 0.5, color: '#f1c40f' },
+      { multiplier: 1.0, color: '#3498db' },
+      { multiplier: 2.0, color: '#2ecc71' },
+      { multiplier: 7.0, color: '#9b59b6' },
+    ],
   };
 
-  // Get segments for the selected difficulty
-  const segments = wheelSegments[difficulty] || wheelSegments.medium;
-
-  // Expand segments based on weight
-  const expandedSegments = [];
-  segments.forEach(segment => {
-    for (let i = 0; i < segment.weight; i++) {
-      expandedSegments.push({ 
-        multiplier: segment.multiplier, 
-        color: segment.color 
-      });
-    }
-  });
-
-  return expandedSegments;
+  return wheelSegments[difficulty] || wheelSegments.medium;
 };
 
 /**

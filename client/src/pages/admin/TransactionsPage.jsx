@@ -155,17 +155,17 @@ const TransactionsPage = () => {
                     {transactions.map((transaction) => (
                       <tr key={transaction.id} className="border-t border-border hover:bg-bg-elevated/50 transition-colors">
                         <td className="py-3 px-4 text-text-secondary">{transaction.id}</td>
-                        <td className="py-3 px-4 text-text-primary">{transaction.username}</td>
+                        <td className="py-3 px-4 text-text-primary">{transaction.userUsername || `User #${transaction.userId}`}</td>
                         <td className="py-3 px-4 text-text-secondary">{transaction.type}</td>
                         <td className={`py-3 px-4 ${transaction.amount >= 0 ? 'text-status-success' : 'text-status-error'}`}>
                           {transaction.amount >= 0 ? '+' : ''}{formatCurrency(transaction.amount)}
                         </td>
-                        <td className="py-3 px-4 text-text-muted">{transaction.date}</td>
+                        <td className="py-3 px-4 text-text-muted">{transaction.createdAt ? new Date(transaction.createdAt).toLocaleString() : ''}</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            transaction.status === 'Completed' ? 'bg-status-success/15 text-status-success' :
-                            transaction.status === 'Pending' ? 'bg-status-warning/15 text-status-warning' :
-                            transaction.status === 'Failed' ? 'bg-status-error/15 text-status-error' : 'bg-status-info/15 text-status-info'
+                            transaction.status?.toLowerCase() === 'completed' ? 'bg-status-success/15 text-status-success' :
+                            transaction.status?.toLowerCase() === 'pending' ? 'bg-status-warning/15 text-status-warning' :
+                            transaction.status?.toLowerCase() === 'failed' ? 'bg-status-error/15 text-status-error' : 'bg-status-info/15 text-status-info'
                           }`}>
                             {transaction.status}
                           </span>

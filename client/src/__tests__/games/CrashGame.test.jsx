@@ -29,6 +29,7 @@ vi.mock('@/services/socket/crashSocketService', () => ({
     onBetPlaced: vi.fn(() => vi.fn()),
     onBetCashout: vi.fn(() => vi.fn()),
     onError: vi.fn(() => vi.fn()),
+    onBalanceUpdate: vi.fn(() => vi.fn()),
     placeBet: vi.fn(),
     cashOut: vi.fn(),
   },

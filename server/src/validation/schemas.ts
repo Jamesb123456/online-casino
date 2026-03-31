@@ -4,11 +4,11 @@ import { z } from 'zod';
 // Common schemas
 // ---------------------------------------------------------------------------
 
-/** Positive bet amount, capped at 10 000, rounded to 2 decimal places. */
+/** Bet amount: $0.10 – $5,000, rounded to 2 decimal places. */
 export const betAmountSchema = z
   .number()
-  .positive('Bet amount must be positive')
-  .max(10000, 'Bet amount cannot exceed 10,000')
+  .min(0.10, 'Minimum bet is $0.10')
+  .max(5000, 'Maximum bet is $5,000')
   .transform(v => Math.round(v * 100) / 100);
 
 /** Accepts a string or number userId and normalises to string. */
@@ -22,7 +22,7 @@ export const userIdSchema = z
 
 export const crashPlaceBetSchema = z.object({
   amount: betAmountSchema,
-  autoCashoutAt: z.number().min(1.01).max(1000000).optional(),
+  autoCashoutAt: z.number().min(1.01).max(50).optional(),
 });
 
 export const crashCashoutSchema = z.object({

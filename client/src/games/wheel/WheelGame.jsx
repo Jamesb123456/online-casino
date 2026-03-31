@@ -18,7 +18,7 @@ const WheelGame = () => {
   const { user, updateBalance } = useContext(AuthContext);
   
   // Game state
-  const [betAmount, setBetAmount] = useState(10);
+  const [betAmount, setBetAmount] = useState(1);
   const [difficulty, setDifficulty] = useState('medium');
   const [segments, setSegments] = useState(() => getWheelSegments('medium'));
   const [isSpinning, setIsSpinning] = useState(false);
@@ -58,6 +58,7 @@ const WheelGame = () => {
   // Initialize socket connection and event listeners
   useEffect(() => {
     const unsubs = [];
+    let cancelled = false;
 
     // Set user information for socket authentication
     if (user) {
@@ -68,36 +69,49 @@ const WheelGame = () => {
       });
     }
 
-    // Connect to socket
-    wheelSocketService.connect();
+    // Connect to socket and subscribe to events after connection is ready
+    const init = async () => {
+      try {
+        await wheelSocketService.connect();
+      } catch (err) {
+        console.error('Wheel socket connection failed:', err);
+        return;
+      }
 
-    // Set up multiplayer event listeners
-    unsubs.push(wheelSocketService.onActivePlayers((players) => {
-      setActivePlayers(players);
-    }));
+      // Guard against subscribing after unmount
+      if (cancelled) return;
 
-    unsubs.push(wheelSocketService.onPlayerJoined((player) => {
-      setActivePlayers(prev => [...prev, player]);
-    }));
+      // Set up multiplayer event listeners
+      unsubs.push(wheelSocketService.onActivePlayers((players) => {
+        setActivePlayers(players);
+      }));
 
-    unsubs.push(wheelSocketService.onPlayerLeft((player) => {
-      setActivePlayers(prev => prev.filter(p => p.id !== player.id));
-    }));
+      unsubs.push(wheelSocketService.onPlayerJoined((player) => {
+        setActivePlayers(prev => [...prev, player]);
+      }));
 
-    unsubs.push(wheelSocketService.onCurrentBets((bets) => {
-      setCurrentBets(bets);
-    }));
+      unsubs.push(wheelSocketService.onPlayerLeft((player) => {
+        setActivePlayers(prev => prev.filter(p => p.id !== player.id));
+      }));
 
-    unsubs.push(wheelSocketService.onPlayerBet((bet) => {
-      setCurrentBets(prev => [...prev, bet]);
-    }));
+      unsubs.push(wheelSocketService.onCurrentBets((bets) => {
+        setCurrentBets(bets);
+      }));
 
-    unsubs.push(wheelSocketService.onBalanceUpdate((data) => {
-      if (data?.balance != null) updateBalance(data.balance);
-    }));
+      unsubs.push(wheelSocketService.onPlayerBet((bet) => {
+        setCurrentBets(prev => [...prev, bet]);
+      }));
+
+      unsubs.push(wheelSocketService.onBalanceUpdate((data) => {
+        if (data?.balance != null) updateBalance(data.balance);
+      }));
+    };
+
+    init();
 
     // Cleanup on unmount
     return () => {
+      cancelled = true;
       unsubs.forEach(unsub => unsub());
       wheelSocketService.disconnect();
     };
@@ -113,9 +127,8 @@ const WheelGame = () => {
     try {
       // Send bet to server and wait for authoritative result
       const response = await wheelSocketService.placeBet({
-        amount: betAmount,
+        betAmount,
         difficulty,
-        segments: segments.length,
       });
 
       // Store the authoritative server result so handleSpinComplete uses it

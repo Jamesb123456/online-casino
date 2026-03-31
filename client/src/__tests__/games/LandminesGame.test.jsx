@@ -5,7 +5,7 @@ import React from 'react';
 
 vi.mock('@/services/socket/landminesSocketService', () => ({
   default: {
-    connect: vi.fn(),
+    connect: vi.fn(() => Promise.resolve()),
     disconnect: vi.fn(),
     joinLandminesGame: vi.fn((cb) => cb && cb({ success: true, balance: 1000, history: [] })),
     leaveLandminesGame: vi.fn(),
@@ -15,6 +15,7 @@ vi.mock('@/services/socket/landminesSocketService', () => ({
     onGameState: vi.fn(() => vi.fn()),
     onResult: vi.fn(() => vi.fn()),
     onError: vi.fn(() => vi.fn()),
+    onBalanceUpdate: vi.fn(() => vi.fn()),
   },
 }));
 

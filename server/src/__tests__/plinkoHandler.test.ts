@@ -2,7 +2,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies
-const { mockPlaceBet, mockRecordWin } = vi.hoisted(() => ({
+const { mockGetBalance, mockPlaceBet, mockRecordWin } = vi.hoisted(() => ({
+  mockGetBalance: vi.fn(),
   mockPlaceBet: vi.fn(),
   mockRecordWin: vi.fn(),
 }));
@@ -14,6 +15,7 @@ const { mockGeneratePath, mockCalculateMultiplier } = vi.hoisted(() => ({
 
 vi.mock('../services/balanceService.js', () => ({
   default: {
+    getBalance: mockGetBalance,
     placeBet: mockPlaceBet,
     recordWin: mockRecordWin,
   },
@@ -76,6 +78,7 @@ describe('PlinkoHandler', () => {
     vi.clearAllMocks();
     mockIo = createMockIo();
     mockSocket = createMockSocket();
+    mockGetBalance.mockResolvedValue(1000);
     mockPlaceBet.mockResolvedValue({ success: true });
     mockRecordWin.mockResolvedValue({ success: true });
     mockGeneratePath.mockReturnValue([0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]);

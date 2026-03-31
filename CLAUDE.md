@@ -20,9 +20,22 @@ npm run db:migrate                    # Run Drizzle migrations
 npm run db:push                       # Push schema directly (dev)
 npm run seed                          # Seed database with test data
 npm run init-stats                    # Initialize game stats table
-npm run test                          # Run vitest tests
+npm run test                          # Run vitest unit tests
 npm run test:watch                    # Run tests in watch mode
 npm run test:coverage                 # Run tests with coverage report
+npm run test:integration              # Run integration tests (requires MySQL)
+```
+
+### Running a Single Test
+```bash
+# Server unit test (from server/)
+npx vitest run src/path/to/file.test.ts
+
+# Server integration test (from server/, requires MySQL)
+npx vitest run --config vitest.integration.config.ts src/__tests__/integration/games/crash.integration.test.ts
+
+# Client test (from client/)
+npx vitest run src/path/to/file.test.jsx
 ```
 
 ### Client (run from `client/`)
@@ -36,19 +49,28 @@ npm run test:watch                    # Run tests in watch mode
 npm run test:coverage                 # Run tests with coverage report
 ```
 
+### E2E Tests (run from project root)
+```bash
+npx playwright test                   # Run all E2E tests
+npx playwright test e2e/tests/crash.spec.ts  # Run a single E2E spec
+```
+Requires both server and client running. Playwright config at `playwright.config.ts`, tests in `e2e/tests/`. Three phases: auth-setup -> games (uses saved session) -> auth-tests (last, since they create new sessions).
+
 ### Docker
 ```bash
 docker-compose up                     # Start all services (MySQL, server, client)
 docker-compose -f docker-compose.dev.yml up  # Dev compose variant
+docker-compose -f docker-compose.test.yml up  # Test DB for integration tests (MySQL on port 3307)
 ```
 
 ### CI
-CI pipeline has 4 stages: **lint** (client ESLint) → **build** (server type-check + build, client build) → **test** (vitest with coverage for both) → **security** (npm audit). CI installs extra deps `zod` and `seedrandom` for the server.
+CI pipeline has 6 jobs: **lint** (client ESLint) -> **build** (server type-check + build, client build) -> **test** (vitest unit tests with coverage for both) + **integration-test** (game socket tests against real MySQL) + **e2e-test** (Playwright against running app) -> **security** (npm audit). CI installs extra deps `zod` and `seedrandom` for the server.
 
 ## Architecture
 
 ### Server (`server/`)
 - **Runtime:** Node.js + Express + TypeScript (ESM modules throughout, `.js` extensions in imports)
+- **Entry point:** `server/server.ts` exports `createApp()` factory that returns `{ app, httpServer, io }`. Integration tests use this factory to spin up isolated server instances. The `if (import.meta.url === ...)` guard at the bottom starts the server only when run directly.
 - **Database:** MySQL via Drizzle ORM (`server/drizzle/schema.ts` is the single source of truth for all tables)
 - **DB connection:** `server/drizzle/db.ts` exports `db` (Drizzle instance), `connectDB`, `closeDB`
 - **Real-time:** Socket.IO with namespace-per-game pattern (e.g., `/crash`, `/roulette`, `/wheel`, `/blackjack`, `/plinko`, `/landmines`)
@@ -58,13 +80,13 @@ CI pipeline has 4 stages: **lint** (client ESLint) → **build** (server type-ch
 - **Redis:** Optional `RedisService` at `server/src/services/redisService.ts` for Socket.IO adapter (horizontal scaling); server works without Redis
 
 ### API Routes (`server/routes/`)
-All mounted under `/api`: `/api/auth`, `/api/users`, `/api/games`, `/api/admin`, `/api/rewards`, `/api/verify`, `/api/leaderboard`, `/api/responsible-gaming`. Health checks at `/health` (basic) and `/api/health/db` (database).
+All mounted under `/api`: `/api/auth`, `/api/users`, `/api/games`, `/api/admin`, `/api/admin/analytics`, `/api/rewards`, `/api/verify`, `/api/leaderboard`, `/api/responsible-gaming`. Health checks at `/health` (basic) and `/api/health/db` (database).
 
 ### Socket Handlers (`server/src/socket/`)
 All six game namespaces are wired in `server/server.ts`. Three different initialization patterns:
-- **Crash:** Namespace-level init — handler is imported once at startup and receives the namespace, attaches its own `connection` listener
-- **Blackjack:** Class-based — `BlackjackHandler` is instantiated per-connection with the namespace, then `handleConnection(socket)` is called
-- **Roulette, Landmines, Plinko, Wheel:** Per-connection init — handler receives `(io, socket, user)` on each connection
+- **Crash:** Namespace-level init -- handler is imported once at startup and receives the namespace, attaches its own `connection` listener
+- **Blackjack:** Class-based -- `BlackjackHandler` is instantiated per-connection with the namespace, then `handleConnection(socket)` is called
+- **Roulette, Landmines, Plinko, Wheel:** Per-connection init -- handler receives `(io, socket, user)` on each connection
 
 Chat and live games handlers are initialized on the main Socket.IO namespace (not game-specific).
 
@@ -77,15 +99,14 @@ Chat and live games handlers are initialized on the main Socket.IO namespace (no
 - **Route guards:** `AuthGuard` (authenticated users) and `AdminGuard` (admin role) in `client/src/components/guards/`
 - **Testing:** Vitest + React Testing Library + jsdom; setup file at `client/src/test/setup.js`
 
-### Client Structure
-- `client/src/pages/` - route-level page components
-- `client/src/games/` - game-specific components and utilities (crash, plinko, wheel, roulette, landmines, blackjack)
-- `client/src/components/ui/` - reusable UI primitives (Button, Card, Modal, Table, etc.)
-- `client/src/components/guards/` - `AuthGuard` and `AdminGuard` route protection
-- `client/src/components/admin/` - admin dashboard components
-
 ### Database Schema (`server/drizzle/schema.ts`)
 Tables: `users`, `session`, `account`, `verification`, `transactions`, `gameSessions`, `gameLogs`, `balances`, `gameStats`, `messages`, `loginRewards`. Drizzle config points to `./drizzle/schema.js` (the compiled output). Better Auth manages `session`, `account`, and `verification` tables. The `gameLogs` table uses `varchar` (not enum) for `gameType`/`eventType` because `LoggingService` writes system/admin events beyond the game enum values.
+
+### Testing Architecture
+- **Unit tests** (server): `server/**/*.test.ts` -- exclude `**/integration/**`. Config at `server/vitest.config.ts`. Uses `pool: 'forks'`.
+- **Unit tests** (client): `client/src/**/*.test.{js,jsx}`. Config at `client/vitest.config.js`. Uses jsdom environment.
+- **Integration tests**: `server/src/__tests__/integration/games/*.integration.test.ts`. Config at `server/vitest.integration.config.ts`. Require a real MySQL database (use `docker-compose.test.yml` for local, CI spins up a MySQL service). Helper modules in `server/src/__tests__/integration/` handle test server creation, auth, and DB cleanup.
+- **E2E tests**: `e2e/tests/*.spec.ts` using Playwright. Config at `playwright.config.ts`. Run against live server+client.
 
 ## Key Patterns
 
@@ -94,6 +115,7 @@ Tables: `users`, `session`, `account`, `verification`, `transactions`, `gameSess
 - **Game socket pattern:** Each game gets a Socket.IO namespace, auth middleware via `socketAuth`, and a handler in `server/src/socket/`. All namespaces verify auth on connection and disconnect unauthenticated sockets.
 - **Balance operations:** All balance changes go through `balanceService` which creates both a `balances` record and a `transactions` record atomically.
 - **Better Auth route ordering:** Custom auth routes (`server/routes/auth.ts`) must be registered *before* the Better Auth `app.all("/api/auth/*")` catch-all in `server.ts`, and Better Auth must be before `express.json()` middleware.
+- **Server factory pattern:** `createApp()` in `server.ts` builds the Express+Socket.IO stack and returns it. This allows integration tests to create isolated server instances without the auto-start side effect.
 
 ## Environment
 
@@ -103,6 +125,11 @@ Server config via `server/.env` (see `server/.env.example`):
 - `BETTER_AUTH_SECRET` (32+ char secret for session signing)
 - `BETTER_AUTH_URL` (default http://localhost:5000)
 - `DATABASE_URL` (mysql://user:pass@host:port/database)
+
+Game timing env vars (used in integration tests to speed up game rounds):
+- `CRASH_COUNTDOWN_MS`, `CRASH_NEXT_GAME_MS`
+- `ROULETTE_BETTING_DURATION`, `ROULETTE_SPIN_DURATION`, `ROULETTE_RESULT_DISPLAY`
+- `WHEEL_BETTING_DURATION`, `WHEEL_SPIN_DURATION`, `WHEEL_RESULT_DISPLAY`
 
 Client reads `VITE_API_URL` and `VITE_SOCKET_URL` from env (defaults to localhost:5000).
 

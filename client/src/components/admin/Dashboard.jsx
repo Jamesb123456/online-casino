@@ -187,7 +187,7 @@ const Dashboard = () => {
               <tbody>
                 {(stats.recentTransactions ?? []).map((transaction) => (
                   <tr key={transaction.id} className="border-b border-border hover:bg-bg-elevated/50 transition-colors">
-                    <td className="py-3 px-4 text-text-primary font-medium">{transaction.user}</td>
+                    <td className="py-3 px-4 text-text-primary font-medium">{transaction.userUsername || `User #${transaction.userId}`}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         transaction.type === 'deposit' ? 'bg-status-success/15 text-status-success border border-status-success/30' : 'bg-status-error/15 text-status-error border border-status-error/30'
@@ -196,7 +196,7 @@ const Dashboard = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-text-secondary font-semibold">{formatCurrency(transaction.amount)}</td>
-                    <td className="py-3 px-4 text-text-muted">{formatTime(transaction.timestamp)}</td>
+                    <td className="py-3 px-4 text-text-muted">{formatTime(transaction.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

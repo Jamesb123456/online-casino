@@ -71,6 +71,14 @@ export const auth = betterAuth({
     database: {
       generateId: "serial",
     },
+    cookiePrefix: "better-auth",
+    useSecureCookies: process.env.NODE_ENV === "production",
+    defaultCookieAttributes: {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+    },
   },
   plugins: [
     username({

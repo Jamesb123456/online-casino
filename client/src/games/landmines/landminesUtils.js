@@ -2,24 +2,29 @@
  * Utility functions for the Landmines game
  */
 
+const HOUSE_EDGE = 0.05;
+const TOTAL_CELLS = 25;
+const MAX_MULTIPLIER = 50;
+
 /**
- * Calculate the multiplier based on the number of mines and cells revealed
+ * Calculate the multiplier based on the number of mines and cells revealed.
+ * Uses a probability-based formula: fair payout = 1 / P(survive), then applies house edge.
+ * P(survive r reveals) = product(i=0..r-1) of (safeCells - i) / (TOTAL_CELLS - i)
  * @param {Number} mines - Number of mines in the grid
  * @param {Number} revealed - Number of cells successfully revealed
  * @returns {Number} - Current multiplier
  */
 export const calculateMultiplier = (mines, revealed) => {
-  // Base multiplier depends on the number of mines (higher risk = higher reward)
-  // For 1 mine: ~1.05x base, for 24 mines: ~24x base
-  const baseMultiplier = 1 + (mines / 12);
-  
-  // Growth constant: how quickly the multiplier increases with each reveal
-  // For fewer mines, growth is slower. For many mines, growth is faster.
-  const growthFactor = 1 + (mines / 25);
-  
-  // Calculate the multiplier with exponential growth
-  // First reveal gives the base multiplier, then it grows exponentially
-  return Math.round((baseMultiplier * Math.pow(growthFactor, revealed)) * 100) / 100;
+  if (revealed <= 0) return 1;
+
+  const safeCells = TOTAL_CELLS - mines;
+  let survivalProbability = 1;
+  for (let i = 0; i < revealed; i++) {
+    survivalProbability *= (safeCells - i) / (TOTAL_CELLS - i);
+  }
+
+  const multiplier = (1 - HOUSE_EDGE) / survivalProbability;
+  return Math.min(Math.round(multiplier * 100) / 100, MAX_MULTIPLIER);
 };
 
 /**

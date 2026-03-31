@@ -114,6 +114,7 @@ Platinum Casino is a web-based online casino platform with real-time multiplayer
 6. **Log stable knowledge.** Document architecture insights in `.claude/memories.md`.
 7. **Run from correct directory.** Server commands from `server/`, client commands from `client/`.
 8. **Do not break CI.** Verify changes pass `npx tsc --noEmit` and `npm run build` before committing.
+9. **Use Playwright for browser automation.** Always use Playwright MCP (`mcp__playwright__*`) instead of Chrome MCP (`mcp__claude-in-chrome__*`) for any browser interaction tasks.
 
 ---
 

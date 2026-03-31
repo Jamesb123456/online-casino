@@ -487,7 +487,7 @@ class BlackjackHandler {
     // Check for blackjack
     if (playerScore === 21 && game.playerHand.length === 2 && dealerScore !== 21) {
       game.result = 'blackjack';
-      game.winAmount = Math.floor(game.betAmount * 2.5);
+      game.winAmount = Math.round(game.betAmount * 2.5 * 100) / 100;
     }
 
     try {

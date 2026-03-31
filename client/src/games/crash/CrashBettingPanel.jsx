@@ -19,7 +19,7 @@ const CrashBettingPanel = ({
     
     // Convert to number values
     const numValue = name === 'amount' ? 
-      Math.max(1, Math.min(10000, Number(value))) : // Amount between 1-10000
+      Math.max(0.10, Math.min(5000, Number(value))) : // Amount between 0.10-5000
       Math.max(1.01, Number(value)); // Auto cashout minimum 1.01x
     
     setBet({
@@ -29,10 +29,10 @@ const CrashBettingPanel = ({
   };
 
   // Preset bet amounts
-  const presetAmounts = [10, 50, 100, 500];
+  const presetAmounts = [1, 5, 10, 25, 50, 100];
   
   // Preset auto cashout multipliers
-  const presetMultipliers = [1.5, 2, 5, 10];
+  const presetMultipliers = [1.5, 2, 5, 10, 25, 50];
 
   // Calculate potential profit
   const calculateProfit = () => {
@@ -53,14 +53,14 @@ const CrashBettingPanel = ({
             value={bet.amount}
             onChange={handleChange}
             disabled={!!activeBet}
-            min={1}
-            max={10000}
+            min={0.10}
+            max={5000}
             step={1}
             className="mb-2"
           />
           
           {/* Preset amounts */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {presetAmounts.map((amount) => (
               <button
                 key={amount}
@@ -90,13 +90,13 @@ const CrashBettingPanel = ({
             onChange={handleChange}
             disabled={!!activeBet}
             min={1.01}
-            max={1000}
+            max={50}
             step={0.01}
             className="mb-2"
           />
           
           {/* Preset multipliers */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {presetMultipliers.map((multiplier) => (
               <button
                 key={multiplier}

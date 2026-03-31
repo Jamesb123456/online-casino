@@ -90,7 +90,7 @@ export const auth = betterAuth({
       adminRoles: ["admin"],
     }),
   ],
-  trustedOrigins: [process.env.CLIENT_URL || "http://localhost"],
+  trustedOrigins: (process.env.CLIENT_URL || "http://localhost").split(',').map(o => o.trim()).filter(Boolean),
   databaseHooks: {
     user: {
       create: {

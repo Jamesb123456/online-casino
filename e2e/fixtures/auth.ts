@@ -68,3 +68,67 @@ export async function ensureAuthenticated(page: Page, targetUrl: string) {
     );
   }
 }
+
+/**
+ * Ensure the page is authenticated as an admin user.
+ *
+ * The default Playwright session is for `player1`, who is not an admin.
+ * The AdminGuard redirects non-admin users to `/`. This helper detects
+ * any redirect away from the admin path and signs in as `admin` instead.
+ *
+ * Sequence:
+ *   1. Navigate to the admin path.
+ *   2. If we land on the admin path, we are done.
+ *   3. Otherwise, sign out (clears any non-admin session), sign in as admin
+ *      via the login form, and navigate to the path again.
+ */
+export async function ensureAdminAuthenticated(page: Page, targetUrl: string) {
+  // Quick path: try the target first.
+  await page.goto(targetUrl);
+  await page.waitForLoadState('domcontentloaded');
+
+  // Wait for the auth context to settle (not still verifying).
+  await page.waitForFunction(
+    () => {
+      const body = document.body.textContent || '';
+      return !body.includes('Verifying authentication') && !body.includes('Verifying admin access');
+    },
+    { timeout: 20_000 }
+  );
+
+  if (page.url().includes(targetUrl)) {
+    // Already on admin path — admin is signed in.
+    return;
+  }
+
+  // Either redirected to `/` (non-admin) or `/login` (no session).
+  // Sign out via better-auth, then sign in as admin via the login UI.
+  try {
+    await page.request.post('/api/auth/sign-out', {
+      headers: { 'Content-Type': 'application/json' },
+      data: {},
+      failOnStatusCode: false,
+    });
+  } catch {
+    // Ignore — we'll fall through to login regardless.
+  }
+
+  await page.goto('/login');
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('#username').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('#username').fill('admin');
+  await page.locator('#password').fill('admin123');
+  await page.locator('button[type="submit"]').click();
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
+
+  // Now retry the original target.
+  await page.goto(targetUrl);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(
+    () => {
+      const body = document.body.textContent || '';
+      return !body.includes('Verifying authentication') && !body.includes('Verifying admin access');
+    },
+    { timeout: 20_000 }
+  );
+}

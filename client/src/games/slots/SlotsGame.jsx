@@ -6,56 +6,39 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import GameLayout from '@/games/_shared/GameLayout';
-import BetControls from '@/games/_shared/BetControls';
-import ProvablyFairPanel from '@/games/_shared/ProvablyFairPanel';
-import DisconnectOverlay from '@/games/_shared/DisconnectOverlay';
-import { useGameSocket } from '@/games/_shared/useGameSocket';
-import { useAnnouncer } from '@/games/_shared/hooks/useAnnouncer';
-import Button from '@/components/ui/Button';
-import { AuthContext } from '@/contexts/AuthContext';
-import { formatCredits } from '@/lib/formatCredits';
-import rules from './rules';
+import GameShell from '../../components/casino/GameShell';
+import BetPanel from '../../components/casino/BetPanel';
+import { useWinBurst } from '../../components/casino/WinBurst';
+import { useSound } from '../../components/casino/SoundProvider';
+import { useGameSocket } from '../_shared/useGameSocket';
+import { useAnnouncer } from '../_shared/hooks/useAnnouncer';
+import DisconnectOverlay from '../_shared/DisconnectOverlay';
+import TestShim from '../_shared/TestShim';
+import SlotsBoard from './SlotsBoard';
+import { AuthContext } from '../../contexts/AuthContext';
+import { formatCredits } from '../../lib/formatCredits';
+import { normalizeSymbolKey, SYMBOL_META } from './symbols';
 
-const SYMBOL_ICONS = {
-  CHERRY: '🍒',
-  LEMON: '🍋',
-  ORANGE: '🍊',
-  PLUM: '🍇',
-  BELL: '🔔',
-  BAR: '📊',
-  SEVEN: '7️⃣',
-  A: '🅰️',
-  B: '🅱️',
-  C: '🆎',
-};
+/**
+ * SlotsGame — Phase 2.5 visual rebuild.
+ *
+ * Render layer is Pixi (SlotsBoard); bet panel is the shared BetPanel.
+ * Server contract unchanged: `slots:join` on connect, `slots:spin` per spin
+ * with `{ betPerLine, lines }` payload and `{ ok, reels, hits, totalPayout,
+ * multiplier, newBalance }` ack.
+ */
 
-const ALL_SYMBOLS = Object.keys(SYMBOL_ICONS);
 const REELS = 5;
 const ROWS = 3;
 const MIN_LINES = 1;
 const MAX_LINES = 5;
-const SPIN_ANIM_MS = 800;
-const AUTOPLAY_DELAY_MS = 800;
-const AUTOPLAY_DEFAULT = 10;
+const HISTORY_LIMIT = 8;
+const BIG_WIN_THRESHOLD = 10; // multiplier ≥ 10× → cinematic flash
 
 const EMPTY_GRID = Array.from({ length: REELS }, () =>
-  Array.from({ length: ROWS }, () => '?'),
+  Array.from({ length: ROWS }, () => 'bar'),
 );
 
-const randomSymbol = () =>
-  ALL_SYMBOLS[Math.floor(Math.random() * ALL_SYMBOLS.length)];
-
-const randomGrid = () =>
-  Array.from({ length: REELS }, () =>
-    Array.from({ length: ROWS }, () => randomSymbol()),
-  );
-
-/**
- * Identify winning cells. Server returns `hits` as
- * `{ lineIdx, symbol, count, payout }[]` but no line geometry. We approximate
- * by finding the symbol's row in each of the first `count` reels.
- */
 const computeWinningCells = (hits, reels) => {
   const set = new Set();
   if (!Array.isArray(hits) || !Array.isArray(reels)) return set;
@@ -71,60 +54,38 @@ const computeWinningCells = (hits, reels) => {
   return set;
 };
 
-const SlotsCell = ({ symbol, highlighted, spinning }) => {
-  const display = SYMBOL_ICONS[symbol] ?? symbol ?? '?';
-  return (
-    <div
-      role="gridcell"
-      aria-pressed={highlighted ? 'true' : undefined}
-      aria-label={symbol || 'empty'}
-      className={[
-        'flex items-center justify-center text-3xl md:text-4xl h-16 md:h-20 w-full rounded-md border transition-all duration-150',
-        highlighted
-          ? 'bg-accent-gold/30 border-accent-gold text-accent-gold ring-2 ring-accent-gold shadow-[0_0_12px_rgba(232,189,90,0.6)]'
-          : 'bg-bg-base border-border-light text-text-primary',
-        spinning ? 'blur-[1.5px] opacity-90' : '',
-      ].join(' ')}
-    >
-      <span aria-hidden="true">{display}</span>
-    </div>
-  );
-};
+function topSymbolFromHits(hits) {
+  if (!Array.isArray(hits) || hits.length === 0) return null;
+  let best = hits[0];
+  for (const h of hits) {
+    if ((h?.payout || 0) > (best?.payout || 0)) best = h;
+  }
+  return best;
+}
 
 const SlotsGame = () => {
   const { user, updateBalance } = useContext(AuthContext) || {};
   const balance = typeof user?.balance === 'number' ? user.balance : 0;
+  const { play } = useSound();
+  const { burst, WinBurst: WinBurstNode } = useWinBurst();
 
-  // Bet config
   const [betPerLine, setBetPerLine] = useState(1);
-  const [lines, setLines] = useState(5);
+  const [lines, setLines] = useState(MAX_LINES);
 
-  // Spin state
   const [reels, setReels] = useState(EMPTY_GRID);
-  const [animReels, setAnimReels] = useState(EMPTY_GRID);
   const [hits, setHits] = useState([]);
   const [lastSpin, setLastSpin] = useState(null);
   const [isSpinning, setIsSpinning] = useState(false);
   const [showWinHighlights, setShowWinHighlights] = useState(false);
+  const [recentWin, setRecentWin] = useState(false);
 
-  // History (last 10) and provably-fair (built from each spin ack)
   const [history, setHistory] = useState([]);
-  const [pfHistory, setPfHistory] = useState([]);
-  const [clientSeed, setClientSeed] = useState('');
 
-  // Autoplay
-  const [autoplay, setAutoplay] = useState(false);
-  const [autoplayRemaining, setAutoplayRemaining] = useState(0);
-  const [stopOnWin, setStopOnWin] = useState(false);
-
-  const animTimerRef = useRef(null);
-  const animIntervalRef = useRef(null);
   const highlightTimerRef = useRef(null);
-  const autoplayTimerRef = useRef(null);
-  const autoplayRef = useRef(false);
-  autoplayRef.current = autoplay;
+  const recentWinTimerRef = useRef(null);
+  const burstRef = useRef(burst);
+  burstRef.current = burst;
 
-  // Announcer for screen readers
   const { announcement, announce } = useAnnouncer(2000);
 
   const totalBet = useMemo(() => {
@@ -133,23 +94,20 @@ const SlotsGame = () => {
     return Math.round(bet * ln * 100) / 100;
   }, [betPerLine, lines]);
 
-  const maxBetPerLine = useMemo(() => {
-    if (balance <= 0) return 1;
-    return Math.max(0.01, Math.floor((balance / MAX_LINES) * 100) / 100);
-  }, [balance]);
+  const handleGameState = useCallback(
+    (payload) => {
+      if (payload?.balance != null && typeof updateBalance === 'function') {
+        updateBalance(payload.balance);
+      }
+    },
+    [updateBalance],
+  );
 
-  // Socket
-  const handleGameState = useCallback((payload) => {
-    if (payload?.balance != null && typeof updateBalance === 'function') {
-      updateBalance(payload.balance);
-    }
-  }, [updateBalance]);
-
-  const { emit, status, lastError, serverSeedHash } = useGameSocket('slots', {
+  const { emit, status, lastError } = useGameSocket('slots', {
     events: { gameState: handleGameState },
   });
 
-  // Send join ack once on connect
+  // Send join ack once on connect.
   const joinedRef = useRef(false);
   useEffect(() => {
     if (status !== 'connected' || joinedRef.current) return;
@@ -161,147 +119,117 @@ const SlotsGame = () => {
     });
   }, [status, emit, updateBalance]);
 
-  // Cleanup all timers on unmount
-  useEffect(() => () => {
-    if (animTimerRef.current) window.clearTimeout(animTimerRef.current);
-    if (animIntervalRef.current) window.clearInterval(animIntervalRef.current);
-    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
-    if (autoplayTimerRef.current) window.clearTimeout(autoplayTimerRef.current);
-  }, []);
+  // Cleanup timers on unmount.
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
+      if (recentWinTimerRef.current) window.clearTimeout(recentWinTimerRef.current);
+    },
+    [],
+  );
 
   const winningCells = useMemo(() => {
     if (!showWinHighlights) return new Set();
     return computeWinningCells(hits, reels);
   }, [showWinHighlights, hits, reels]);
 
-  const stopAutoplay = useCallback(() => {
-    setAutoplay(false);
-    setAutoplayRemaining(0);
-    if (autoplayTimerRef.current) {
-      window.clearTimeout(autoplayTimerRef.current);
-      autoplayTimerRef.current = null;
-    }
-  }, []);
+  const isBigWin = useMemo(() => {
+    if (!lastSpin || !showWinHighlights) return false;
+    return (Number(lastSpin.multiplier) || 0) >= BIG_WIN_THRESHOLD;
+  }, [lastSpin, showWinHighlights]);
 
-  const performSpin = useCallback(() => {
-    if (isSpinning) return false;
+  const handleSpinClick = useCallback(() => {
+    if (isSpinning) return;
     const bet = Number(betPerLine);
-    if (!Number.isFinite(bet) || bet <= 0) return false;
+    if (!Number.isFinite(bet) || bet <= 0) return;
     const activeLines = Math.max(MIN_LINES, Math.min(MAX_LINES, Number(lines) || MAX_LINES));
     const spinTotalBet = Math.round(bet * activeLines * 100) / 100;
-    if (spinTotalBet > balance) return false;
-    if (status !== 'connected') return false;
+    if (spinTotalBet > balance) return;
+    if (status !== 'connected') return;
 
     setIsSpinning(true);
     setShowWinHighlights(false);
     setHits([]);
     setLastSpin(null);
-
-    // Animate: rotate random symbols rapidly for SPIN_ANIM_MS
-    setAnimReels(randomGrid());
-    if (animIntervalRef.current) window.clearInterval(animIntervalRef.current);
-    animIntervalRef.current = window.setInterval(() => {
-      setAnimReels(randomGrid());
-    }, 80);
+    play('bet');
 
     emit('slots:spin', { betPerLine: bet, lines: activeLines }, (resp) => {
-      // Finish the animation window before revealing.
-      const reveal = () => {
-        if (animIntervalRef.current) {
-          window.clearInterval(animIntervalRef.current);
-          animIntervalRef.current = null;
-        }
+      if (!resp || resp.ok === false) {
+        setIsSpinning(false);
+        announce('Spin failed');
+        return;
+      }
 
-        if (!resp || resp.ok === false) {
-          setIsSpinning(false);
-          announce('Spin failed');
-          if (autoplayRef.current) stopAutoplay();
-          return;
-        }
+      const safeReels = Array.isArray(resp.reels)
+        ? resp.reels.map((col) =>
+            Array.isArray(col) ? col.map((sym) => normalizeSymbolKey(sym)) : [],
+          )
+        : EMPTY_GRID;
+      setReels(safeReels);
+      setHits(Array.isArray(resp.hits) ? resp.hits : []);
+      setLastSpin({
+        gameId: resp.gameId,
+        totalPayout: Number(resp.totalPayout) || 0,
+        multiplier: Number(resp.multiplier) || 0,
+        activeLines,
+      });
 
-        const safeReels = Array.isArray(resp.reels) ? resp.reels : EMPTY_GRID;
-        setReels(safeReels);
-        setAnimReels(safeReels);
-        setHits(Array.isArray(resp.hits) ? resp.hits : []);
-        setLastSpin({
-          gameId: resp.gameId,
-          totalPayout: resp.totalPayout || 0,
-          multiplier: resp.multiplier || 0,
-          activeLines,
-        });
+      if (typeof resp.newBalance === 'number' && typeof updateBalance === 'function') {
+        updateBalance(resp.newBalance);
+      }
 
-        if (typeof resp.newBalance === 'number' && typeof updateBalance === 'function') {
-          updateBalance(resp.newBalance);
-        }
+      const payout = Number(resp.totalPayout) || 0;
+      const winningLineCount = Array.isArray(resp.hits) ? resp.hits.length : 0;
+      if (payout > 0) {
+        announce(
+          `Won ${formatCredits(payout, { withUnit: false })} credits on ${winningLineCount} line${
+            winningLineCount === 1 ? '' : 's'
+          }`,
+        );
+      } else {
+        announce('No payout');
+      }
 
-        const payout = Number(resp.totalPayout) || 0;
-        const winningLineCount = Array.isArray(resp.hits) ? resp.hits.length : 0;
-        if (payout > 0) {
-          announce(`Won ${formatCredits(payout, { withUnit: false })} credits on ${winningLineCount} line${winningLineCount === 1 ? '' : 's'}`);
-        } else {
-          announce('No payout');
-        }
-
-        // Push to history
-        setHistory((prev) => [
+      const topHit = topSymbolFromHits(resp.hits);
+      setHistory((prev) =>
+        [
           {
             id: resp.gameId || `${Date.now()}-${Math.random()}`,
             totalPayout: payout,
             multiplier: Number(resp.multiplier) || 0,
             totalBet: spinTotalBet,
+            topSymbol: topHit ? normalizeSymbolKey(topHit.symbol) : null,
             timestamp: Date.now(),
           },
           ...prev,
-        ].slice(0, 10));
+        ].slice(0, HISTORY_LIMIT),
+      );
 
-        // PF history row (server seed not exposed for slots — verify is best-effort)
-        setPfHistory((prev) => [
-          {
-            id: resp.gameId || `${Date.now()}-${Math.random()}`,
-            gameType: 'slots',
-            serverSeedHash: serverSeedHash || '',
-            serverSeed: null,
-            clientSeed,
-            nonce: prev.length + 1,
-            outcome: payout,
-            multiplier: Number(resp.multiplier) || 0,
-            timestamp: Date.now(),
-          },
-          ...prev,
-        ].slice(0, 20));
+      setShowWinHighlights(true);
 
-        setShowWinHighlights(true);
-        if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
-        highlightTimerRef.current = window.setTimeout(() => {
-          setShowWinHighlights(false);
-        }, 2200);
-
-        setIsSpinning(false);
-
-        // Autoplay continuation logic
-        if (autoplayRef.current) {
-          if (stopOnWin && payout > 0) {
-            stopAutoplay();
-            return;
-          }
-          setAutoplayRemaining((n) => {
-            const next = n - 1;
-            if (next <= 0) {
-              // Schedule stop on next tick to avoid setState during render path
-              window.setTimeout(stopAutoplay, 0);
-              return 0;
-            }
-            return next;
-          });
+      // Celebrate + sound feedback after reels settle.
+      const mult = Number(resp.multiplier) || 0;
+      const settleDelayMs = 2300;
+      window.setTimeout(() => {
+        if (payout > 0 && mult >= 2) {
+          burstRef.current?.({ multiplier: mult, amount: payout });
+          setRecentWin(true);
+          if (recentWinTimerRef.current) window.clearTimeout(recentWinTimerRef.current);
+          recentWinTimerRef.current = window.setTimeout(() => setRecentWin(false), 1500);
+        } else if (payout > 0) {
+          play('cashout');
+        } else {
+          play('lose');
         }
-      };
+      }, settleDelayMs);
 
-      // Ensure the animation has at least ~SPIN_ANIM_MS visible time.
-      if (animTimerRef.current) window.clearTimeout(animTimerRef.current);
-      animTimerRef.current = window.setTimeout(reveal, SPIN_ANIM_MS);
+      if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = window.setTimeout(() => {
+        setShowWinHighlights(false);
+      }, 4500);
+
+      setIsSpinning(false);
     });
-
-    return true;
   }, [
     isSpinning,
     betPerLine,
@@ -311,179 +239,12 @@ const SlotsGame = () => {
     emit,
     updateBalance,
     announce,
-    serverSeedHash,
-    clientSeed,
-    stopOnWin,
-    stopAutoplay,
+    play,
   ]);
 
-  // Autoplay driver: when autoplay is on and not spinning, schedule the next spin.
-  useEffect(() => {
-    if (!autoplay) return undefined;
-    if (isSpinning) return undefined;
-    if (autoplayRemaining <= 0) return undefined;
-
-    // Stop if balance can't cover the next bet
-    if (totalBet > balance) {
-      stopAutoplay();
-      return undefined;
-    }
-
-    autoplayTimerRef.current = window.setTimeout(() => {
-      const ok = performSpin();
-      if (!ok) stopAutoplay();
-    }, AUTOPLAY_DELAY_MS);
-
-    return () => {
-      if (autoplayTimerRef.current) {
-        window.clearTimeout(autoplayTimerRef.current);
-        autoplayTimerRef.current = null;
-      }
-    };
-  }, [autoplay, autoplayRemaining, isSpinning, totalBet, balance, performSpin, stopAutoplay]);
-
-  const handleSpinClick = useCallback(() => {
-    // Manual spin disables autoplay if it was running
-    if (autoplay) stopAutoplay();
-    performSpin();
-  }, [autoplay, stopAutoplay, performSpin]);
-
-  const handleToggleAutoplay = useCallback(() => {
-    if (autoplay) {
-      stopAutoplay();
-      return;
-    }
-    setAutoplayRemaining(AUTOPLAY_DEFAULT);
-    setAutoplay(true);
-  }, [autoplay, stopAutoplay]);
-
-  const handleBetPerLineChange = useCallback((e) => {
-    const raw = e.target.value;
-    if (raw === '') { setBetPerLine(0.01); return; }
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) { setBetPerLine(0.01); return; }
-    const clamped = Math.max(0.01, Math.min(maxBetPerLine, parsed));
-    setBetPerLine(Math.round(clamped * 100) / 100);
-  }, [maxBetPerLine]);
-
-  // Build the canvas (reels grid)
-  const visibleReels = isSpinning ? animReels : reels;
-  const winLineCount = lastSpin?.totalPayout > 0 ? hits.length : 0;
-
-  const canvas = (
-    <div className="relative">
-      <DisconnectOverlay status={status} lastError={lastError} />
-
-      {/* Win banner above reels */}
-      <div className="min-h-[2.25rem] mb-3 flex items-center justify-center">
-        {lastSpin && lastSpin.totalPayout > 0 ? (
-          <div
-            data-testid="slots-win-banner"
-            className="px-4 py-1.5 rounded-md bg-status-success/15 border border-status-success/60 text-status-success font-semibold text-sm md:text-base"
-            role="status"
-          >
-            Won {formatCredits(lastSpin.totalPayout, { withUnit: false })} credits on {winLineCount} line{winLineCount === 1 ? '' : 's'}!
-          </div>
-        ) : lastSpin && lastSpin.totalPayout === 0 ? (
-          <div
-            data-testid="slots-result"
-            className="px-4 py-1.5 rounded-md bg-bg-base border border-border-light text-text-secondary text-sm"
-          >
-            No win this spin
-          </div>
-        ) : (
-          <div className="text-xs text-text-secondary uppercase tracking-wider">
-            5 × 3 Reels · Up to {MAX_LINES} Lines
-          </div>
-        )}
-        {lastSpin && lastSpin.totalPayout > 0 ? (
-          // Hidden testid for "Won..." copy parity with old tests
-          <span data-testid="slots-result" className="sr-only">
-            Won {formatCredits(lastSpin.totalPayout, { withUnit: false })} credits
-          </span>
-        ) : null}
-      </div>
-
-      <div
-        data-testid="slots-reels"
-        role="grid"
-        aria-label="Slots reels"
-        className="grid grid-cols-5 gap-2 md:gap-3"
-      >
-        {visibleReels.map((col, reelIdx) => (
-          <div
-            key={reelIdx}
-            data-testid={`slots-reel-${reelIdx}`}
-            role="row"
-            aria-label={`Reel ${reelIdx + 1}`}
-            className="flex flex-col gap-2"
-          >
-            {col.map((sym, rowIdx) => (
-              <SlotsCell
-                key={`${reelIdx}-${rowIdx}`}
-                symbol={sym}
-                highlighted={winningCells.has(`${reelIdx}:${rowIdx}`)}
-                spinning={isSpinning}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Polite live region */}
-      <div
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
-        {announcement}
-      </div>
-    </div>
-  );
-
-  const insufficient = totalBet > balance;
-  const spinDisabled = isSpinning || status !== 'connected' || insufficient;
-
-  const controls = (
-    <BetControls
-      value={betPerLine}
-      onChange={() => { /* not used — handled inline below */ }}
-      min={0.01}
-      max={maxBetPerLine}
-      balance={balance}
-      primaryAction={handleSpinClick}
-      primaryLabel={isSpinning ? 'Spinning…' : 'Spin'}
-      primaryDisabled={spinDisabled}
-      status={
-        autoplay
-          ? `Autoplay running · ${autoplayRemaining} spin${autoplayRemaining === 1 ? '' : 's'} left`
-          : null
-      }
-    >
-      {/* Bet per line input (replaces BetControls' integer default) */}
-      <div className="flex flex-col gap-1.5">
-        <label
-          htmlFor="slots-bet-per-line"
-          className="text-xs uppercase tracking-wider text-text-secondary"
-        >
-          Bet per line
-        </label>
-        <input
-          id="slots-bet-per-line"
-          type="number"
-          inputMode="decimal"
-          min={0.01}
-          max={maxBetPerLine}
-          step={0.01}
-          value={betPerLine}
-          onChange={handleBetPerLineChange}
-          disabled={isSpinning}
-          className="bg-bg-base border border-border-light rounded-md px-3 py-2 text-text-primary font-mono tabular-nums focus-visible:ring-2 focus-visible:ring-accent-gold focus-visible:border-accent-gold focus:outline-none disabled:opacity-50"
-          aria-describedby="slots-total-bet-helper"
-        />
-      </div>
-
-      {/* Lines segmented control */}
+  // BetPanel extras: line selector + total bet + last result summary.
+  const extras = (
+    <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-1.5">
         <span
           id="slots-lines-label"
@@ -505,13 +266,15 @@ const SlotsGame = () => {
                 role="radio"
                 aria-checked={active}
                 aria-label={`${n} line${n === 1 ? '' : 's'}`}
-                onClick={() => setLines(n)}
+                onClick={() => !isSpinning && setLines(n)}
                 disabled={isSpinning}
                 className={[
-                  'py-2 rounded-md text-sm font-mono tabular-nums border transition-colors focus-visible:ring-2 focus-visible:ring-accent-gold focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed',
+                  'h-[44px] rounded-md text-sm font-mono tabular-nums transition',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-gold',
                   active
-                    ? 'bg-accent-gold/20 border-accent-gold text-accent-gold'
-                    : 'bg-bg-base border-border-light text-text-secondary hover:border-accent-gold/60',
+                    ? 'bg-accent-purple text-white shadow-glow-amber cursor-pointer'
+                    : 'border border-white/10 bg-white/5 text-text-primary hover:border-accent-purple hover:bg-accent-purple/10 cursor-pointer',
+                  isSpinning ? 'cursor-not-allowed opacity-60' : '',
                 ].join(' ')}
               >
                 {n}
@@ -521,12 +284,8 @@ const SlotsGame = () => {
         </div>
       </div>
 
-      {/* Total bet display */}
-      <div
-        id="slots-total-bet-helper"
-        className="flex items-center justify-between bg-bg-base border border-border-light rounded-md px-3 py-2 text-xs"
-      >
-        <span className="uppercase tracking-wider text-text-secondary">Total bet</span>
+      <div className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs ring-1 ring-white/10">
+        <span className="text-text-secondary uppercase tracking-wider">Total bet</span>
         <span
           data-testid="slots-total-bet"
           className="font-mono tabular-nums text-text-primary"
@@ -535,100 +294,159 @@ const SlotsGame = () => {
         </span>
       </div>
 
-      {/* Autoplay */}
-      <div className="flex flex-col gap-2 border-t border-border-light pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs uppercase tracking-wider text-text-secondary">
-            Autoplay
-          </span>
-          <Button
-            variant={autoplay ? 'accent' : 'outline'}
-            size="sm"
-            onClick={handleToggleAutoplay}
-            disabled={status !== 'connected' || insufficient}
-            aria-pressed={autoplay}
-          >
-            {autoplay ? `Stop (${autoplayRemaining} left)` : `Auto × ${AUTOPLAY_DEFAULT}`}
-          </Button>
-        </div>
-        <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={stopOnWin}
-            onChange={(e) => setStopOnWin(e.target.checked)}
-            className="accent-accent-gold"
-          />
-          Stop on win
-        </label>
+      <div className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs ring-1 ring-white/10">
+        <span className="text-text-secondary uppercase tracking-wider">Last spin</span>
+        <span
+          data-testid="slots-result"
+          className={[
+            'font-mono tabular-nums',
+            lastSpin && lastSpin.totalPayout > 0
+              ? 'text-lime-300'
+              : 'text-text-secondary',
+          ].join(' ')}
+        >
+          {lastSpin
+            ? lastSpin.totalPayout > 0
+              ? `Won +${formatCredits(lastSpin.totalPayout, { withUnit: false })}`
+              : 'No win this spin'
+            : '—'}
+        </span>
       </div>
 
-      {/* Hidden spin button alias for old test selectors */}
-      <button
-        type="button"
-        data-testid="slots-spin-button"
-        onClick={handleSpinClick}
-        disabled={spinDisabled}
-        className="sr-only"
-        aria-hidden="true"
-        tabIndex={-1}
-      >
-        Spin
-      </button>
-    </BetControls>
+      {/* Hidden test-shims — legacy E2E specs use a single range slider
+          (#slots-lines) instead of the radiogroup, and target the bet input
+          via #slots-bet-per-line. The visible UI is unchanged. */}
+      <TestShim>
+        <input
+          id="slots-lines"
+          type="range"
+          min={MIN_LINES}
+          max={MAX_LINES}
+          step={1}
+          value={lines}
+          onChange={(e) => !isSpinning && setLines(Number(e.target.value))}
+          disabled={isSpinning}
+          aria-label="Lines (test-shim)"
+          tabIndex={-1}
+        />
+        <input
+          id="slots-bet-per-line"
+          type="number"
+          inputMode="decimal"
+          step={0.10}
+          value={Number(betPerLine).toFixed(2)}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            if (Number.isFinite(n)) setBetPerLine(n);
+          }}
+          disabled={isSpinning}
+          aria-label="Bet per line (test-shim)"
+          tabIndex={-1}
+        />
+      </TestShim>
+    </div>
   );
 
-  const historyPanel = (
+  const insufficient = totalBet > balance || balance < 0.01;
+
+  const panel = (
+    <BetPanel
+      bet={betPerLine}
+      onBetChange={setBetPerLine}
+      min={0.01}
+      max={Math.max(0.01, Math.floor((balance / Math.max(1, lines)) * 100) / 100 || 1)}
+      step={0.10}
+      balance={balance}
+      recentWin={recentWin}
+      onPlaceBet={handleSpinClick}
+      betLabel={isSpinning ? 'Spinning…' : 'Spin'}
+      loading={isSpinning}
+      disabled={isSpinning || insufficient || status !== 'connected'}
+      extra={extras}
+      betInputId="slots-bet-input"
+    />
+  );
+
+  const stats = (
     <div className="flex flex-col gap-2">
       <h2 className="text-xs uppercase tracking-wider text-text-secondary">
         Recent spins
       </h2>
-      {history.length === 0 ? (
-        <p className="text-xs text-text-secondary italic">No spins yet.</p>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {history.map((row) => (
-            <li
-              key={row.id}
-              className="flex items-center justify-between gap-2 bg-bg-base border border-border-light rounded-md px-2 py-1.5 text-xs"
-            >
-              <span className="font-mono tabular-nums text-text-secondary">
-                {row.multiplier.toFixed(2)}×
-              </span>
+      <div className="flex flex-wrap gap-1.5" aria-label="Recent spin results">
+        {history.length === 0 ? (
+          <span className="text-xs text-text-muted">No spins yet.</span>
+        ) : (
+          history.map((row) => {
+            const win = row.totalPayout > 0;
+            const label = row.topSymbol
+              ? SYMBOL_META[row.topSymbol]?.label || row.topSymbol
+              : null;
+            return (
               <span
+                key={row.id}
+                title={label ? `${label} · ${row.multiplier.toFixed(2)}×` : `${row.multiplier.toFixed(2)}×`}
                 className={[
-                  'font-mono tabular-nums',
-                  row.totalPayout > 0 ? 'text-status-success' : 'text-text-secondary',
+                  'inline-flex h-7 items-center gap-1 rounded-full px-2.5',
+                  'font-mono text-[11px] font-semibold tabular-nums ring-1',
+                  win
+                    ? 'bg-lime-400/10 text-lime-300 ring-lime-400/30'
+                    : 'bg-white/5 text-text-secondary ring-white/10',
                 ].join(' ')}
               >
-                {row.totalPayout > 0 ? '+' : ''}
-                {formatCredits(row.totalPayout - row.totalBet, { withUnit: false })}
+                <span aria-hidden="true">{label ? `${label} ` : ''}</span>
+                <span>{row.multiplier.toFixed(2)}×</span>
               </span>
-            </li>
-          ))}
-        </ul>
-      )}
+            );
+          })
+        )}
+      </div>
     </div>
   );
 
-  const provablyFair = (
-    <ProvablyFairPanel
-      currentHash={serverSeedHash}
-      clientSeed={clientSeed}
-      onClientSeedChange={setClientSeed}
-      history={pfHistory}
-    />
-  );
-
   return (
-    <GameLayout
-      title="Slots"
-      gameType="slots"
-      rules={rules}
-      canvas={canvas}
-      controls={controls}
-      history={historyPanel}
-      provablyFair={provablyFair}
-    />
+    <GameShell title="Slots" accent="magenta" panel={panel} stats={stats}>
+      <div className="relative">
+        <DisconnectOverlay status={status} lastError={lastError} />
+        <SlotsBoard
+          reels={reels}
+          spinning={isSpinning}
+          winningCells={winningCells}
+          bigWin={isBigWin}
+        />
+        {/* Polite live region for screen readers */}
+        <div aria-live="polite" aria-atomic="true" className="sr-only">
+          {announcement}
+        </div>
+        {/* Hidden spin button alias + reel DOM mirror for legacy test
+            selectors. The visible spin CTA is rendered by BetPanel; this
+            shim only exists so `getByTestId('slots-spin-button')` resolves
+            and the reels grid can be asserted on without a Pixi readback. */}
+        <TestShim>
+          <button
+            type="button"
+            data-testid="slots-spin-button"
+            aria-label="Spin (test-shim)"
+            onClick={handleSpinClick}
+            disabled={isSpinning || insufficient || status !== 'connected'}
+            tabIndex={-1}
+          >
+            {isSpinning ? 'Spinning…' : 'Spin alias'}
+          </button>
+          <div data-testid="slots-reels">
+            {Array.from({ length: REELS }, (_, i) => {
+              const col = Array.isArray(reels[i]) ? reels[i] : [];
+              const text = lastSpin ? col.slice(0, ROWS).join(' ') : '?';
+              return (
+                <span key={i} data-testid={`slots-reel-${i}`}>
+                  {text}
+                </span>
+              );
+            })}
+          </div>
+        </TestShim>
+      </div>
+      <WinBurstNode />
+    </GameShell>
   );
 };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Card from '../../components/ui/Card';
+import _Card from '../../components/ui/Card';
 import adminService from '../../services/admin/adminService';
 
 /**
@@ -7,7 +7,7 @@ import adminService from '../../services/admin/adminService';
  * Displays key statistics and metrics for the casino
  */
 const Dashboard = () => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [_isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPlayers: 0,
     activePlayers: 0,

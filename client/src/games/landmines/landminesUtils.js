@@ -91,7 +91,11 @@ export const calculatePotentialWin = (betAmount, mines, revealed) => {
  * @returns {String} - Formatted currency string
  */
 export const formatCurrency = (value, decimals = 2) => {
-  return value.toFixed(decimals);
+  const num = Number(value) || 0;
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 };
 
 /**

@@ -4,7 +4,7 @@ import { formatMultiplier } from './crashUtils';
 /**
  * Component to display all active bets in the Crash game
  */
-const CrashActiveBets = ({ bets = [], currentMultiplier = 1 }) => {
+const CrashActiveBets = ({ bets = [], currentMultiplier: _currentMultiplier = 1 }) => {
   if (!bets || bets.length === 0) {
     return (
       <div className="bg-bg-card border border-border rounded-xl overflow-hidden p-4">

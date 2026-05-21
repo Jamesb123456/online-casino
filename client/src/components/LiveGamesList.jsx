@@ -48,7 +48,7 @@ const GameIcon = ({ game, size = "sm" }) => {
 
 // Game Filter Button
 const GameFilterButton = ({ game, isActive, onClick }) => {
-  const gameNames = {
+  const _gameNames = {
     all: 'All',
     crash: 'Crash',
     roulette: 'Roulette',

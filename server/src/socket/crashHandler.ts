@@ -12,6 +12,7 @@
 // Use ES6 imports to avoid variable conflicts
 import BalanceService from '../services/balanceService.js';
 import LoggingService from '../services/loggingService.js';
+import gameConfigService from '../services/gameConfigService.js';
 import { calculateHouseEdge } from '../utils/gameUtils.js';
 import { validateSocketData, crashPlaceBetSchema } from '../validation/schemas.js';
 import crypto from 'crypto';
@@ -50,6 +51,11 @@ const crashGame = {
  * @param {Object} namespace - Socket.IO namespace
  */
 export default function initCrashHandlers(namespace) {
+  // Fire-and-forget config fetch on handler init so the configured house edge
+  // is available for the first round. Failures are swallowed and the handler
+  // falls back to `calculateHouseEdge('crash')`.
+  gameConfigService.getConfig('crash').catch(() => { /* swallow */ });
+
   // Store game state
   const gameState = {
     isGameRunning: false,

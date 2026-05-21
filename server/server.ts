@@ -33,6 +33,9 @@ import userRoutes from './routes/users.js';
 import gameRoutes from './routes/games.js';
 import adminRoutes from './routes/admin.js';
 import adminAnalyticsRoutes from './routes/adminAnalytics.js';
+// Admin routes for the pre-existing feature work (alerts, snapshots,
+// tournaments, chat moderation, settings, etc.). Schema tables for these
+// live in `drizzle/schema.ts` (added with Phase E-3 schema mirror).
 import adminGamesRoutes from './routes/adminGames.js';
 import adminHouseRoutes from './routes/adminHouse.js';
 import loginRewardsRoutes from './routes/login-rewards.js';
@@ -176,7 +179,6 @@ export async function createApp(): Promise<AppInstance> {
   app.use('/api/admin/settings', adminSettingsRoutes);
   app.use('/api/admin/user-limits', adminUserLimitsRoutes);
   app.use('/api/admin/tournaments', adminTournamentsRoutes);
-  // Allow the admin chat route to emit moderation events on the main namespace
   setAdminChatIo(io);
   app.use('/api/rewards', loginRewardsRoutes);
   app.use('/api/verify', verifyRoutes);

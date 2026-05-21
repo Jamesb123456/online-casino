@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import Button from './Button';
+import _Button from './Button';
 
 const Modal = ({
   isOpen,

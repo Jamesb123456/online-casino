@@ -9,7 +9,7 @@ import Loading from '../ui/Loading';
  * Redirects to login page if user is not authenticated
  */
 const AuthGuard = ({ children }) => {
-  const { user, loading, isAuthenticated } = useContext(AuthContext);
+  const { user: _user, loading, isAuthenticated } = useContext(AuthContext);
   const location = useLocation();
 
   if (loading) {

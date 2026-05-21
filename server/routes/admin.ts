@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { authenticate as auth, adminOnly } from '../middleware/auth.js';
+import { authenticate as auth, adminOnly, adminOrOperator } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import LoggingService from '../src/services/loggingService.js';
 import { adminCreateUserSchema, adminUpdateUserSchema, adminTransactionSchema } from '../src/validation/schemas.js';
@@ -212,6 +212,70 @@ router.post('/users/:id/balance', auth, adminOnly, async (req: Request, res: Res
     }
     LoggingService.logSystemEvent('admin_balance_adjust_error', { error: message }, 'error');
     res.status(500).json({ message: 'Error adjusting balance' });
+  }
+});
+
+// Bulk credit non-staff users (admin/operator only).
+// Accepts an optional `filter.idList` to scope the credit to specific user ids.
+// Set `dryRun: true` to preview the count + sample usernames without crediting.
+router.post('/users/bulk-credit', auth, adminOrOperator, async (req: Request, res: Response) => {
+  try {
+    const { amount, reason, filter, dryRun } = req.body || {};
+    const parsedAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (typeof parsedAmount !== 'number' || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ message: 'Amount must be a positive finite number' });
+    }
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({ message: 'Reason is required' });
+    }
+
+    const adminId = (req as AuthenticatedRequest).user.userId;
+
+    // Build the user query. Non-staff means role NOT IN ('admin', 'operator', 'viewer').
+    // The `idList` filter further restricts the set.
+    const idList: number[] = Array.isArray(filter?.idList) ? filter.idList.map((n: any) => Number(n)).filter(Number.isFinite) : [];
+    let query: any;
+    if (idList.length > 0) {
+      // Build a placeholder list for the IN clause.
+      query = sql`SELECT id, username FROM users WHERE role NOT IN ('admin','operator','viewer') AND id IN (${sql.join(idList.map(id => sql`${id}`), sql`, `)})`;
+    } else {
+      query = sql`SELECT id, username FROM users WHERE role NOT IN ('admin','operator','viewer')`;
+    }
+
+    const result: any = await db.execute(query);
+    const rows: Array<{ id: number; username: string }> = (result?.[0] || result || []) as any;
+
+    if (dryRun) {
+      return res.json({
+        wouldCredit: rows.length,
+        sampleUsernames: rows.slice(0, 5).map(r => r.username),
+      });
+    }
+
+    let credited = 0;
+    let failed = 0;
+    let totalDebited = 0;
+    const errors: Array<{ userId: number; reason: string }> = [];
+
+    for (const row of rows) {
+      try {
+        await balanceService.manualAdjustment(row.id, parsedAmount, reason.trim(), adminId);
+        credited++;
+        totalDebited += parsedAmount;
+      } catch (err) {
+        failed++;
+        errors.push({ userId: row.id, reason: (err as Error)?.message ?? 'unknown' });
+      }
+    }
+
+    LoggingService.logSystemEvent('admin_bulk_credit', {
+      adminId, amount: parsedAmount, reason, credited, failed, totalDebited,
+    });
+
+    res.json({ credited, failed, totalDebited, errors });
+  } catch (error) {
+    LoggingService.logSystemEvent('admin_bulk_credit_error', { error: (error as Error)?.message }, 'error');
+    res.status(500).json({ message: 'Error performing bulk credit' });
   }
 });
 

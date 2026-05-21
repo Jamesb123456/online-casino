@@ -46,3 +46,11 @@ client/vitest_json.txt
 # Temporary files
 *.tmp
 *.temp
+
+# Visual audit / ad-hoc verification artifacts (Phase E ergonomic ignore)
+visual-audit-*.mjs
+screenshots/
+dashboard-check.png
+player-profile-check.png
+revenue-check.png
+transactions-check.png

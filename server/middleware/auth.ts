@@ -51,3 +51,20 @@ export const userOrAdmin = (req: AuthenticatedRequest, res: Response, next: Next
     res.status(403).json({ message: 'Access denied.' });
   }
 };
+
+// Generic role guard factory. 401 when unauthenticated, 403 when role is not allowed.
+export const requireRole = (allowedRoles: string[]) =>
+  (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ message: 'Authentication required' });
+      return;
+    }
+    if (allowedRoles.includes(req.user.role as string)) {
+      next();
+      return;
+    }
+    res.status(403).json({ message: 'Forbidden' });
+  };
+
+export const adminOrOperator = requireRole(['admin', 'operator']);
+export const adminOrOperatorOrViewer = requireRole(['admin', 'operator', 'viewer']);

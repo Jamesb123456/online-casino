@@ -103,16 +103,18 @@ export const getBetNumbers = (betType, value) => {
     case 'HIGH':
       return Array.from({ length: 18 }, (_, i) => i + 19);
     
-    case 'DOZEN':
+    case 'DOZEN': {
       const dozenStart = parseInt(value) * 12 - 11;
       return Array.from({ length: 12 }, (_, i) => i + dozenStart);
-    
-    case 'COLUMN':
+    }
+
+    case 'COLUMN': {
       // Column 1: 1, 4, 7, ..., 34
       // Column 2: 2, 5, 8, ..., 35
       // Column 3: 3, 6, 9, ..., 36
       const col = parseInt(value);
       return Array.from({ length: 12 }, (_, i) => i * 3 + col);
+    }
     
     default:
       return [];

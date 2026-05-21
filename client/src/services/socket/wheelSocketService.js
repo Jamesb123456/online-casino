@@ -23,7 +23,7 @@ class WheelSocketService {
    * @param {Object} userInfo - Optional user info to override this.user
    * @returns {Promise} Resolves when connected, rejects on timeout or error
    */
-  connect(userInfo = null) {
+  connect(_userInfo = null) {
     if (this.socket?.connected) return Promise.resolve();
 
     return new Promise((resolve, reject) => {

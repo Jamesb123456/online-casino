@@ -37,7 +37,7 @@ class RouletteSocketService {
       }
       
       // Use provided userInfo or fallback to this.user
-      const user = userInfo || this.user || {};
+      const _user = userInfo || this.user || {};
       
       this.socket = io(`${this.apiUrl}${this.namespace}`, {
         transports: ['websocket'],

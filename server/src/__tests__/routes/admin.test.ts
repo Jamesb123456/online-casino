@@ -61,6 +61,14 @@ vi.mock('../../../middleware/auth.js', () => ({
     if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Access denied. Admin only.' });
     next();
   }),
+  adminOrOperator: vi.fn((req, res, next) => {
+    if (!['admin', 'operator'].includes(req.user?.role)) return res.status(403).json({ message: 'Forbidden' });
+    next();
+  }),
+  adminOrOperatorOrViewer: vi.fn((req, res, next) => {
+    if (!['admin', 'operator', 'viewer'].includes(req.user?.role)) return res.status(403).json({ message: 'Forbidden' });
+    next();
+  }),
   userOrAdmin: vi.fn((req, res, next) => next()),
 }));
 

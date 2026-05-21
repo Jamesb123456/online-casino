@@ -86,7 +86,7 @@ const TransactionsPage = () => {
   };
 
   // Create new transaction and refresh list
-  const handleTransactionCreated = (newTransaction) => {
+  const handleTransactionCreated = (_newTransaction) => {
     const fetchTransactions = async () => {
       try {
         setIsLoading(true);

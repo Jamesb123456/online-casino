@@ -126,47 +126,38 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Register function
-  const register = useCallback(async (userData) => {
-    try {
-      setError(null);
-      setLoading(true);
-
-      const { data, error: signUpError } = await authClient.signUp.email({
-        email: `${userData.username}@platinum.local`,
-        password: userData.password,
-        name: userData.username,
-        username: userData.username,
-      });
-
-      if (signUpError) {
-        throw new Error(signUpError.message || 'Registration failed');
-      }
-
-      // Fetch full user data including balance from our API
-      let mappedUser;
-      try {
-        mappedUser = await api.get('/users/me');
-      } catch {
-        mappedUser = mapUser(data?.user);
-      }
-
-      setUser(mappedUser);
-      return mappedUser;
-    } catch (err) {
-      setError(err.message || 'Registration failed');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   // Update user balance (for game wins/losses)
   const updateBalance = useCallback((newBalance) => {
     setUser(prev => {
       if (!prev) return prev;
       return { ...prev, balance: newBalance };
     });
+  }, []);
+
+  // Subscribe to canonical balance updates from the server.
+  // The main namespace emits `balanceUpdate` whenever BalanceService mutates
+  // the user's balance, making AuthContext the single source of truth.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const handler = (payload) => {
+      const next = typeof payload === 'number' ? payload : payload?.balance;
+      if (typeof next !== 'number' || Number.isNaN(next)) return;
+      if (import.meta.env.DEV) {
+        console.debug('[AuthContext] balanceUpdate received:', next);
+      }
+      updateBalance(next);
+    };
+
+    const unsubscribe = socketService.onSocketEvent('balanceUpdate', handler);
+    return unsubscribe;
+  }, [user?.id, updateBalance]);
+
+  // Refresh user from server (e.g. after profile edit). Errors propagate to caller.
+  const refreshUser = useCallback(async () => {
+    const userData = await api.get('/users/me');
+    setUser(userData);
+    return userData;
   }, []);
 
   // Context value
@@ -176,10 +167,10 @@ export const AuthProvider = ({ children }) => {
     error,
     login,
     logout,
-    register,
     updateBalance,
+    refreshUser,
     isAuthenticated: !!user,
-  }), [user, loading, error, login, logout, register, updateBalance]);
+  }), [user, loading, error, login, logout, updateBalance, refreshUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

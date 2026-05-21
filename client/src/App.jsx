@@ -11,6 +11,8 @@ import GameErrorBoundary from './components/GameErrorBoundary'
 import Loading from './components/ui/Loading'
 import { ToastProvider } from './contexts/ToastContext'
 import { AuthProvider } from './contexts/AuthContext'
+import { SoundProvider } from './components/casino/SoundProvider'
+import { MotionSafe } from './components/casino/MotionSafe'
 
 // Eagerly loaded pages (critical path)
 import HomePage from './pages/HomePage'
@@ -26,6 +28,8 @@ const WheelPage = lazy(() => import('./pages/games/WheelPage'))
 const RoulettePage = lazy(() => import('./pages/games/RoulettePage'))
 const BlackjackPage = lazy(() => import('./pages/games/BlackjackPage'))
 const LandminesPage = lazy(() => import('./pages/games/LandminesPage'))
+const DicePage = lazy(() => import('./pages/games/DicePage'))
+const SlotsPage = lazy(() => import('./pages/games/SlotsPage'))
 
 // Lazy loaded feature pages
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
@@ -43,6 +47,10 @@ const GameAnalyticsPage = lazy(() => import('./pages/admin/GameAnalyticsPage'))
 const GameDetailPage = lazy(() => import('./pages/admin/GameDetailPage'))
 const PlayerProfilePage = lazy(() => import('./pages/admin/PlayerProfilePage'))
 const RevenueDashboardPage = lazy(() => import('./pages/admin/RevenueDashboardPage'))
+const ChatModerationPage = lazy(() => import('./pages/admin/ChatModerationPage'))
+const HousePage = lazy(() => import('./pages/admin/HousePage'))
+const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'))
+const TournamentsAdminPage = lazy(() => import('./pages/admin/TournamentsAdminPage'))
 
 // Guards
 import AdminGuard from './components/guards/AdminGuard'
@@ -72,6 +80,8 @@ const router = createBrowserRouter(
       <Route path="/games/roulette" element={<AuthGuard><GameRoute name="Roulette"><RoulettePage /></GameRoute></AuthGuard>} />
       <Route path="/games/blackjack" element={<AuthGuard><GameRoute name="Blackjack"><BlackjackPage /></GameRoute></AuthGuard>} />
       <Route path="/games/landmines" element={<AuthGuard><GameRoute name="Landmines"><LandminesPage /></GameRoute></AuthGuard>} />
+      <Route path="/games/dice" element={<AuthGuard><GameRoute name="Dice"><DicePage /></GameRoute></AuthGuard>} />
+      <Route path="/games/slots" element={<AuthGuard><GameRoute name="Slots"><SlotsPage /></GameRoute></AuthGuard>} />
       <Route path="/rewards" element={
         <Suspense fallback={<Loading size="lg" message="Loading rewards..." />}>
           <RewardsPage />
@@ -189,6 +199,47 @@ const router = createBrowserRouter(
         }
       />
 
+      <Route
+        path="/admin/chat"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading chat moderation..." />}>
+              <ChatModerationPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/house"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading house treasury..." />}>
+              <HousePage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading settings..." />}>
+              <SettingsPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/admin/tournaments"
+        element={
+          <AdminGuard>
+            <Suspense fallback={<Loading size="lg" message="Loading tournaments..." />}>
+              <TournamentsAdminPage />
+            </Suspense>
+          </AdminGuard>
+        }
+      />
+
       {/* Admin redirect */}
       <Route
         path="/admin"
@@ -212,14 +263,18 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <ToastProvider>
-          <RouterProvider
-            router={router}
-            fallbackElement={
-              <div className="min-h-screen flex items-center justify-center">
-                <Loading size="lg" message="Loading application..." />
-              </div>
-            }
-          />
+          <SoundProvider>
+            <MotionSafe>
+              <RouterProvider
+                router={router}
+                fallbackElement={
+                  <div className="min-h-screen flex items-center justify-center">
+                    <Loading size="lg" message="Loading application..." />
+                  </div>
+                }
+              />
+            </MotionSafe>
+          </SoundProvider>
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>

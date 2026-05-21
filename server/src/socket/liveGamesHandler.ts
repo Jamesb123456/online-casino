@@ -10,7 +10,7 @@ import { gameSessions, users } from '../../drizzle/schema.js';
 import LoggingService from '../services/loggingService.js';
 import { socketAuth } from '../../middleware/socket/socketAuth.js';
 
-const GAME_TYPES = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'landmines'];
+const GAME_TYPES = ['crash', 'roulette', 'blackjack', 'plinko', 'wheel', 'landmines', 'dice', 'slots'];
 
 /**
  * Initialize live games socket handlers

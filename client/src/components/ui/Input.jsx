@@ -18,7 +18,7 @@ const Input = ({
   min,
   max,
   step,
-  variant = 'default'
+  variant: _variant = 'default'
 }) => {
   const inputId = id || name;
 

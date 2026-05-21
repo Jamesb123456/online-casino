@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as _render, screen as _screen } from '@testing-library/react';
 
 describe('Client smoke test', () => {
   it('should pass', () => {

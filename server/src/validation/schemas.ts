@@ -88,6 +88,36 @@ export const blackjackStartSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Dice game schemas (legacy handler)
+// ---------------------------------------------------------------------------
+
+export const diceRollSchema = z.object({
+  betAmount: betAmountSchema,
+  target: z
+    .number()
+    .int('Target must be an integer')
+    .min(1, 'Target must be between 1 and 99')
+    .max(99, 'Target must be between 1 and 99'),
+  direction: z.enum(['over', 'under']),
+});
+
+// ---------------------------------------------------------------------------
+// Slots game schemas (legacy handler)
+// ---------------------------------------------------------------------------
+
+export const slotsSpinSchema = z.object({
+  betPerLine: z
+    .number()
+    .positive('Bet per line must be positive')
+    .max(5000, 'Bet per line cannot exceed $5,000'),
+  lines: z
+    .number()
+    .int('Lines must be an integer')
+    .min(1, 'Minimum 1 line')
+    .max(5, 'Maximum 5 lines'),
+});
+
+// ---------------------------------------------------------------------------
 // Admin route schemas
 // ---------------------------------------------------------------------------
 

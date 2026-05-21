@@ -8,7 +8,7 @@ const RewardsPage = () => {
   useEffect(() => {
     document.title = 'Rewards | Platinum Casino';
   }, []);
-  const { isAuthenticated, user } = useContext(AuthContext);
+  const { isAuthenticated, user: _user } = useContext(AuthContext);
   const [rewardStatus, setRewardStatus] = useState({ canClaim: false, nextRewardTime: null });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);

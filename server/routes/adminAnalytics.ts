@@ -3,6 +3,7 @@ import { authenticate as auth, adminOnly } from '../middleware/auth.js';
 import { db } from '../drizzle/db.js';
 import { sql } from 'drizzle-orm';
 import LoggingService from '../src/services/loggingService.js';
+import behaviourAnalyticsService from '../src/services/behaviourAnalyticsService.js';
 import {
   analyticsPeriodSchema,
   analyticsGameDetailSchema,
@@ -510,6 +511,9 @@ router.get('/players/:userId/profile', auth, adminOnly, async (req: Request, res
         avgDailyWager,
         lossStreakMax,
         longestSession,
+        behaviourPatterns: await behaviourAnalyticsService
+          .detectPatterns(Number(user.id))
+          .catch(() => null),
       },
       activityTimeline,
     });

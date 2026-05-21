@@ -27,7 +27,7 @@ vi.mock('@/contexts/AuthContext', () => ({
     _currentValue: {
       login: mockLogin,
     },
-    Provider: ({ value, children }) => children,
+    Provider: ({ value: _value, children }) => children,
     Consumer: ({ children }) => children({}),
   },
 }));

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within as _within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HomePage from '@/pages/HomePage';
 

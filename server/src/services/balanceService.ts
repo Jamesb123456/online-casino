@@ -175,14 +175,15 @@ class BalanceService {
    * @param {Number} amount - Amount to adjust
    * @param {String} reason - Reason for adjustment
    * @param {String} adminId - Admin user ID
+   * @param {String} [gameType] - Optional gameType tag for the underlying balance/transaction
    * @returns {Promise<Object>} Updated user and transaction
    */
-  async manualAdjustment(userId, amount, reason, adminId) {
+  async manualAdjustment(userId, amount, reason, adminId, gameType = null) {
     return this.updateBalance(
       userId,
       amount,
       'admin_adjustment',
-      null,
+      gameType,
       { reason, adminId }
     );
   }

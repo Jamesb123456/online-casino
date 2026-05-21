@@ -5,14 +5,25 @@ import React from 'react';
 
 vi.mock('@/services/socket/rouletteSocketService', () => ({
   default: {
-    connect: vi.fn(),
+    setUser: vi.fn(),
+    connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn(),
-    onGameState: vi.fn(() => vi.fn()),
-    onResult: vi.fn(() => vi.fn()),
-    onError: vi.fn(() => vi.fn()),
-    onBetsUpdate: vi.fn(() => vi.fn()),
-    onPlayersUpdate: vi.fn(() => vi.fn()),
+    joinGame: vi.fn().mockResolvedValue({ success: true, balance: 1000, history: [] }),
     placeBet: vi.fn(),
+    spin: vi.fn(),
+    ensureConnected: vi.fn().mockResolvedValue(undefined),
+    onActivePlayers: vi.fn(() => vi.fn()),
+    onPlayerJoined: vi.fn(() => vi.fn()),
+    onPlayerLeft: vi.fn(() => vi.fn()),
+    onCurrentBets: vi.fn(() => vi.fn()),
+    onPlayerBet: vi.fn(() => vi.fn()),
+    onBalanceUpdate: vi.fn(() => vi.fn()),
+    onBettingStart: vi.fn(() => vi.fn()),
+    onBettingEnd: vi.fn(() => vi.fn()),
+    onSpinStarted: vi.fn(() => vi.fn()),
+    onSpinResult: vi.fn(() => vi.fn()),
+    onPersonalResult: vi.fn(() => vi.fn()),
+    onRoundComplete: vi.fn(() => vi.fn()),
   },
 }));
 
@@ -28,19 +39,19 @@ vi.mock('@/contexts/ToastContext', () => ({
 }));
 
 vi.mock('@/games/roulette/RouletteBettingPanel', () => ({
-  default: (props) => <div data-testid="roulette-betting-panel">Betting Panel</div>,
+  default: (_props) => <div data-testid="roulette-betting-panel">Betting Panel</div>,
 }));
 
 vi.mock('@/games/roulette/RouletteWheel', () => ({
-  default: (props) => <div data-testid="roulette-wheel">Wheel</div>,
+  default: (_props) => <div data-testid="roulette-wheel">Wheel</div>,
 }));
 
 vi.mock('@/games/roulette/RouletteActiveBets', () => ({
-  default: (props) => <div data-testid="roulette-active-bets">Active Bets</div>,
+  default: (_props) => <div data-testid="roulette-active-bets">Active Bets</div>,
 }));
 
 vi.mock('@/games/roulette/RoulettePlayersList', () => ({
-  default: (props) => <div data-testid="roulette-players">Players</div>,
+  default: (_props) => <div data-testid="roulette-players">Players</div>,
 }));
 
 import RouletteGame from '@/games/roulette/RouletteGame';

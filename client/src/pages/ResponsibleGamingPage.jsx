@@ -8,8 +8,8 @@ const ResponsibleGamingPage = () => {
   useEffect(() => {
     document.title = 'Responsible Gaming | Platinum Casino';
   }, []);
-  const { isAuthenticated, user, logout } = useContext(AuthContext);
-  const [limits, setLimits] = useState(null);
+  const { isAuthenticated, user: _user, logout } = useContext(AuthContext);
+  const [_limits, setLimits] = useState(null);
   const [activitySummary, setActivitySummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selfExcludeDays, setSelfExcludeDays] = useState(1);

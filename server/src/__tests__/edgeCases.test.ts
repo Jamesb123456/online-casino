@@ -317,74 +317,8 @@ describe('Edge cases: socketRateLimit', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Edge cases: Blackjack utility methods
-// ---------------------------------------------------------------------------
-// Top-level mocks for Blackjack handler
-vi.mock('../services/balanceService.js', () => ({ default: { hasSufficientBalance: vi.fn(), placeBet: vi.fn(), recordWin: vi.fn(), getBalance: vi.fn() } }));
-vi.mock('../../drizzle/models/User.js', () => ({ default: { findById: vi.fn() } }));
-vi.mock('../../drizzle/models/GameStat.js', () => ({ default: { updateStats: vi.fn() } }));
-vi.mock('../services/loggingService.js', () => ({ default: { logGameAction: vi.fn(), logGameEvent: vi.fn() } }));
-vi.mock('../validation/schemas.js', () => ({ validateSocketData: vi.fn((_s, d) => d), blackjackStartSchema: {} }));
-
-describe('Edge cases: Blackjack card values', () => {
-  let BlackjackHandler;
-
-  beforeEach(async () => {
-
-    const mod = await import('../socket/blackjackHandler.js');
-    BlackjackHandler = mod.default;
-  });
-
-  it('should score a hand with three aces as 13 (11 + 1 + 1)', () => {
-    const handler = new BlackjackHandler({});
-    const hand = [
-      { suit: 'h', rank: 'A', value: 11 },
-      { suit: 's', rank: 'A', value: 11 },
-      { suit: 'c', rank: 'A', value: 11 },
-    ];
-    // 11 + 11 + 11 = 33 → adjust: 23 → 13
-    expect(handler.calculateScore(hand)).toBe(13);
-  });
-
-  it('should score 21 exactly with A + 10', () => {
-    const handler = new BlackjackHandler({});
-    const hand = [
-      { suit: 'h', rank: 'A', value: 11 },
-      { suit: 's', rank: '10', value: 10 },
-    ];
-    expect(handler.calculateScore(hand)).toBe(21);
-  });
-
-  it('should score bust hand correctly', () => {
-    const handler = new BlackjackHandler({});
-    const hand = [
-      { suit: 'h', rank: 'K', value: 10 },
-      { suit: 's', rank: 'Q', value: 10 },
-      { suit: 'c', rank: '5', value: 5 },
-    ];
-    expect(handler.calculateScore(hand)).toBe(25);
-  });
-
-  it('should detect empty hand as 0', () => {
-    const handler = new BlackjackHandler({});
-    expect(handler.calculateScore([])).toBe(0);
-  });
-
-  it('canSplit should handle hand with 3+ cards', () => {
-    const handler = new BlackjackHandler({});
-    expect(handler.canSplit([
-      { rank: '8', value: 8 },
-      { rank: '8', value: 8 },
-      { rank: '3', value: 3 },
-    ])).toBe(false);
-  });
-
-  it('canSplit should return true for face cards with same value', () => {
-    const handler = new BlackjackHandler({});
-    expect(handler.canSplit([
-      { rank: 'K', value: 10 },
-      { rank: 'Q', value: 10 },
-    ])).toBe(true);
-  });
-});
+// NOTE: The "Edge cases: Blackjack card values" describe block (and its
+// top-level mocks for balanceService / User / GameStat / loggingService /
+// validation schemas) was removed in Phase F-6 when the legacy
+// `socket/blackjackHandler.ts` was deleted. Equivalent edge-case coverage
+// lives under `server/src/__tests__/games/blackjack/`.

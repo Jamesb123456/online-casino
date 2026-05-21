@@ -224,7 +224,7 @@ const PlayerProfile = () => {
   }
 
   /* ---- destructure profile data ---- */
-  const { overallStats, favoriteGame, perGameBreakdown, riskIndicators, activityTimeline, recentActivity } = profile;
+  const { overallStats, favoriteGame, perGameBreakdown, riskIndicators, activityTimeline, recentActivity: _recentActivity } = profile;
   const risk = RISK_STYLES[riskIndicators?.riskLevel] || RISK_STYLES.low;
 
   /* ---- format timeline dates for the area chart ---- */

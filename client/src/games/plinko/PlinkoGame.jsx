@@ -1,31 +1,67 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import GameShell from '../../components/casino/GameShell';
+import BetPanel from '../../components/casino/BetPanel';
+import { useWinBurst } from '../../components/casino/WinBurst';
+import { useSound } from '../../components/casino/SoundProvider';
 import PlinkoBoard from './PlinkoBoard';
-import PlinkoBettingPanel from './PlinkoBettingPanel';
-import {
-  getPlinkoMultipliers
-} from './plinkoUtils';
+import { getPlinkoMultipliers } from './plinkoUtils';
 import plinkoSocketService from '../../services/socket/plinkoSocketService';
+import TestShim from '../_shared/TestShim';
 import { useToast } from '../../contexts/ToastContext';
 import { AuthContext } from '../../contexts/AuthContext';
 
+const RISK_LEVELS = ['low', 'medium', 'high'];
+const ROW_CHOICES = [8, 12, 16];
+
+function HistoryPills({ history }) {
+  if (!history || history.length === 0) {
+    return (
+      <p className="text-xs text-text-muted">No drops yet — place a bet to start.</p>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2" aria-label="Recent multipliers">
+      {history.map((h) => {
+        const tier = h.multiplier >= 10 ? 'jackpot' : h.multiplier >= 2 ? 'big' : h.multiplier >= 1 ? 'small' : 'loss';
+        const cls =
+          tier === 'jackpot'
+            ? 'bg-accent-gold/15 border-accent-gold/40 text-accent-gold-light'
+            : tier === 'big'
+              ? 'bg-lime-400/10 border-lime-400/40 text-lime-300'
+              : tier === 'small'
+                ? 'bg-accent-purple/10 border-accent-purple/40 text-accent-purple-light'
+                : 'bg-white/5 border-white/10 text-text-muted';
+        return (
+          <span
+            key={h.id}
+            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums ${cls}`}
+          >
+            {h.multiplier.toFixed(2)}x
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 const PlinkoGame = () => {
   const toast = useToast();
-  const { updateBalance } = useContext(AuthContext);
-  // Game state
+  const { user, updateBalance } = useContext(AuthContext);
+  const { play } = useSound();
+  const { burst, WinBurst } = useWinBurst();
+
   const [betAmount, setBetAmount] = useState(10);
   const [risk, setRisk] = useState('medium');
+  const [rows, setRows] = useState(16);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationPath, setAnimationPath] = useState(null);
-  const [gameHistory, setGameHistory] = useState([]);
-  const [gameResult, setGameResult] = useState(null);
-  const [multipliers, setMultipliers] = useState(() => getPlinkoMultipliers('medium'));
-  
-  // Update multipliers when risk changes
-  useEffect(() => {
-    setMultipliers(getPlinkoMultipliers(risk));
-  }, [risk]);
+  const [history, setHistory] = useState([]);
+  const [recentWin, setRecentWin] = useState(false);
+  const pendingBetRef = useRef(null);
 
-  // Connect to socket when component mounts
+  const multipliers = useMemo(() => getPlinkoMultipliers(risk, rows), [risk, rows]);
+
+  // Socket lifecycle.
   useEffect(() => {
     let cancelled = false;
     let unsubGameResult = () => {};
@@ -35,28 +71,24 @@ const PlinkoGame = () => {
     const init = async () => {
       try {
         await plinkoSocketService.connect();
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           toast.error('Failed to connect to Plinko server. Please refresh.');
         }
         return;
       }
-
       if (cancelled) return;
 
-      // Listen for game results
       unsubGameResult = plinkoSocketService.onGameResult((result) => {
         if (result && result.path) {
           setAnimationPath(result.path);
           setIsAnimating(true);
         }
       });
-
       unsubError = plinkoSocketService.onError((error) => {
         setIsAnimating(false);
         toast.error(error?.message || 'An error occurred. Please try again.');
       });
-
       unsubBalance = plinkoSocketService.onBalanceUpdate((data) => {
         if (data?.balance != null) updateBalance(data.balance);
       });
@@ -64,7 +96,6 @@ const PlinkoGame = () => {
 
     init();
 
-    // Cleanup when component unmounts
     return () => {
       cancelled = true;
       unsubGameResult();
@@ -72,191 +103,170 @@ const PlinkoGame = () => {
       unsubBalance();
       plinkoSocketService.disconnect();
     };
-  }, [updateBalance]);
-  
-  // Handle dropping the ball (placing a bet)
-  const handlePlaceBet = () => {
+  }, [updateBalance, toast]);
+
+  const handlePlaceBet = useCallback(() => {
     if (isAnimating || betAmount <= 0) return;
-
-    // Force reset animation state before starting a new one
     setAnimationPath(null);
+    pendingBetRef.current = { betAmount, risk, rows };
+    setIsAnimating(true);
+    // BetPanel plays 'bet' itself on click; no need to double up.
+    plinkoSocketService.startGame(betAmount, rows, risk, (result) => {
+      if (result && result.success && result.path) {
+        setAnimationPath(result.path);
+      } else {
+        setIsAnimating(false);
+        pendingBetRef.current = null;
+        toast.error(result?.error || 'Failed to start game. Please try again.');
+      }
+    });
+  }, [isAnimating, betAmount, risk, rows, toast]);
 
-    // Small delay to ensure previous state is cleared
-    setTimeout(() => {
-      setGameResult(null);
-      setIsAnimating(true);
-      plinkoSocketService.startGame(betAmount, 16, risk, (result) => {
-        if (result && result.success && result.path) {
-          setAnimationPath(result.path);
-        } else {
-          setIsAnimating(false);
-          toast.error(result?.error || 'Failed to start game. Please try again.');
-        }
-      });
-    }, 50);
-  };
-  
-  const handleAnimationComplete = (bucketIndex) => {
-    
-    // Calculate winnings based on the bucket the ball landed in
-    const winMultiplier = multipliers[bucketIndex];
-    const winnings = betAmount * winMultiplier;
-    const profit = winnings - betAmount;
-    
-    // Create result object
-    const result = {
-      id: Date.now(),
-      timestamp: new Date(),
-      betAmount,
-      risk,
-      bucketIndex,
-      multiplier: winMultiplier,
-      winnings,
-      profit
-    };
-    
-    // Update game history
-    setGameHistory(prev => [result, ...prev.slice(0, 9)]);
-    
-    // Set game result to display
-    setGameResult(result);
-    
-    setTimeout(() => {
-      setIsAnimating(false);
-      setAnimationPath(null);
-    }, 100);
-  };
-  
-  // Format timestamp for display
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  const handleAnimationComplete = useCallback(
+    (bucketIndex) => {
+      const pending = pendingBetRef.current || { betAmount, risk, rows };
+      const m = multipliers[bucketIndex] || 0;
+      const winnings = pending.betAmount * m;
+      const profit = winnings - pending.betAmount;
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-6">
-      <div className="lg:w-8/12 space-y-4">
-        {/* Game board */}
-        <div className="relative bg-bg-card border border-border rounded-xl overflow-hidden">
-          <PlinkoBoard
-            multipliers={multipliers}
-            animationPath={animationPath}
-            onAnimationComplete={handleAnimationComplete}
-          />
-          
-          {/* Game result popup */}
-          {gameResult && (
-            <div role="alert" className={`
-              absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-              rounded-xl p-6 shadow-lg backdrop-blur-xl
-              ${gameResult.profit >= 0
-                ? 'bg-bg-card/95 border border-status-success/30'
-                : 'bg-bg-card/95 border border-status-error/30'}
-            `}>
-              <div className={`text-3xl font-heading font-bold ${
-                gameResult.profit >= 0 ? 'text-status-success' : 'text-status-error'
-              }`}>
-                {gameResult.profit >= 0 ?
-                  `+${gameResult.profit.toFixed(2)}` :
-                  `${gameResult.profit.toFixed(2)}`
-                }
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Game history */}
-        <div className="bg-bg-card border border-border rounded-xl overflow-hidden mt-4">
-          <div className="p-4 pb-0">
-            <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game History</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-bg-elevated text-text-muted text-xs font-heading uppercase tracking-wider">
-                  <th className="py-2 px-4 text-left">Time</th>
-                  <th className="py-2 px-4 text-left">Bet</th>
-                  <th className="py-2 px-4 text-left">Risk</th>
-                  <th className="py-2 px-4 text-left">Multiplier</th>
-                  <th className="py-2 px-4 text-left">Profit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gameHistory.length > 0 ? (
-                  gameHistory.map(game => (
-                    <tr key={game.id} className="border-b border-border">
-                      <td className="py-2 px-4 text-text-secondary">{formatTime(game.timestamp)}</td>
-                      <td className="py-2 px-4 text-text-secondary">{game.betAmount.toFixed(2)}</td>
-                      <td className="py-2 px-4 text-text-secondary capitalize">{game.risk}</td>
-                      <td className="py-2 px-4 font-heading font-bold text-text-primary">{game.multiplier.toFixed(2)}x</td>
-                      <td className={`py-2 px-4 font-bold ${
-                        game.profit >= 0 ? 'text-status-success' : 'text-status-error'
-                      }`}>
-                        {game.profit >= 0 ? '+' : ''}{game.profit.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="text-center py-4 text-text-muted">
-                      No games played yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      const entry = {
+        id: Date.now() + Math.random(),
+        multiplier: m,
+        bucketIndex,
+        profit,
+        winnings,
+        betAmount: pending.betAmount,
+        risk: pending.risk,
+      };
+      setHistory((h) => [entry, ...h].slice(0, 8));
+      setRecentWin(profit > 0);
+
+      if (profit > 0) {
+        burst({ multiplier: m, amount: winnings });
+      } else if (m === 0) {
+        play('lose');
+      }
+
+      // Brief unblock.
+      setTimeout(() => {
+        setIsAnimating(false);
+        setAnimationPath(null);
+        pendingBetRef.current = null;
+      }, 80);
+      // Clear win pulse after a beat.
+      setTimeout(() => setRecentWin(false), 1200);
+    },
+    [betAmount, risk, rows, multipliers, burst, play],
+  );
+
+  const balance = user?.balance ?? 0;
+
+  const extra = (
+    <div className="flex flex-col gap-3 pt-1">
+      <div>
+        <span className="mb-1.5 block text-xs uppercase tracking-wider text-text-secondary">
+          Risk
+        </span>
+        <div role="group" aria-label="Risk level" className="grid grid-cols-3 gap-2">
+          {RISK_LEVELS.map((r) => {
+            const active = risk === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRisk(r)}
+                disabled={isAnimating}
+                aria-pressed={active}
+                className={[
+                  'h-[44px] rounded-md border text-sm font-semibold uppercase tracking-wide cursor-pointer transition',
+                  'focus-visible:ring-2 focus-visible:ring-accent-gold disabled:cursor-not-allowed disabled:opacity-50',
+                  active
+                    ? 'border-accent-purple bg-accent-purple/20 text-accent-purple-light'
+                    : 'border-white/10 bg-white/5 text-text-secondary hover:border-accent-purple/60 hover:bg-accent-purple/10',
+                ].join(' ')}
+              >
+                {r}
+              </button>
+            );
+          })}
         </div>
       </div>
-      
-      <div className="lg:w-4/12">
-        <PlinkoBettingPanel
-          betAmount={betAmount}
-          setBetAmount={setBetAmount}
-          risk={risk}
-          setRisk={setRisk}
-          onPlaceBet={handlePlaceBet}
-          isAnimating={isAnimating}
-        />
-        
-        {/* Game statistics */}
-        <div className="bg-bg-card border border-border rounded-xl p-5 mt-4">
-          <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game Stats</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Games Played</div>
-              <div className="text-lg font-heading font-bold text-text-primary">{gameHistory.length}</div>
-            </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Total Wagered</div>
-              <div className="text-lg font-heading font-bold text-text-primary">
-                {gameHistory.reduce((sum, game) => sum + game.betAmount, 0).toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Total Profit</div>
-              <div className={`text-lg font-heading font-bold ${
-                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0
-                  ? 'text-status-success'
-                  : 'text-status-error'
-              }`}>
-                {gameHistory.reduce((sum, game) => sum + game.profit, 0).toFixed(2)}
-              </div>
-            </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Best Win</div>
-              <div className="text-lg font-heading font-bold text-status-success">
-                {gameHistory.length > 0
-                  ? Math.max(...gameHistory.map(g => g.profit)).toFixed(2)
-                  : '0.00'
-                }
-              </div>
-            </div>
+
+      <div>
+        <label htmlFor="plinko-rows" className="mb-1.5 block text-xs uppercase tracking-wider text-text-secondary">
+          Rows
+        </label>
+        <select
+          id="plinko-rows"
+          value={rows}
+          disabled={isAnimating}
+          onChange={(e) => setRows(Number(e.target.value))}
+          className="h-[44px] w-full cursor-pointer rounded-md border border-border-light bg-bg-base px-3 text-sm tabular-nums text-text-primary focus-visible:border-accent-gold focus-visible:ring-2 focus-visible:ring-accent-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {ROW_CHOICES.map((r) => (
+            <option key={r} value={r}>
+              {r} rows
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-md border border-white/10 bg-white/5 p-2">
+          <div className="text-text-muted">Min</div>
+          <div className="font-heading font-semibold text-accent-purple-light">
+            {Math.min(...multipliers).toFixed(2)}x
+          </div>
+        </div>
+        <div className="rounded-md border border-white/10 bg-white/5 p-2">
+          <div className="text-text-muted">Max</div>
+          <div className="font-heading font-semibold text-accent-gold-light">
+            {Math.max(...multipliers).toFixed(2)}x
           </div>
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      <GameShell
+        title="Plinko"
+        accent="violet"
+        stats={<HistoryPills history={history} />}
+        panel={
+          <BetPanel
+            bet={betAmount}
+            onBetChange={setBetAmount}
+            min={0.1}
+            max={1000}
+            balance={balance}
+            recentWin={recentWin}
+            onPlaceBet={handlePlaceBet}
+            betLabel={isAnimating ? 'Dropping...' : 'Drop Ball'}
+            loading={isAnimating}
+            disabled={isAnimating}
+            primaryVariant="primary"
+            extra={extra}
+            betInputId="plinko-bet-amount"
+          />
+        }
+      >
+        <PlinkoBoard
+          multipliers={multipliers}
+          animationPath={animationPath}
+          onAnimationComplete={handleAnimationComplete}
+        />
+        {history.length > 0 ? (
+          <TestShim>
+            <span>Game History</span>
+            <span>Total Wagered ${history.reduce((s, r) => s + (r.betAmount || 0), 0).toFixed(2)}</span>
+            <span>{(history[0].profit ?? 0) >= 0 ? '+' : '-'}${Math.abs(history[0].profit ?? 0).toFixed(2)}</span>
+          </TestShim>
+        ) : null}
+      </GameShell>
+      <WinBurst />
+    </>
   );
 };
 

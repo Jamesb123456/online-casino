@@ -45,7 +45,7 @@ const RegisterPage = () => {
       };
 
       // Call the register function from AuthContext
-      const user = await register(registrationData);
+      const _user = await register(registrationData);
 
       // Redirect to home page after successful registration
       navigate('/');

@@ -4,7 +4,7 @@ import { relations, InferSelectModel, InferInsertModel } from 'drizzle-orm';
 // Enums (MySQL uses ENUM differently than PostgreSQL)
 export const transactionTypeEnum = mysqlEnum('transaction_type', ['deposit', 'withdrawal', 'game_win', 'game_loss', 'admin_adjustment', 'bonus', 'login_reward']);
 export const transactionStatusEnum = mysqlEnum('transaction_status', ['pending', 'completed', 'failed', 'voided', 'processing']);
-export const gameTypeEnum = mysqlEnum('game_type', ['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines']);
+export const gameTypeEnum = mysqlEnum('game_type', ['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines', 'dice', 'slots', 'tournament_prize']);
 export const balanceTypeEnum = mysqlEnum('balance_type', ['deposit', 'withdrawal', 'win', 'loss', 'admin_adjustment', 'login_reward']);
 export const eventTypeEnum = mysqlEnum('event_type', ['session_start', 'bet_placed', 'bet_updated', 'game_result', 'win', 'loss', 'cashout', 'error', 'game_state_change']);
 
@@ -219,6 +219,10 @@ export const messages = mysqlTable('messages', {
   content: text('content').notNull(),
   userId: int('user_id').notNull().references(() => users.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+  // Chat moderation (added in migration 0007)
+  deletedAt: timestamp('deleted_at'),
+  deletedBy: int('deleted_by').references(() => users.id),
+  deletedReason: text('deleted_reason'),
 }, (table) => ({
   userIdIdx: index('messages_user_id_idx').on(table.userId),
   createdAtIdx: index('messages_created_at_idx').on(table.createdAt),
@@ -362,3 +366,198 @@ export type Account = InferSelectModel<typeof account>;
 export type NewAccount = InferInsertModel<typeof account>;
 export type Verification = InferSelectModel<typeof verification>;
 export type NewVerification = InferInsertModel<typeof verification>;
+
+// ---------------------------------------------------------------------------
+// House Treasury (migration 0003)
+// ---------------------------------------------------------------------------
+export const houseAccount = mysqlTable('house_account', {
+  id: int('id').primaryKey().autoincrement(),
+  balance: decimal('balance', { precision: 15, scale: 2 }).default('0').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+});
+
+export const houseTransactions = mysqlTable('house_transactions', {
+  id: int('id').primaryKey().autoincrement(),
+  type: varchar('type', { length: 50 }).notNull(),
+  amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  balanceBefore: decimal('balance_before', { precision: 15, scale: 2 }).notNull(),
+  balanceAfter: decimal('balance_after', { precision: 15, scale: 2 }).notNull(),
+  userId: int('user_id').references(() => users.id),
+  gameType: varchar('game_type', { length: 50 }),
+  gameSessionId: int('game_session_id'),
+  transactionId: int('transaction_id').references(() => transactions.id),
+  adminId: int('admin_id').references(() => users.id),
+  reason: text('reason'),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  typeIdx: index('house_transactions_type_idx').on(table.type),
+  userIdIdx: index('house_transactions_user_id_idx').on(table.userId),
+  gameTypeIdx: index('house_transactions_game_type_idx').on(table.gameType),
+  createdAtIdx: index('house_transactions_created_at_idx').on(table.createdAt),
+}));
+
+export const settings = mysqlTable('settings', {
+  id: int('id').primaryKey().autoincrement(),
+  key: varchar('key', { length: 100 }).unique().notNull(),
+  value: json('value').notNull(),
+  updatedBy: int('updated_by').references(() => users.id),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  keyIdx: index('settings_key_idx').on(table.key),
+}));
+
+// ---------------------------------------------------------------------------
+// Game Config (migration 0004)
+// ---------------------------------------------------------------------------
+export const gameConfig = mysqlTable('game_config', {
+  id: int('id').primaryKey().autoincrement(),
+  gameType: varchar('game_type', { length: 50 }).unique().notNull(),
+  houseEdge: decimal('house_edge', { precision: 5, scale: 4 }).notNull(),
+  payoutTable: json('payout_table').notNull(),
+  maxBet: decimal('max_bet', { precision: 15, scale: 2 }).default('0').notNull(),
+  enabled: boolean('enabled').default(true).notNull(),
+  updatedBy: int('updated_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  gameTypeIdx: index('game_config_game_type_idx').on(table.gameType),
+}));
+
+// ---------------------------------------------------------------------------
+// Daily Snapshots (migration 0006)
+// ---------------------------------------------------------------------------
+export const dailySnapshots = mysqlTable('daily_snapshots', {
+  id: int('id').primaryKey().autoincrement(),
+  snapshotDate: varchar('snapshot_date', { length: 10 }).unique().notNull(),
+  houseBalanceClose: decimal('house_balance_close', { precision: 15, scale: 2 }).notNull(),
+  totalBets: decimal('total_bets', { precision: 20, scale: 2 }).notNull(),
+  totalWins: decimal('total_wins', { precision: 20, scale: 2 }).notNull(),
+  ggr: decimal('ggr', { precision: 20, scale: 2 }).notNull(),
+  bonusesPaid: decimal('bonuses_paid', { precision: 20, scale: 2 }).default('0').notNull(),
+  ngr: decimal('ngr', { precision: 20, scale: 2 }).notNull(),
+  activePlayerCount: int('active_player_count').default(0).notNull(),
+  newPlayerCount: int('new_player_count').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  snapshotDateIdx: index('daily_snapshots_snapshot_date_idx').on(table.snapshotDate),
+}));
+
+// ---------------------------------------------------------------------------
+// Chat Moderation: user mutes (migration 0007)
+// ---------------------------------------------------------------------------
+export const userMutes = mysqlTable('user_mutes', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').notNull().references(() => users.id),
+  mutedUntil: timestamp('muted_until').notNull(),
+  mutedBy: int('muted_by').references(() => users.id),
+  reason: text('reason'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('user_mutes_user_id_idx').on(table.userId),
+  userMutedUntilIdx: index('user_mutes_user_muted_until_idx').on(table.userId, table.mutedUntil),
+}));
+
+// ---------------------------------------------------------------------------
+// Alerts (migration 0008)
+// ---------------------------------------------------------------------------
+export const alerts = mysqlTable('alerts', {
+  id: int('id').primaryKey().autoincrement(),
+  type: varchar('type', { length: 60 }).notNull(),
+  severity: varchar('severity', { length: 20 }).default('warning').notNull(),
+  userId: int('user_id').references(() => users.id),
+  gameType: varchar('game_type', { length: 50 }),
+  details: json('details').notNull(),
+  acknowledged: boolean('acknowledged').default(false).notNull(),
+  acknowledgedAt: timestamp('acknowledged_at'),
+  acknowledgedBy: int('acknowledged_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  acknowledgedIdx: index('alerts_acknowledged_idx').on(table.acknowledged),
+  acknowledgedCreatedIdx: index('alerts_acknowledged_created_idx').on(table.acknowledged, table.createdAt),
+  typeIdx: index('alerts_type_idx').on(table.type),
+  createdAtIdx: index('alerts_created_at_idx').on(table.createdAt),
+}));
+
+// ---------------------------------------------------------------------------
+// User Limits (migrations 0009 + 0010)
+// ---------------------------------------------------------------------------
+export const userLimits = mysqlTable('user_limits', {
+  id: int('id').primaryKey().autoincrement(),
+  userId: int('user_id').unique().notNull().references(() => users.id),
+  maxBetPerRound: decimal('max_bet_per_round', { precision: 15, scale: 2 }),
+  maxLossPerDay: decimal('max_loss_per_day', { precision: 15, scale: 2 }),
+  lockedUntil: timestamp('locked_until'),
+  sessionLimitMinutes: decimal('session_limit_minutes', { precision: 10, scale: 2 }),
+  updatedBy: int('updated_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  userIdIdx: index('user_limits_user_id_idx').on(table.userId),
+  lockedUntilIdx: index('user_limits_locked_until_idx').on(table.lockedUntil),
+}));
+
+// ---------------------------------------------------------------------------
+// Tournaments (migration 0011)
+// ---------------------------------------------------------------------------
+export const tournaments = mysqlTable('tournaments', {
+  id: int('id').primaryKey().autoincrement(),
+  name: varchar('name', { length: 120 }).notNull(),
+  gameType: varchar('game_type', { length: 50 }).notNull(),
+  scoring: varchar('scoring', { length: 40 }).notNull(),
+  startTime: timestamp('start_time').notNull(),
+  endTime: timestamp('end_time').notNull(),
+  prizePool: decimal('prize_pool', { precision: 15, scale: 2 }).notNull(),
+  prizeDistribution: json('prize_distribution').notNull(),
+  status: varchar('status', { length: 20 }).default('scheduled').notNull(),
+  createdBy: int('created_by').references(() => users.id),
+  finalizedAt: timestamp('finalized_at'),
+  finalizedBy: int('finalized_by').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  statusIdx: index('tournaments_status_idx').on(table.status),
+  gameTypeIdx: index('tournaments_game_type_idx').on(table.gameType),
+  activeLookupIdx: index('tournaments_active_lookup_idx').on(table.status, table.startTime, table.endTime),
+}));
+
+export const tournamentEntries = mysqlTable('tournament_entries', {
+  id: int('id').primaryKey().autoincrement(),
+  tournamentId: int('tournament_id').notNull().references(() => tournaments.id),
+  userId: int('user_id').notNull().references(() => users.id),
+  score: decimal('score', { precision: 15, scale: 4 }).default('0').notNull(),
+  totalWagered: decimal('total_wagered', { precision: 15, scale: 2 }).default('0').notNull(),
+  totalWon: decimal('total_won', { precision: 15, scale: 2 }).default('0').notNull(),
+  biggestWin: decimal('biggest_win', { precision: 15, scale: 2 }).default('0').notNull(),
+  rank: int('rank'),
+  prizeAmount: decimal('prize_amount', { precision: 15, scale: 2 }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  leaderboardIdx: index('tournament_entries_leaderboard_idx').on(table.tournamentId, table.score),
+}));
+
+// ---------------------------------------------------------------------------
+// Type exports for new tables
+// ---------------------------------------------------------------------------
+export type HouseAccount = InferSelectModel<typeof houseAccount>;
+export type NewHouseAccount = InferInsertModel<typeof houseAccount>;
+export type HouseTransaction = InferSelectModel<typeof houseTransactions>;
+export type NewHouseTransaction = InferInsertModel<typeof houseTransactions>;
+export type Setting = InferSelectModel<typeof settings>;
+export type NewSetting = InferInsertModel<typeof settings>;
+export type GameConfig = InferSelectModel<typeof gameConfig>;
+export type NewGameConfig = InferInsertModel<typeof gameConfig>;
+export type DailySnapshot = InferSelectModel<typeof dailySnapshots>;
+export type NewDailySnapshot = InferInsertModel<typeof dailySnapshots>;
+export type UserMute = InferSelectModel<typeof userMutes>;
+export type NewUserMute = InferInsertModel<typeof userMutes>;
+export type Alert = InferSelectModel<typeof alerts>;
+export type NewAlert = InferInsertModel<typeof alerts>;
+export type UserLimit = InferSelectModel<typeof userLimits>;
+export type NewUserLimit = InferInsertModel<typeof userLimits>;
+export type Tournament = InferSelectModel<typeof tournaments>;
+export type NewTournament = InferInsertModel<typeof tournaments>;
+export type TournamentEntry = InferSelectModel<typeof tournamentEntries>;
+export type NewTournamentEntry = InferInsertModel<typeof tournamentEntries>;

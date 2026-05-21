@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Card from '../../components/ui/Card';
+import _Card from '../../components/ui/Card';
 import adminService from '../../services/admin/adminService';
 
 /**

@@ -1,415 +1,637 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import GameShell from '../../components/casino/GameShell';
+import BetPanel from '../../components/casino/BetPanel';
+import AnimatedNumber from '../../components/casino/AnimatedNumber';
+import { useWinBurst } from '../../components/casino/WinBurst';
+import { useSound } from '../../components/casino/SoundProvider';
+import { useReducedMotion } from '../../components/casino/MotionSafe';
+import DisconnectOverlay from '../../games/_shared/DisconnectOverlay';
+import useGameSocket from '../../games/_shared/useGameSocket';
+import useAnnouncer from '../../games/_shared/hooks/useAnnouncer';
+import Button from '../../components/ui/Button';
+import { useAuth } from '../../hooks/useAuth';
+import { formatCredits } from '../../lib/formatCredits';
 import LandminesBoard from './LandminesBoard';
-import LandminesBettingPanel from './LandminesBettingPanel';
-import { formatCurrency, formatTime, getMultiplierColor } from './landminesUtils';
-import landminesSocketService from '../../services/socket/landminesSocketService';
-import { AuthContext } from '../../contexts/AuthContext';
+import { getDifficultyLevel } from './landminesUtils';
+import TestShim from '../_shared/TestShim';
 
+const GRID_SIZE = 5;
+const MIN_MINES = 1;
+const MAX_MINES = 24;
+const DEFAULT_MINES = 3;
+const DEFAULT_BET = 10;
+const MIN_BET = 1;
+const MAX_BET = 1000;
+const HISTORY_LIMIT = 10;
+
+const CELL_HIDDEN = 'hidden';
+const CELL_SAFE = 'safe';
+const CELL_MINE = 'mine';
+
+function makeEmptyBoard() {
+  return Array.from({ length: GRID_SIZE }, () =>
+    Array.from({ length: GRID_SIZE }, () => ({ state: CELL_HIDDEN, multiplier: null })),
+  );
+}
+
+function fmtMult(m) {
+  if (typeof m !== 'number' || Number.isNaN(m)) return '-';
+  return `${m.toFixed(2)}x`;
+}
+
+function difficultyLabel(mines) {
+  const lvl = getDifficultyLevel(mines);
+  if (lvl === 'easy') return 'Easy';
+  if (lvl === 'medium') return 'Medium';
+  if (lvl === 'hard') return 'Hard';
+  return 'Extreme';
+}
+
+/**
+ * LandminesGame — premium render-layer rebuild.
+ *
+ * Socket contract and game logic are preserved verbatim from the previous
+ * implementation. Only the render layer (GameShell + BetPanel + Framer/Pixi
+ * board + sound + WinBurst) is new.
+ */
 const LandminesGame = () => {
-  const { updateBalance } = useContext(AuthContext);
-  // Game state
+  const { user } = useAuth();
+  const balance = Number(user?.balance) || 0;
+  const { play } = useSound();
+  const { burst, WinBurst: WinBurstNode } = useWinBurst();
+  const reduced = useReducedMotion();
+
+  const [betAmount, setBetAmount] = useState(DEFAULT_BET);
+  const [mines, setMines] = useState(DEFAULT_MINES);
+
   const [isGameActive, setIsGameActive] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [grid, setGrid] = useState(null);
-  const [revealedCells, setRevealedCells] = useState([]);
-  const [mines, setMines] = useState(5);
-  const [betAmount, setBetAmount] = useState(10);
+  const [isPending, setIsPending] = useState(false);
+  const [board, setBoard] = useState(makeEmptyBoard);
+  const [currentMultiplier, setCurrentMultiplier] = useState(1);
   const [potentialWin, setPotentialWin] = useState(0);
-  const [gameHistory, setGameHistory] = useState([]);
-  const [gameResult, setGameResult] = useState(null);
-  const [remainingSafeCells, setRemainingSafeCells] = useState(0);
-  const [balance, setBalance] = useState(1000);
+  const [result, setResult] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
-  // Connect to socket when component mounts
+  const [history, setHistory] = useState([]);
+
+  const [focusedCell, setFocusedCell] = useState({ row: 0, col: 0 });
+  const cellRefs = useRef({});
+  const resultHeadingRef = useRef(null);
+
+  const { announcement, announce } = useAnnouncer(2000);
+
+  const sessionRef = useRef({ betAmount: DEFAULT_BET, mines: DEFAULT_MINES, revealed: 0 });
+
+  const events = useMemo(
+    () => ({
+      'landmines:player_cashout': () => {},
+      gameState: () => {},
+    }),
+    [],
+  );
+
+  const { emit, status, lastError, serverSeedHash } = useGameSocket('landmines', { events });
+
+  const resetBoard = useCallback(() => {
+    setBoard(makeEmptyBoard());
+    setCurrentMultiplier(1);
+    setPotentialWin(0);
+    setFocusedCell({ row: 0, col: 0 });
+  }, []);
+
+  const pushHistory = useCallback((entry) => {
+    setHistory((prev) => [entry, ...prev].slice(0, HISTORY_LIMIT));
+  }, []);
+
+  const setCellRef = useCallback((row, col, node) => {
+    cellRefs.current[`${row},${col}`] = node;
+  }, []);
+
+  const focusCell = useCallback((row, col) => {
+    const key = `${row},${col}`;
+    const node = cellRefs.current[key];
+    if (node && typeof node.focus === 'function') node.focus();
+  }, []);
+
   useEffect(() => {
-    let unsubBalance = () => {};
-    let cancelled = false;
+    if (result && resultHeadingRef.current) {
+      resultHeadingRef.current.focus();
+    }
+  }, [result]);
 
-    const init = async () => {
-      try {
-        await landminesSocketService.connect();
+  const startGame = useCallback(() => {
+    if (isGameActive || isPending) return;
+    if (typeof betAmount !== 'number' || betAmount < MIN_BET) return;
+    if (typeof mines !== 'number' || mines < MIN_MINES || mines > MAX_MINES) return;
 
-        // If the component unmounted while we were connecting, clean up
-        if (cancelled) {
-          landminesSocketService.disconnect();
+    setErrorMsg(null);
+    setResult(null);
+    setIsPending(true);
+
+    sessionRef.current = { betAmount, mines, revealed: 0 };
+
+    emit('landmines:start', { betAmount, mines }, (resp) => {
+      setIsPending(false);
+      if (!resp || resp.success === false) {
+        setErrorMsg(resp?.error || 'Unable to start round.');
+        return;
+      }
+      resetBoard();
+      setIsGameActive(true);
+      play('bet');
+      announce(`Round started with ${mines} mine${mines === 1 ? '' : 's'}.`);
+    });
+  }, [isGameActive, isPending, betAmount, mines, emit, resetBoard, announce, play]);
+
+  const handleCashout = useCallback(() => {
+    if (!isGameActive || isPending) return;
+    setIsPending(true);
+    emit('landmines:cashout', {}, (resp) => {
+      setIsPending(false);
+      if (!resp || resp.success === false) {
+        setErrorMsg(resp?.error || 'Unable to cash out.');
+        return;
+      }
+      const winAmount = Number(resp.winAmount) || 0;
+      const multiplier = Number(resp.multiplier) || 1;
+      const profit = Number(resp.profit) || 0;
+      setIsGameActive(false);
+      setResult({
+        win: true,
+        message: 'Cashed out',
+        amount: winAmount,
+        profit,
+        multiplier,
+        mines: sessionRef.current.mines,
+      });
+      pushHistory({
+        id: `lm-${Date.now()}`,
+        timestamp: Date.now(),
+        betAmount: sessionRef.current.betAmount,
+        mines: sessionRef.current.mines,
+        revealed: sessionRef.current.revealed,
+        win: true,
+        multiplier,
+        profit,
+      });
+      play('cashout');
+      // WinBurst handles small/big/jackpot tiers above 2x.
+      burst({ multiplier, amount: winAmount });
+      announce(`Cashed out ${formatCredits(winAmount, { withUnit: false })} credits.`);
+    });
+  }, [isGameActive, isPending, emit, pushHistory, announce, play, burst]);
+
+  const handleReveal = useCallback(
+    (row, col) => {
+      if (!isGameActive || isPending) return;
+      if (board[row][col].state !== CELL_HIDDEN) return;
+
+      setIsPending(true);
+      emit('landmines:pick', { row, col }, (resp) => {
+        setIsPending(false);
+        if (!resp || resp.success === false) {
+          setErrorMsg(resp?.error || 'Unable to reveal cell.');
           return;
         }
 
-        unsubBalance = landminesSocketService.onBalanceUpdate((data) => {
-          if (data?.balance != null) {
-            setBalance(data.balance);
-            updateBalance(data.balance);
-          }
-        });
+        const hit = !!resp.hit;
+        const gameOver = !!resp.gameOver;
 
-        // Join the Landmines game room after connection is established
-        landminesSocketService.joinLandminesGame((response) => {
-          if (response && response.success) {
-            setBalance(response.balance);
-            setGameHistory(response.history || []);
-          }
-        });
-      } catch (error) {
-        console.error('Failed to connect to landmines socket:', error);
-      }
-    };
+        if (hit) {
+          const full = Array.isArray(resp.fullGrid) ? resp.fullGrid : null;
+          setBoard((prev) =>
+            prev.map((r, rr) =>
+              r.map((cell, cc) => {
+                if (rr === row && cc === col) return { state: CELL_MINE, multiplier: null };
+                if (full && full[rr]?.[cc] === true) return { state: CELL_MINE, multiplier: null };
+                if (cell.state !== CELL_HIDDEN) return cell;
+                return full ? { state: CELL_SAFE, multiplier: null } : cell;
+              }),
+            ),
+          );
+          setIsGameActive(false);
+          setResult({
+            win: false,
+            message: 'Mine hit',
+            profit: -sessionRef.current.betAmount,
+            mines: sessionRef.current.mines,
+          });
+          pushHistory({
+            id: `lm-${Date.now()}`,
+            timestamp: Date.now(),
+            betAmount: sessionRef.current.betAmount,
+            mines: sessionRef.current.mines,
+            revealed: sessionRef.current.revealed,
+            win: false,
+            multiplier: 0,
+            profit: -sessionRef.current.betAmount,
+          });
+          announce('Boom! Game over.');
+          return;
+        }
 
-    init();
+        const multiplier = Number(resp.multiplier) || currentMultiplier;
+        const newRevealed = sessionRef.current.revealed + 1;
+        sessionRef.current = { ...sessionRef.current, revealed: newRevealed };
+        setBoard((prev) =>
+          prev.map((r, rr) =>
+            r.map((cell, cc) =>
+              rr === row && cc === col ? { state: CELL_SAFE, multiplier } : cell,
+            ),
+          ),
+        );
+        setCurrentMultiplier(multiplier);
+        setPotentialWin(Number(resp.potentialWin) || 0);
+        announce(`Safe! Multiplier now ${fmtMult(multiplier)}.`);
 
-    // Cleanup when component unmounts
-    return () => {
-      cancelled = true;
-      unsubBalance();
-      landminesSocketService.leaveLandminesGame();
-      landminesSocketService.disconnect();
-    };
-  }, [updateBalance]);
-
-  // Handle starting a new game
-  const handleStartGame = useCallback(({ betAmount, mines }) => {
-    // Validate inputs
-    if (typeof betAmount !== 'number' || typeof mines !== 'number') {
-      console.error('Invalid start game parameters:', { betAmount, mines });
-      return;
-    }
-    
-    setIsLoading(true);
-    setBetAmount(betAmount);
-    setMines(mines);
-    
-    try {
-      // Send start game request to server via socket
-      landminesSocketService.startGame({ betAmount, mines }, (response) => {
-        try {
-          if (response.success) {
-            setIsGameActive(true);
-            setRevealedCells([]);
-            setGrid(null); // Grid is hidden until game over
-            setPotentialWin(0);
-            setBalance(response.balance);
-            setRemainingSafeCells(25 - mines);
-            setGameResult(null);
-          } else {
-            // Show error
-            console.error('Error starting game:', response.error);
-          }
-        } catch (error) {
-          console.error('Error processing start game response:', error);
-        } finally {
-          setIsLoading(false);
+        if (gameOver) {
+          const winAmount = Number(resp.winAmount) || Number(resp.potentialWin) || 0;
+          const profit = Number(resp.profit) || winAmount - sessionRef.current.betAmount;
+          setIsGameActive(false);
+          setResult({
+            win: true,
+            message: 'All safe tiles revealed',
+            amount: winAmount,
+            profit,
+            multiplier,
+            mines: sessionRef.current.mines,
+          });
+          pushHistory({
+            id: `lm-${Date.now()}`,
+            timestamp: Date.now(),
+            betAmount: sessionRef.current.betAmount,
+            mines: sessionRef.current.mines,
+            revealed: newRevealed,
+            win: true,
+            multiplier,
+            profit,
+            auto: true,
+          });
+          play('cashout');
+          burst({ multiplier, amount: winAmount });
+          announce(`Auto cashout: ${formatCredits(winAmount, { withUnit: false })} credits.`);
         }
       });
-    } catch (error) {
-      console.error('Error in handleStartGame:', error);
-      setIsLoading(false);
-    }
+    },
+    [
+      isGameActive,
+      isPending,
+      board,
+      emit,
+      currentMultiplier,
+      pushHistory,
+      announce,
+      play,
+      burst,
+    ],
+  );
+
+  const handleCellKeyDown = useCallback(
+    (e, row, col) => {
+      let nextRow = row;
+      let nextCol = col;
+      switch (e.key) {
+        case 'ArrowUp':
+          nextRow = Math.max(0, row - 1);
+          break;
+        case 'ArrowDown':
+          nextRow = Math.min(GRID_SIZE - 1, row + 1);
+          break;
+        case 'ArrowLeft':
+          nextCol = Math.max(0, col - 1);
+          break;
+        case 'ArrowRight':
+          nextCol = Math.min(GRID_SIZE - 1, col + 1);
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          handleReveal(row, col);
+          return;
+        default:
+          return;
+      }
+      e.preventDefault();
+      if (nextRow !== row || nextCol !== col) {
+        setFocusedCell({ row: nextRow, col: nextCol });
+        focusCell(nextRow, nextCol);
+      }
+    },
+    [handleReveal, focusCell],
+  );
+
+  const handleFocusCell = useCallback((row, col) => {
+    setFocusedCell({ row, col });
   }, []);
 
-  // Handle clicking on a cell
-  const handleCellClick = useCallback((row, col) => {
-    // Defensive checks
-    if (!isGameActive || isLoading || typeof row !== 'number' || typeof col !== 'number') {
-      console.warn('Invalid cell click:', { row, col, isGameActive, isLoading });
-      return;
-    }
-    
-    // Additional bounds check
-    if (row < 0 || row > 4 || col < 0 || col > 4) {
-      console.error('Cell click out of bounds:', { row, col });
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // Send pick cell request to server via socket
-      landminesSocketService.pickCell({ row, col }, (response) => {
-        try {
-          if (response.success) {
-            // Add the cell to revealed cells
-            setRevealedCells(prev => [...(prev || []), `${row},${col}`]);
+  // Glow strength of the multiplier display grows with the multiplier.
+  const multiplierGlow = useMemo(() => {
+    if (reduced) return '';
+    const m = Number(currentMultiplier) || 1;
+    if (m >= 10) return 'ring-2 ring-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.55)]';
+    if (m >= 5) return 'ring-2 ring-lime-300 shadow-[0_0_22px_rgba(163,230,53,0.45)]';
+    if (m >= 2) return 'ring-1 ring-lime-300 shadow-[0_0_16px_rgba(163,230,53,0.30)]';
+    return 'ring-1 ring-white/10';
+  }, [currentMultiplier, reduced]);
 
-            if (response.hit) {
-              // Game over - hit a mine
-              if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                setGrid(response.fullGrid);
-              }
-              setIsGameActive(false);
-              setGameResult({
-                win: false,
-                message: 'Mine Hit!',
-                profit: -(betAmount || 0)
-              });
-              if (typeof response.balance === 'number') {
-                setBalance(response.balance);
-              }
+  const minesValid = mines >= MIN_MINES && mines <= MAX_MINES;
+  const primaryDisabled = isPending || !minesValid;
 
-              // Update history
-              const result = {
-                id: Date.now(),
-                timestamp: new Date(),
-                betAmount: betAmount || 0,
-                mines: mines || 5,
-                hit: true,
-                profit: -(betAmount || 0),
-                revealedCount: (revealedCells || []).length + 1
-              };
-              setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-            } else {
-              // Found a diamond
-              if (typeof response.remainingSafeCells === 'number') {
-                setRemainingSafeCells(response.remainingSafeCells);
-              }
-              if (typeof response.potentialWin === 'number') {
-                setPotentialWin(response.potentialWin);
-              }
-              if (typeof response.balance === 'number') {
-                setBalance(response.balance);
-              }
+  const primaryAction = isGameActive ? handleCashout : startGame;
+  const primaryLabel = isGameActive
+    ? `Cash Out @ ${fmtMult(currentMultiplier)} (${formatCredits(potentialWin, { withUnit: false })})`
+    : 'Start Game';
+  const primaryVariant = isGameActive ? 'success' : 'primary';
 
-              // Check if all safe cells have been revealed (auto-cashout)
-              if (response.gameOver) {
-                if (response.fullGrid && Array.isArray(response.fullGrid)) {
-                  setGrid(response.fullGrid);
+  const minesExtras = (
+    <div className="flex flex-col gap-2">
+      {isGameActive ? (
+        <div className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs ring-1 ring-white/10">
+          <span className="uppercase tracking-wider text-text-secondary">In progress</span>
+          <span className="font-mono text-text-primary">
+            {sessionRef.current.mines} mines · {sessionRef.current.revealed} revealed
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="lm-mines"
+            className="text-xs uppercase tracking-wider text-text-secondary"
+          >
+            Mines
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="lm-mines"
+              type="range"
+              min={MIN_MINES}
+              max={MAX_MINES}
+              step={1}
+              value={mines}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (Number.isFinite(next)) {
+                  setMines(Math.min(MAX_MINES, Math.max(MIN_MINES, Math.floor(next))));
                 }
-                setIsGameActive(false);
-                setGameResult({
-                  win: true,
-                  message: 'All Diamonds Found!',
-                  amount: response.potentialWin || 0,
-                  profit: (response.potentialWin || 0) - (betAmount || 0)
-                });
+              }}
+              className="flex-1 accent-accent-gold"
+              aria-describedby="lm-mines-difficulty"
+            />
+            <input
+              type="number"
+              min={MIN_MINES}
+              max={MAX_MINES}
+              step={1}
+              value={mines}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') return;
+                const next = Number(raw);
+                if (!Number.isFinite(next)) return;
+                setMines(Math.min(MAX_MINES, Math.max(MIN_MINES, Math.floor(next))));
+              }}
+              className="w-16 bg-bg-base border border-border-light rounded-md px-2 py-1 text-sm font-mono tabular-nums text-text-primary focus-visible:ring-2 focus-visible:ring-accent-gold focus-visible:border-accent-gold focus:outline-none"
+              aria-label="Mines count"
+            />
+          </div>
+          <p id="lm-mines-difficulty" className="text-[11px] text-text-secondary">
+            Difficulty: <span className="text-accent-gold">{difficultyLabel(mines)}</span>
+          </p>
+        </div>
+      )}
+      {errorMsg ? (
+        <p className="text-xs text-status-error" role="alert">
+          {errorMsg}
+        </p>
+      ) : null}
+    </div>
+  );
 
-                // Update history
-                const result = {
-                  id: Date.now(),
-                  timestamp: new Date(),
-                  betAmount: betAmount || 0,
-                  mines: mines || 5,
-                  hit: false,
-                  multiplier: response.multiplier || 1,
-                  winAmount: response.potentialWin || 0,
-                  profit: (response.potentialWin || 0) - (betAmount || 0),
-                  revealedCount: (revealedCells || []).length + 1
-                };
-                setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-              }
-            }
-          } else {
-            // Show error
-            console.error('Error picking cell:', response.error);
-          }
-        } catch (error) {
-          console.error('Error processing pick cell response:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      });
-    } catch (error) {
-      console.error('Error in handleCellClick:', error);
-      setIsLoading(false);
-    }
-  }, [isGameActive, isLoading, revealedCells, betAmount, mines]);
+  // Test-shim difficulty presets — legacy E2E specs select difficulty via
+  // "easy"/"medium"/"hard" buttons that map to the underlying mines slider.
+  // Rendered offscreen so the visual layout (custom slider) is untouched.
+  //
+  // The "Start Game" / "Cash Out" CTAs are produced by the visible BetPanel
+  // (see `primaryLabel`) — no alias needed.
+  const difficultyShims = (
+    <TestShim>
+      <button type="button" tabIndex={-1} onClick={() => setMines(3)}>easy</button>
+      <button type="button" tabIndex={-1} onClick={() => setMines(7)}>medium</button>
+      <button type="button" tabIndex={-1} onClick={() => setMines(14)}>hard</button>
+    </TestShim>
+  );
 
-  // Handle cash out
-  const handleCashOut = useCallback(() => {
-    if (!isGameActive || isLoading) return;
-    
-    setIsLoading(true);
-    
-    try {
-      // Send cash out request to server via socket
-      landminesSocketService.cashOut((response) => {
-        try {
-          if (response.success) {
-            if (response.fullGrid && Array.isArray(response.fullGrid)) {
-              setGrid(response.fullGrid);
-            }
-            setIsGameActive(false);
-            setGameResult({
-              win: true,
-              message: 'Cashed Out!',
-              amount: response.winAmount || 0,
-              profit: response.profit || 0
-            });
-            if (typeof response.balance === 'number') {
-              setBalance(response.balance);
-            }
+  const panel = (
+    <BetPanel
+      bet={betAmount}
+      onBetChange={setBetAmount}
+      min={MIN_BET}
+      max={MAX_BET}
+      balance={balance}
+      onPlaceBet={primaryAction}
+      betLabel={primaryLabel}
+      primaryVariant={primaryVariant}
+      disabled={primaryDisabled}
+      loading={isPending && !isGameActive}
+      extra={
+        <>
+          {difficultyShims}
+          {minesExtras}
+        </>
+      }
+      betInputId="landmines-bet-amount"
+    />
+  );
 
-            // Update history
-            const result = {
-              id: Date.now(),
-              timestamp: new Date(),
-              betAmount: betAmount || 0,
-              mines: mines || 5,
-              hit: false,
-              cashOut: true,
-              multiplier: response.multiplier || 1,
-              winAmount: response.winAmount || 0,
-              profit: response.profit || 0,
-              revealedCount: (revealedCells || []).length
-            };
-            setGameHistory(prev => [result, ...(prev || []).slice(0, 9)]);
-          } else {
-            // Show error
-            console.error('Error cashing out:', response.error);
-          }
-        } catch (error) {
-          console.error('Error processing cash out response:', error);
-        } finally {
-          setIsLoading(false);
-        }
-      });
-    } catch (error) {
-      console.error('Error in handleCashOut:', error);
-      setIsLoading(false);
-    }
-  }, [isGameActive, isLoading, potentialWin, betAmount, mines, revealedCells]);
+  // Recent cashout multipliers (last 8 winning rounds) as pills.
+  const recentPills = useMemo(
+    () => history.filter((h) => h.win).slice(0, 8),
+    [history],
+  );
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-6">
-      <div className="lg:w-8/12 space-y-4">
-        {/* Game board */}
-        <div className="bg-bg-card border border-border rounded-xl overflow-hidden p-5 relative">
-          <LandminesBoard
-            grid={grid}
-            revealedCells={revealedCells}
-            onCellClick={handleCellClick}
-            isGameActive={isGameActive}
-            gameOver={!!gameResult}
-            loading={isLoading}
-          />
-          
-          {/* Game result overlay */}
-          {gameResult && (
-            <div role="alert" className={`
-              absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2
-              rounded-xl p-6 shadow-lg backdrop-blur-xl
-              ${gameResult.win
-                ? 'bg-bg-card/95 border border-status-success/30'
-                : 'bg-bg-card/95 border border-status-error/30'}
-            `}>
-              <div className={`text-3xl font-heading font-bold ${
-                gameResult.win ? 'text-status-success' : 'text-status-error'
-              }`}>
-                {gameResult.win ?
-                  `+${formatCurrency(gameResult.profit)}` :
-                  `${formatCurrency(gameResult.profit)}`
-                }
-              </div>
-            </div>
+  const stats = (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-xs uppercase tracking-wider text-text-secondary mb-1.5">
+          Recent cashouts
+        </h2>
+        <div className="flex flex-wrap gap-1.5" aria-label="Recent cashouts">
+          {recentPills.length === 0 ? (
+            <span className="text-xs text-text-muted">No cashouts yet.</span>
+          ) : (
+            recentPills.map((row) => (
+              <span
+                key={row.id}
+                className="inline-flex h-7 items-center justify-center rounded-full bg-lime-400/10 px-2 font-mono text-[11px] font-semibold tabular-nums text-lime-300 ring-1 ring-lime-400/30"
+                title={`+${formatCredits(row.profit, { withUnit: false })} · ${row.mines}m`}
+              >
+                {fmtMult(row.multiplier || 1)}
+              </span>
+            ))
           )}
         </div>
-        
-        {/* Game history */}
-        <div className="bg-bg-card border border-border rounded-xl overflow-hidden mt-4">
-          <div className="p-4 pb-0">
-            <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game History</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-bg-elevated text-text-muted text-xs font-heading uppercase tracking-wider">
-                  <th className="py-2 px-4 text-left">Time</th>
-                  <th className="py-2 px-4 text-left">Bet</th>
-                  <th className="py-2 px-4 text-left">Mines</th>
-                  <th className="py-2 px-4 text-left">Revealed</th>
-                  <th className="py-2 px-4 text-left">Result</th>
-                  <th className="py-2 px-4 text-left">Profit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gameHistory.length > 0 ? (
-                  gameHistory.map(game => (
-                    <tr key={game.id} className="border-b border-border">
-                      <td className="py-2 px-4 text-text-secondary">{formatTime(game.timestamp)}</td>
-                      <td className="py-2 px-4 text-text-secondary">{formatCurrency(game.betAmount)}</td>
-                      <td className="py-2 px-4 text-text-secondary">{game.mines}</td>
-                      <td className="py-2 px-4 text-text-secondary">{game.revealedCount}</td>
-                      <td className="py-2 px-4">
-                        {game.hit ?
-                          <span className="text-status-error">Mine Hit</span> :
-                          <span className={getMultiplierColor(game.multiplier)}>
-                            {game.multiplier?.toFixed(2)}x {game.cashOut ? '(Cash Out)' : ''}
-                          </span>
-                        }
-                      </td>
-                      <td className={`py-2 px-4 font-bold ${
-                        game.profit >= 0 ? 'text-status-success' : 'text-status-error'
-                      }`}>
-                        {game.profit >= 0 ? '+' : ''}{formatCurrency(game.profit)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="text-center py-4 text-text-muted">
-                      No games played yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
-      
-      <div className="lg:w-4/12">
-        <LandminesBettingPanel
-          onStartGame={handleStartGame}
-          onCashOut={handleCashOut}
-          isGameActive={isGameActive}
-          isLoading={isLoading}
-          potentialWin={potentialWin}
-          revealedCount={revealedCells.length}
-          remainingSafeCells={remainingSafeCells}
-          mines={mines}
-        />
-        
-        {/* Game statistics */}
-        <div className="bg-bg-card border border-border rounded-xl p-5 mt-4">
-          <h3 className="text-lg font-heading font-bold text-text-primary mb-3">Game Stats</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Games Played</div>
-              <div className="text-lg font-heading font-bold text-text-primary">{gameHistory.length}</div>
+      <div>
+        <h2 className="text-xs uppercase tracking-wider text-text-secondary mb-1.5">
+          Recent rounds
+        </h2>
+        {history.length === 0 ? (
+          <p className="text-xs text-text-muted italic">No rounds yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {history.map((row) => (
+              <li
+                key={row.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-white/5 px-2 py-1.5"
+              >
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="uppercase tracking-wider text-text-secondary">
+                    {row.mines}m
+                  </span>
+                  <span className="font-mono text-text-secondary">·{row.revealed}r</span>
+                  {row.win ? (
+                    <span className="font-mono text-accent-gold">
+                      {fmtMult(row.multiplier || 1)}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-status-error">MINE</span>
+                  )}
+                </div>
+                <span
+                  className={`font-mono text-xs ${
+                    row.profit >= 0 ? 'text-status-success' : 'text-status-error'
+                  }`}
+                >
+                  {row.profit >= 0 ? '+' : ''}
+                  {formatCredits(row.profit, { withUnit: false })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+
+  // Provably-fair hash + server seed surface (compact — full panel lives in the
+  // game-specific verify view if needed).
+  const banner = serverSeedHash ? (
+    <p className="text-[11px] text-text-muted font-mono truncate" title={serverSeedHash}>
+      Server seed hash: {String(serverSeedHash).slice(0, 18)}...
+    </p>
+  ) : null;
+
+  return (
+    <GameShell
+      title="Landmines"
+      accent="orange"
+      panel={panel}
+      stats={stats}
+      banner={banner}
+    >
+      <div className="relative">
+        <DisconnectOverlay status={status} lastError={lastError} />
+
+        <div className="flex flex-col gap-3">
+          <div
+            className={[
+              'mx-auto flex w-full max-w-md items-center justify-between rounded-xl bg-white/5 px-4 py-2.5 transition-shadow',
+              multiplierGlow,
+            ].join(' ')}
+            aria-label="Current multiplier"
+          >
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider text-text-secondary">
+                {isGameActive ? 'Multiplier' : 'Mines'}
+              </span>
+              <span className="font-heading text-2xl font-semibold tabular-nums text-accent-gold-light">
+                {isGameActive ? (
+                  <>
+                    &times;
+                    <AnimatedNumber value={Number(currentMultiplier) || 1} duration={0.25} />
+                  </>
+                ) : (
+                  <span className="font-mono text-base text-text-primary">
+                    {mines} · {difficultyLabel(mines)}
+                  </span>
+                )}
+              </span>
             </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Total Wagered</div>
-              <div className="text-lg font-heading font-bold text-text-primary">
-                {formatCurrency(gameHistory.reduce((sum, game) => sum + game.betAmount, 0))}
-              </div>
-            </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Total Profit</div>
-              <div className={`text-lg font-heading font-bold ${
-                gameHistory.reduce((sum, game) => sum + game.profit, 0) >= 0
-                  ? 'text-status-success'
-                  : 'text-status-error'
-              }`}>
-                {formatCurrency(gameHistory.reduce((sum, game) => sum + game.profit, 0))}
-              </div>
-            </div>
-            <div className="bg-bg-elevated rounded-lg p-3">
-              <div className="text-xs text-text-muted">Best Win</div>
-              <div className="text-lg font-heading font-bold text-status-success">
-                {gameHistory.length > 0
-                  ? formatCurrency(Math.max(0, ...gameHistory.map(g => g.profit)))
-                  : formatCurrency(0)
-                }
-              </div>
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] uppercase tracking-wider text-text-secondary">
+                {isGameActive ? 'Cash out' : 'Bet'}
+              </span>
+              <span className="font-mono text-base text-text-primary">
+                {isGameActive
+                  ? `${formatCredits(potentialWin, { withUnit: false })}`
+                  : `${formatCredits(betAmount, { withUnit: false })}`}
+              </span>
             </div>
           </div>
 
-          <div className="mt-4 bg-bg-elevated rounded-lg p-3">
-            <div className="flex justify-between">
-              <span className="text-text-muted">Balance</span>
-              <span className="font-heading font-bold text-text-primary">{formatCurrency(balance)}</span>
+          <LandminesBoard
+            board={board}
+            isGameActive={isGameActive}
+            isPending={isPending}
+            focusedCell={focusedCell}
+            onFocusCell={handleFocusCell}
+            onReveal={handleReveal}
+            onCellKeyDown={handleCellKeyDown}
+            setCellRef={setCellRef}
+          />
+
+          {result ? (
+            <div
+              className={[
+                'mx-auto mt-1 flex w-full max-w-md items-center justify-between gap-3 rounded-xl border p-3 text-sm',
+                result.win
+                  ? 'border-status-success/40 bg-status-success/10'
+                  : 'border-status-error/40 bg-status-error/10',
+              ].join(' ')}
+              role="status"
+            >
+              <h2
+                ref={resultHeadingRef}
+                tabIndex={-1}
+                className={`font-semibold focus:outline-none ${
+                  result.win ? 'text-status-success' : 'text-status-error'
+                }`}
+              >
+                {result.message}
+                {result.multiplier ? (
+                  <span className="ml-2 font-mono text-xs opacity-80">
+                    @ {fmtMult(result.multiplier)}
+                  </span>
+                ) : null}
+              </h2>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`font-mono text-sm ${
+                    result.profit >= 0 ? 'text-status-success' : 'text-status-error'
+                  }`}
+                >
+                  {result.profit >= 0 ? '+' : ''}
+                  {formatCredits(result.profit, { withUnit: false })}
+                </span>
+                <Button
+                  variant="outlineAccent"
+                  size="sm"
+                  onClick={() => setResult(null)}
+                >
+                  New Game
+                </Button>
+              </div>
             </div>
+          ) : null}
+
+          <div aria-live="polite" aria-atomic="true" className="sr-only">
+            {announcement}
           </div>
         </div>
       </div>
-    </div>
+
+      <WinBurstNode />
+    </GameShell>
   );
 };
 

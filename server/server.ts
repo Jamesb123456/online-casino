@@ -17,7 +17,7 @@ import type { Socket } from 'socket.io';
 import { requestIdMiddleware } from './middleware/requestId.js';
 
 // Socket Authentication Middleware
-import { socketAuth, getAuthenticatedUser } from './middleware/socket/socketAuth.js';
+import { socketAuth } from './middleware/socket/socketAuth.js';
 
 // Drizzle Database Connection
 import { connectDB, closeDB } from './drizzle/db.js';
@@ -53,13 +53,20 @@ import userLimitsService from './src/services/userLimitsService.js';
 import { startDailySnapshotJob, stopDailySnapshotJob } from './src/jobs/dailySnapshot.js';
 import { startTournamentSweeperJob, stopTournamentSweeperJob } from './src/jobs/tournamentSweeper.js';
 
-// New round-based engines (Phase B rebuild). Legacy handlers in
-// `src/socket/{crashHandler,rouletteHandler,wheelHandler}.ts` are intentionally
+// New engines (Phase B + C rebuild). Legacy handlers in
+// `src/socket/{crashHandler,rouletteHandler,wheelHandler,blackjackHandler,
+// plinkoHandler,landminesHandler,diceHandler,slotsHandler}.ts` are intentionally
 // left on disk for rollback but are no longer wired into the namespace.
 import { registerGameNamespace } from './src/games/_engine/registerNamespace.js';
 import { CrashEngine } from './src/games/crash/engine.js';
 import { RouletteEngine } from './src/games/roulette/engine.js';
 import { WheelEngine } from './src/games/wheel/engine.js';
+import { BlackjackEngine } from './src/games/blackjack/engine.js';
+import { PlinkoEngine } from './src/games/plinko/engine.js';
+import { LandminesEngine } from './src/games/landmines/engine.js';
+import { DiceEngine } from './src/games/dice/engine.js';
+import { SlotsEngine } from './src/games/slots/engine.js';
+import balanceService from './src/services/balanceService.js';
 
 // Config
 dotenv.config();
@@ -260,158 +267,228 @@ export async function createApp(): Promise<AppInstance> {
     },
   );
 
-  // Landmines game namespace
-  const landminesNamespace = io.of('/landmines');
-  landminesNamespace.use(socketAuth);
-
-  landminesNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('landmines', 'namespace_connection', { socketId: socket.id });
-
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_landmines_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
-
-    LoggingService.logGameEvent('landmines', 'namespace_authenticated', { username: user.username, userId: user.userId });
-
-    import('./src/socket/landminesHandler.js')
-      .then((mod: any) => {
-        const init = mod?.initLandminesHandlers || mod?.default?.initLandminesHandlers || mod?.default;
-        if (typeof init === 'function') init(io, socket, user);
-      })
-      .catch((err) => LoggingService.logSystemEvent('landmines_handler_init_failed', { error: String(err) }, 'error'));
-
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('landmines', 'namespace_disconnected', { username: user.username, userId: user.userId });
-      userLimitsService.clearSession(user.userId);
-    });
-  });
-
-  // Dice game namespace (per-connection init, instant-resolve like landmines)
-  const diceNamespace = io.of('/dice');
-  diceNamespace.use(socketAuth);
-
-  diceNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('dice', 'namespace_connection', { socketId: socket.id });
-
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_dice_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
-
-    LoggingService.logGameEvent('dice', 'namespace_authenticated', { username: user.username, userId: user.userId });
-
-    import('./src/socket/diceHandler.js')
-      .then((mod: any) => {
-        const init = mod?.initDiceHandlers || mod?.default?.initDiceHandlers || mod?.default;
-        if (typeof init === 'function') init(io, socket, user);
-      })
-      .catch((err) => LoggingService.logSystemEvent('dice_handler_init_failed', { error: String(err) }, 'error'));
-
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('dice', 'namespace_disconnected', { username: user.username, userId: user.userId });
-      userLimitsService.clearSession(user.userId);
-    });
-  });
-
-  // Slots game namespace (per-connection init, instant-resolve like dice)
-  const slotsNamespace = io.of('/slots');
-  slotsNamespace.use(socketAuth);
-
-  slotsNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('slots', 'namespace_connection', { socketId: socket.id });
-
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_slots_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
-
-    LoggingService.logGameEvent('slots', 'namespace_authenticated', { username: user.username, userId: user.userId });
-
-    import('./src/socket/slotsHandler.js')
-      .then((mod: any) => {
-        const init = mod?.initSlotsHandlers || mod?.default?.initSlotsHandlers || mod?.default;
-        if (typeof init === 'function') init(io, socket, user);
-      })
-      .catch((err) => LoggingService.logSystemEvent('slots_handler_init_failed', { error: String(err) }, 'error'));
-
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('slots', 'namespace_disconnected', { username: user.username, userId: user.userId });
-      userLimitsService.clearSession(user.userId);
-    });
-  });
-
-  // Blackjack game namespace
-  const blackjackNamespace = io.of('/blackjack');
-  blackjackNamespace.use(socketAuth);
-
-  let blackjackHandler: any = null;
-  handlerPromises.push(
-    import('./src/socket/blackjackHandler.js')
-      .then((mod: any) => {
-        const HandlerClass = mod?.default || mod?.BlackjackHandler;
-        if (HandlerClass && typeof HandlerClass === 'function') {
-          blackjackHandler = new HandlerClass(blackjackNamespace);
-          LoggingService.logSystemEvent('blackjack_handler_initialized', {});
-        }
-      })
-      .catch((err) => LoggingService.logSystemEvent('blackjack_handler_init_failed', { error: String(err) }, 'error'))
+  // Blackjack game namespace — new engine wiring (Phase C).
+  // The engine emits `blackjack_game_state` + `balanceUpdate` itself. The
+  // bindEvents layer only routes the four inbound action events into the
+  // engine. Engine errors surface as `blackjack_error: { message }` — the
+  // legacy outbound contract used by the existing client.
+  registerGameNamespace(
+    io,
+    'blackjack',
+    () => new BlackjackEngine(),
+    (engine, ctx) => {
+      const safeEmitError = (err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        ctx.socket.emit('blackjack_error', { message });
+      };
+      ctx.socket.on('blackjack_start', async (payload: any) => {
+        try { await engine.onBet(ctx, payload); } catch (err) { safeEmitError(err); }
+      });
+      ctx.socket.on('blackjack_hit', async (payload: any) => {
+        try { await engine.onAction(ctx, 'hit', payload); } catch (err) { safeEmitError(err); }
+      });
+      ctx.socket.on('blackjack_stand', async (payload: any) => {
+        try { await engine.onAction(ctx, 'stand', payload); } catch (err) { safeEmitError(err); }
+      });
+      ctx.socket.on('blackjack_double', async (payload: any) => {
+        try { await engine.onAction(ctx, 'double', payload); } catch (err) { safeEmitError(err); }
+      });
+    },
   );
 
-  blackjackNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('blackjack', 'namespace_connection', { socketId: socket.id });
+  // Plinko game namespace — new engine wiring (Phase C).
+  // Single-shot: `plinko:drop_ball` runs `onBet`, which packages the legacy
+  // ack-shape onto `resultDetails.ack`. `plinko:get_history` reads the
+  // engine's in-memory ring buffer. `plinko:join` / `plinko:leave` are
+  // no-ops because per-user state is already pushed via `onJoin`.
+  registerGameNamespace(
+    io,
+    'plinko',
+    () => new PlinkoEngine(),
+    (engine, ctx) => {
+      ctx.socket.on('plinko:drop_ball', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          const ackPayload = (result.resultDetails as any)?.ack ?? null;
+          if (ack) {
+            if (ackPayload) ack(ackPayload);
+            else ack({ success: true, gameId: String(result.sessionId), balance: result.balance });
+          }
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('plinko:get_history', (data: any, ack?: (resp: any) => void) => {
+        try {
+          const limit = data?.limit || 10;
+          const history = engine.getHistory(limit);
+          if (ack) ack({ success: true, userHistory: [], globalHistory: history });
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      // Legacy no-op events kept for backwards compatibility with old clients.
+      ctx.socket.on('plinko:join', (_data: any, ack?: (resp: any) => void) => {
+        if (ack) ack({ success: true });
+      });
+      ctx.socket.on('plinko:leave', () => { /* state cleared by base.onDisconnect */ });
+    },
+  );
 
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_blackjack_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
+  // Landmines game namespace — new engine wiring (Phase C).
+  // Multi-step: `landmines:start` opens a session via `onBet`,
+  // `landmines:pick` / `landmines:cashout` route to `onAction`. The engine
+  // returns rich result objects; we translate to the legacy ack shapes.
+  registerGameNamespace(
+    io,
+    'landmines',
+    () => new LandminesEngine(),
+    (engine, ctx) => {
+      ctx.socket.on('landmines:start', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          const details = (result.resultDetails ?? {}) as any;
+          if (ack) ack({
+            success: true,
+            gameId: details.gameId,
+            mines: details.mines,
+            gridSize: details.gridSize ?? 5,
+            balance: result.balance,
+          });
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('landmines:pick', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onAction(ctx, 'reveal', payload);
+          const details = (result.resultDetails ?? {}) as any;
+          if (details.hit === true) {
+            if (ack) ack({
+              success: true,
+              hit: true,
+              position: details.position,
+              gameOver: true,
+              fullGrid: details.fullGrid,
+              winAmount: 0,
+            });
+          } else {
+            if (ack) ack({
+              success: true,
+              hit: false,
+              position: details.position,
+              multiplier: details.multiplier,
+              potentialWin: details.potentialWin,
+              winAmount: details.winAmount,
+              profit: details.profit,
+              gameOver: !!details.gameOver,
+              fullGrid: details.fullGrid,
+              remainingSafeCells: details.remainingSafeCells,
+              autoCashout: details.autoCashout,
+            });
+          }
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('landmines:cashout', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onAction(ctx, 'cashout', payload);
+          const details = (result.resultDetails ?? {}) as any;
+          if (ack) ack({
+            success: true,
+            winAmount: details.winAmount,
+            multiplier: details.multiplier,
+            profit: details.profit,
+            cashedOut: !!details.cashedOut,
+            balance: result.balance,
+            fullGrid: details.fullGrid,
+          });
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+    },
+  );
 
-    LoggingService.logGameEvent('blackjack', 'namespace_authenticated', { username: user.username, userId: user.userId });
+  // Dice game namespace — new engine wiring (Phase C).
+  // Single-shot: `dice:roll` runs `onBet`, translates to `{ ok, gameId,
+  // result, target, direction, win, multiplier, winAmount, newBalance }`.
+  // `dice:join` returns the player's current balance for the lightweight
+  // client-mount handshake.
+  registerGameNamespace(
+    io,
+    'dice',
+    () => new DiceEngine(),
+    (engine, ctx) => {
+      ctx.socket.on('dice:roll', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          const details = (result.resultDetails ?? {}) as any;
+          if (ack) ack({
+            ok: true,
+            gameId: String(result.sessionId),
+            result: details.result,
+            target: details.target,
+            direction: details.direction,
+            win: details.win,
+            multiplier: result.finalMultiplier ?? 0,
+            winAmount: result.outcome,
+            newBalance: result.balance,
+          });
+        } catch (err) {
+          if (ack) ack({ ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('dice:join', async (_data: any, ack?: (resp: any) => void) => {
+        try {
+          const balance = await balanceService.getBalance(ctx.user.userId);
+          if (ack) ack({ success: true, balance, history: [] });
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('dice:leave', () => { /* per-user state lives in seed cache only */ });
+    },
+  );
 
-    if (blackjackHandler) {
-      blackjackHandler.handleConnection(socket);
-    } else {
-      LoggingService.logSystemEvent('blackjack_handler_not_ready', { socketId: socket.id }, 'warning');
-      socket.emit('blackjack_error', { message: 'Game handler is initializing, please reconnect shortly' });
-    }
-
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('blackjack', 'namespace_disconnected', { username: user.username, userId: user.userId });
-      userLimitsService.clearSession(user.userId);
-    });
-  });
-
-  // Plinko game namespace
-  const plinkoNamespace = io.of('/plinko');
-  plinkoNamespace.use(socketAuth);
-  plinkoNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('plinko', 'namespace_connection', { socketId: socket.id });
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_plinko_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
-    LoggingService.logGameEvent('plinko', 'namespace_authenticated', { username: user.username, userId: user.userId });
-    import('./src/socket/plinkoHandler.js')
-      .then((mod: any) => {
-        const init = mod?.initPlinkoHandlers || mod?.default?.initPlinkoHandlers || mod?.default;
-        if (typeof init === 'function') init(io, socket, user);
-      })
-      .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('plinko', 'namespace_disconnected', { username: user.username, userId: user.userId });
-      userLimitsService.clearSession(user.userId);
-    });
-  });
+  // Slots game namespace — new engine wiring (Phase C).
+  // Single-shot: `slots:spin` runs `onBet`, translates to `{ ok, gameId,
+  // reels, hits, totalPayout, multiplier, newBalance }`. `slots:join`
+  // returns the current balance for the lightweight handshake.
+  registerGameNamespace(
+    io,
+    'slots',
+    () => new SlotsEngine(),
+    (engine, ctx) => {
+      ctx.socket.on('slots:spin', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          const details = (result.resultDetails ?? {}) as any;
+          if (ack) ack({
+            ok: true,
+            gameId: String(result.sessionId),
+            reels: details.reels,
+            hits: details.hits,
+            totalPayout: result.outcome,
+            multiplier: result.finalMultiplier ?? 0,
+            newBalance: result.balance,
+          });
+        } catch (err) {
+          if (ack) ack({ ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('slots:join', async (_data: any, ack?: (resp: any) => void) => {
+        try {
+          const balance = await balanceService.getBalance(ctx.user.userId);
+          if (ack) ack({ success: true, balance });
+        } catch (err) {
+          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
+        }
+      });
+      ctx.socket.on('slots:leave', () => { /* no per-connection state */ });
+    },
+  );
 
   // Wheel game namespace — new engine wiring (Phase B).
   // The engine owns the round loop and `onBet` logic; `bindEvents` wires the

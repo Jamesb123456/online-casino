@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { AuthProvider, AuthContext } from '@/contexts/AuthContext';
@@ -7,14 +7,12 @@ import { AuthProvider, AuthContext } from '@/contexts/AuthContext';
 // ---- Mocks ----
 
 const mockSignIn = vi.fn();
-const mockSignUp = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetSession = vi.fn();
 
 vi.mock('@/lib/auth-client', () => ({
   authClient: {
     signIn: { username: (...args) => mockSignIn(...args) },
-    signUp: { email: (...args) => mockSignUp(...args) },
     signOut: (...args) => mockSignOut(...args),
     getSession: (...args) => mockGetSession(...args),
   },
@@ -22,11 +20,13 @@ vi.mock('@/lib/auth-client', () => ({
 
 const mockInitializeSocket = vi.fn();
 const mockDisconnectSocket = vi.fn();
+const mockOnSocketEvent = vi.fn(() => vi.fn());
 
 vi.mock('@/services/socketService', () => ({
   default: {
     initializeSocket: (...args) => mockInitializeSocket(...args),
     disconnectSocket: (...args) => mockDisconnectSocket(...args),
+    onSocketEvent: (...args) => mockOnSocketEvent(...args),
   },
 }));
 
@@ -56,12 +56,6 @@ function TestComponent({ onRender } = {}) {
       </button>
       <button data-testid="logout" onClick={() => ctx.logout()}>
         Logout
-      </button>
-      <button
-        data-testid="register"
-        onClick={() => ctx.register({ username: 'newuser', password: 'pass123' }).catch(() => {})}
-      >
-        Register
       </button>
       <button data-testid="updateBalance" onClick={() => ctx.updateBalance(999)}>
         Update Balance
@@ -273,72 +267,6 @@ describe('AuthContext', () => {
     expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false');
     expect(mockSignOut).toHaveBeenCalled();
     expect(mockDisconnectSocket).toHaveBeenCalled();
-  });
-
-  it('register() - successful registration', async () => {
-    const user = userEvent.setup();
-
-    mockGetSession.mockResolvedValue({ data: null, error: null });
-    mockSignUp.mockResolvedValue({
-      data: { user: { id: '2', username: 'newuser', role: 'user', balance: '0' } },
-      error: null,
-    });
-    mockApiGet.mockResolvedValue({
-      id: 2,
-      username: 'newuser',
-      role: 'user',
-      balance: 0,
-    });
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('false');
-    });
-
-    await user.click(screen.getByTestId('register'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('newuser');
-    });
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true');
-    expect(mockSignUp).toHaveBeenCalledWith({
-      email: 'newuser@platinum.local',
-      password: 'pass123',
-      name: 'newuser',
-      username: 'newuser',
-    });
-  });
-
-  it('register() - failed registration sets error', async () => {
-    const user = userEvent.setup();
-
-    mockGetSession.mockResolvedValue({ data: null, error: null });
-    mockSignUp.mockResolvedValue({
-      data: null,
-      error: { message: 'Username already taken' },
-    });
-
-    render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('false');
-    });
-
-    await user.click(screen.getByTestId('register'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('error')).toHaveTextContent('Username already taken');
-    });
-    expect(screen.getByTestId('user')).toHaveTextContent('none');
   });
 
   it('updateBalance() - updates user.balance', async () => {

@@ -25,6 +25,7 @@ import { connectDB, closeDB } from './drizzle/db.js';
 // Better Auth
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
+import { parseOrigins } from './lib/env.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -32,10 +33,33 @@ import userRoutes from './routes/users.js';
 import gameRoutes from './routes/games.js';
 import adminRoutes from './routes/admin.js';
 import adminAnalyticsRoutes from './routes/adminAnalytics.js';
+import adminGamesRoutes from './routes/adminGames.js';
+import adminHouseRoutes from './routes/adminHouse.js';
 import loginRewardsRoutes from './routes/login-rewards.js';
 import verifyRoutes from './routes/verify.js';
 import leaderboardRoutes from './routes/leaderboard.js';
 import responsibleGamingRoutes from './routes/responsible-gaming.js';
+import adminSnapshotsRoutes from './routes/adminSnapshots.js';
+import adminLoginRewardsRoutes from './routes/adminLoginRewards.js';
+import adminChatRoutes, { setIo as setAdminChatIo } from './routes/adminChat.js';
+import adminAlertsRoutes from './routes/adminAlerts.js';
+import adminSettingsRoutes from './routes/adminSettings.js';
+import adminUserLimitsRoutes from './routes/adminUserLimits.js';
+import adminTournamentsRoutes from './routes/adminTournaments.js';
+import tournamentsRoutes from './routes/tournaments.js';
+import userLimitsService from './src/services/userLimitsService.js';
+
+// Scheduled jobs
+import { startDailySnapshotJob, stopDailySnapshotJob } from './src/jobs/dailySnapshot.js';
+import { startTournamentSweeperJob, stopTournamentSweeperJob } from './src/jobs/tournamentSweeper.js';
+
+// New round-based engines (Phase B rebuild). Legacy handlers in
+// `src/socket/{crashHandler,rouletteHandler,wheelHandler}.ts` are intentionally
+// left on disk for rollback but are no longer wired into the namespace.
+import { registerGameNamespace } from './src/games/_engine/registerNamespace.js';
+import { CrashEngine } from './src/games/crash/engine.js';
+import { RouletteEngine } from './src/games/roulette/engine.js';
+import { WheelEngine } from './src/games/wheel/engine.js';
 
 // Config
 dotenv.config();
@@ -53,10 +77,7 @@ export async function createApp(): Promise<AppInstance> {
   const app = express();
   const httpServer = http.createServer(app);
 
-  // Support comma-separated CLIENT_URL for multiple allowed origins
-  // e.g. CLIENT_URL=http://localhost,http://localhost:5173
-  const rawOrigins = process.env.CLIENT_URL || 'http://localhost';
-  const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+  const allowedOrigins = parseOrigins(process.env.CLIENT_URL);
   const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
 
   const io = new SocketIOServer(httpServer, {
@@ -104,6 +125,14 @@ export async function createApp(): Promise<AppInstance> {
   // Custom auth routes (registered before Better Auth catch-all so they take priority)
   app.use('/api/auth', authRoutes);
 
+  // Private casino: block public sign-up. Integration tests still need to
+  // create users via Better Auth, so we allow it when NODE_ENV === 'test'.
+  // In production, only admin-created users can log in.
+  app.use('/api/auth/sign-up', (req, res, next) => {
+    if (process.env.NODE_ENV === 'test') return next();
+    return res.status(404).json({ message: 'Not found' });
+  });
+
   // Better Auth handler - must be before express.json()
   app.all("/api/auth/*", toNodeHandler(auth));
 
@@ -131,10 +160,22 @@ export async function createApp(): Promise<AppInstance> {
   app.use('/api/games', gameRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/admin/analytics', adminAnalyticsRoutes);
+  app.use('/api/admin/games', adminGamesRoutes);
+  app.use('/api/admin/house', adminHouseRoutes);
+  app.use('/api/admin/snapshots', adminSnapshotsRoutes);
+  app.use('/api/admin/login-rewards', adminLoginRewardsRoutes);
+  app.use('/api/admin/chat', adminChatRoutes);
+  app.use('/api/admin/alerts', adminAlertsRoutes);
+  app.use('/api/admin/settings', adminSettingsRoutes);
+  app.use('/api/admin/user-limits', adminUserLimitsRoutes);
+  app.use('/api/admin/tournaments', adminTournamentsRoutes);
+  // Allow the admin chat route to emit moderation events on the main namespace
+  setAdminChatIo(io);
   app.use('/api/rewards', loginRewardsRoutes);
   app.use('/api/verify', verifyRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/responsible-gaming', responsibleGamingRoutes);
+  app.use('/api/tournaments', tournamentsRoutes);
 
   // Health check - basic
   app.get('/health', (req: express.Request, res: express.Response) => {
@@ -167,47 +208,56 @@ export async function createApp(): Promise<AppInstance> {
   // Collect handler init promises so callers can await full readiness.
   const handlerPromises: Promise<any>[] = [];
 
-  // Crash game namespace
-  const crashNamespace = io.of('/crash');
-  crashNamespace.use(socketAuth);
-
-  handlerPromises.push(
-    import('./src/socket/crashHandler.js')
-      .then((mod: any) => {
-        const init = mod?.default || mod;
-        if (typeof init === 'function') init(crashNamespace);
-      })
-      .catch((err) => LoggingService.logSystemEvent('crash_handler_init_failed', { error: String(err) }, 'error'))
+  // Crash game namespace — new engine wiring (Phase B).
+  // The engine drives its own round cycle; `bindEvents` wires the legacy
+  // ack-callback contract for `placeBet` / `cashOut`. `registerGameNamespace`
+  // handles auth, join handshake (`gameState`), disconnect cleanup, and
+  // `userLimitsService.clearSession`.
+  registerGameNamespace(
+    io,
+    'crash',
+    () => {
+      const engine = new CrashEngine();
+      engine.startCycle();
+      return engine;
+    },
+    (engine, ctx) => {
+      ctx.socket.on('placeBet', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          ack?.({ success: true, ...result });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          ack?.({ success: false, error: message });
+        }
+      });
+      ctx.socket.on('cashOut', async (_payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.cashOut(ctx);
+          ack?.({ success: true, ...result });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          ack?.({ success: false, error: message });
+        }
+      });
+    },
   );
 
-  crashNamespace.on('connection', (socket) => {
-    LoggingService.logGameEvent('crash', 'namespace_connection', { socketId: socket.id });
-
-    const user = getAuthenticatedUser(socket);
-    if (!user) {
-      LoggingService.logSystemEvent('unauthenticated_crash_namespace', { socketId: socket.id }, 'warning');
-      socket.disconnect();
-      return;
-    }
-
-    LoggingService.logGameEvent('crash', 'namespace_authenticated', { username: user.username, userId: user.userId });
-
-    socket.on('disconnect', () => {
-      LoggingService.logGameEvent('crash', 'namespace_disconnected', { username: user.username, userId: user.userId });
-    });
-  });
-
-  // Roulette game namespace (namespace-level init with automated game loop)
-  const rouletteNamespace = io.of('/roulette');
-  rouletteNamespace.use(socketAuth);
-
-  handlerPromises.push(
-    import('./src/socket/rouletteHandler.js')
-      .then((mod: any) => {
-        const init = mod?.default || mod;
-        if (typeof init === 'function') init(rouletteNamespace);
-      })
-      .catch((err) => LoggingService.logSystemEvent('roulette_handler_init_failed', { error: String(err) }, 'error'))
+  // Roulette game namespace — new engine wiring (Phase B).
+  // The engine binds its own `roulette:join` / `roulette:place_bet` /
+  // `roulette:spin` / `roulette:get_history` listeners inside `onJoin`, so
+  // `bindEvents` is a no-op here.
+  registerGameNamespace(
+    io,
+    'roulette',
+    () => {
+      const engine = new RouletteEngine();
+      engine.start();
+      return engine;
+    },
+    () => {
+      /* event listeners bound in RouletteEngine.onJoin */
+    },
   );
 
   // Landmines game namespace
@@ -235,6 +285,65 @@ export async function createApp(): Promise<AppInstance> {
 
     socket.on('disconnect', () => {
       LoggingService.logGameEvent('landmines', 'namespace_disconnected', { username: user.username, userId: user.userId });
+      userLimitsService.clearSession(user.userId);
+    });
+  });
+
+  // Dice game namespace (per-connection init, instant-resolve like landmines)
+  const diceNamespace = io.of('/dice');
+  diceNamespace.use(socketAuth);
+
+  diceNamespace.on('connection', (socket) => {
+    LoggingService.logGameEvent('dice', 'namespace_connection', { socketId: socket.id });
+
+    const user = getAuthenticatedUser(socket);
+    if (!user) {
+      LoggingService.logSystemEvent('unauthenticated_dice_namespace', { socketId: socket.id }, 'warning');
+      socket.disconnect();
+      return;
+    }
+
+    LoggingService.logGameEvent('dice', 'namespace_authenticated', { username: user.username, userId: user.userId });
+
+    import('./src/socket/diceHandler.js')
+      .then((mod: any) => {
+        const init = mod?.initDiceHandlers || mod?.default?.initDiceHandlers || mod?.default;
+        if (typeof init === 'function') init(io, socket, user);
+      })
+      .catch((err) => LoggingService.logSystemEvent('dice_handler_init_failed', { error: String(err) }, 'error'));
+
+    socket.on('disconnect', () => {
+      LoggingService.logGameEvent('dice', 'namespace_disconnected', { username: user.username, userId: user.userId });
+      userLimitsService.clearSession(user.userId);
+    });
+  });
+
+  // Slots game namespace (per-connection init, instant-resolve like dice)
+  const slotsNamespace = io.of('/slots');
+  slotsNamespace.use(socketAuth);
+
+  slotsNamespace.on('connection', (socket) => {
+    LoggingService.logGameEvent('slots', 'namespace_connection', { socketId: socket.id });
+
+    const user = getAuthenticatedUser(socket);
+    if (!user) {
+      LoggingService.logSystemEvent('unauthenticated_slots_namespace', { socketId: socket.id }, 'warning');
+      socket.disconnect();
+      return;
+    }
+
+    LoggingService.logGameEvent('slots', 'namespace_authenticated', { username: user.username, userId: user.userId });
+
+    import('./src/socket/slotsHandler.js')
+      .then((mod: any) => {
+        const init = mod?.initSlotsHandlers || mod?.default?.initSlotsHandlers || mod?.default;
+        if (typeof init === 'function') init(io, socket, user);
+      })
+      .catch((err) => LoggingService.logSystemEvent('slots_handler_init_failed', { error: String(err) }, 'error'));
+
+    socket.on('disconnect', () => {
+      LoggingService.logGameEvent('slots', 'namespace_disconnected', { username: user.username, userId: user.userId });
+      userLimitsService.clearSession(user.userId);
     });
   });
 
@@ -276,6 +385,7 @@ export async function createApp(): Promise<AppInstance> {
 
     socket.on('disconnect', () => {
       LoggingService.logGameEvent('blackjack', 'namespace_disconnected', { username: user.username, userId: user.userId });
+      userLimitsService.clearSession(user.userId);
     });
   });
 
@@ -299,20 +409,56 @@ export async function createApp(): Promise<AppInstance> {
       .catch((err) => LoggingService.logSystemEvent('plinko_handler_init_failed', { error: String(err) }, 'error'));
     socket.on('disconnect', () => {
       LoggingService.logGameEvent('plinko', 'namespace_disconnected', { username: user.username, userId: user.userId });
+      userLimitsService.clearSession(user.userId);
     });
   });
 
-  // Wheel game namespace (namespace-level init with automated game loop)
-  const wheelNamespace = io.of('/wheel');
-  wheelNamespace.use(socketAuth);
-
-  handlerPromises.push(
-    import('./src/socket/wheelHandler.js')
-      .then((mod: any) => {
-        const init = mod?.default || mod;
-        if (typeof init === 'function') init(wheelNamespace);
-      })
-      .catch((err) => LoggingService.logSystemEvent('wheel_handler_init_failed', { error: String(err) }, 'error'))
+  // Wheel game namespace — new engine wiring (Phase B).
+  // The engine owns the round loop and `onBet` logic; `bindEvents` wires the
+  // legacy ack-callback contract for `wheel:place_bet` and forwards the
+  // `wheel:get_history` request. Error messages are mapped back to the
+  // legacy strings so existing client code + integration tests keep matching.
+  registerGameNamespace(
+    io,
+    'wheel',
+    () => {
+      const engine = new WheelEngine();
+      engine.start();
+      return engine;
+    },
+    (engine, ctx) => {
+      ctx.socket.on('wheel:place_bet', async (payload: any, ack?: (resp: any) => void) => {
+        try {
+          const result = await engine.onBet(ctx, payload);
+          ack?.({ success: true, balance: result.balance, sessionId: result.sessionId });
+        } catch (err) {
+          const raw = err instanceof Error ? err.message : String(err);
+          const error = (() => {
+            switch (raw) {
+              case 'not_betting_phase':
+                return 'Betting is closed';
+              case 'already_placed_bet':
+                return 'You already placed a bet this round';
+              case 'invalid_bet':
+              case 'invalid_payload':
+                return 'Invalid bet';
+              case 'invalid_difficulty':
+                return 'Invalid difficulty';
+              default:
+                if (raw.startsWith('limit_')) return `Bet blocked: ${raw.slice(6)}`;
+                return raw;
+            }
+          })();
+          ack?.({ success: false, error });
+        }
+      });
+      ctx.socket.on('wheel:get_history', (_data: any, ack?: (resp: any) => void) => {
+        // History is engine-internal; expose via a tiny accessor on the engine.
+        const history = (engine as any).history ?? [];
+        const limit = _data?.limit || 10;
+        ack?.({ success: true, globalHistory: history.slice(-limit) });
+      });
+    },
   );
 
   // Apply authentication middleware to main namespace
@@ -348,7 +494,11 @@ export async function createApp(): Promise<AppInstance> {
 
     socket.on('disconnect', () => {
       const username = (socket as any).user?.username || socket.id;
+      const userId = (socket as any).user?.userId;
       LoggingService.logSystemEvent('socket_disconnected', { username, socketId: socket.id });
+      if (userId != null) {
+        userLimitsService.clearSession(userId);
+      }
     });
   });
 
@@ -438,9 +588,17 @@ async function startServer() {
     LoggingService.logSystemEvent('server_started', { port: PORT });
   });
 
+  // Start scheduled jobs (skip in test environment to keep unit tests deterministic)
+  if (process.env.NODE_ENV !== 'test') {
+    startDailySnapshotJob();
+    startTournamentSweeperJob();
+  }
+
   // Graceful shutdown
   process.on('SIGINT', async () => {
     LoggingService.logSystemEvent('sigint_received', {});
+    stopDailySnapshotJob();
+    stopTournamentSweeperJob();
     await RedisService.close();
     await closeDB();
     process.exit(0);
@@ -448,6 +606,8 @@ async function startServer() {
 
   process.on('SIGTERM', async () => {
     LoggingService.logSystemEvent('sigterm_received', {});
+    stopDailySnapshotJob();
+    stopTournamentSweeperJob();
     await RedisService.close();
     await closeDB();
     process.exit(0);

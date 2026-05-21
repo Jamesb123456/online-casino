@@ -64,7 +64,7 @@ export class LandminesEngine extends InstantResolveEngine<LandminesSession> {
 
       // No second game on top of an active one — matches legacy semantics.
       if (this.sessions.has(userId)) {
-        throw new Error('game_in_progress');
+        throw new Error('active_game_in_progress');
       }
 
       // Config + limits gate; throws on disabled / too-large / locked.

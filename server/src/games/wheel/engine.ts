@@ -36,6 +36,21 @@ import {
 const VALID_DIFFICULTIES: ReadonlyArray<WheelDifficulty> = ['easy', 'medium', 'hard'];
 const MAX_HISTORY = 100;
 
+/**
+ * Map a payout multiplier to a colour hint for `wheel:game_result`.
+ * Mirrors the legacy palette used by `socket/wheelHandler.ts` so observer
+ * clients without their own bet see a meaningful segment colour.
+ */
+function colorForMultiplier(multiplier: number): string {
+  if (multiplier <= 0) return '#374151';
+  if (multiplier < 0.3) return '#e74c3c';
+  if (multiplier < 0.5) return '#e67e22';
+  if (multiplier < 1.0) return '#f1c40f';
+  if (multiplier < 1.2) return '#3498db';
+  if (multiplier < 3.0) return '#2ecc71';
+  return '#9b59b6';
+}
+
 /** History entry retained for the `wheel:gameState` snapshot on join. */
 interface WheelHistoryEntry {
   roundId: string | number | null;
@@ -442,10 +457,22 @@ export class WheelEngine extends RoundBasedEngine {
       this.history.splice(0, this.history.length - MAX_HISTORY);
     }
 
+    // Include a default-difficulty (medium) multiplier and a color hint so
+    // observer clients without an active bet still receive a meaningful
+    // payout indication — matches the legacy `wheel:game_result` contract.
+    const defaultMultiplier = resolveMultiplier(
+      'medium',
+      segmentIndex,
+      this.currentPayoutTable as Record<string, number[]> | null,
+    );
+    const defaultColor = colorForMultiplier(defaultMultiplier);
+
     for (const sub of this.subscribers) {
       sub.emit('wheel:game_result', {
         roundId: this.round.id,
         segmentIndex,
+        multiplier: defaultMultiplier,
+        color: defaultColor,
         timestamp: new Date(),
       });
     }

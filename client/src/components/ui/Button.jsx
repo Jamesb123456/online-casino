@@ -10,7 +10,8 @@ const Button = ({
   type = 'button',
   className = '',
   rounded = 'md',
-  glow = false
+  glow = false,
+  ...rest
 }) => {
   // Define variant classes
   const variantClasses = {
@@ -64,6 +65,7 @@ const Button = ({
       className={buttonClasses}
       onClick={onClick}
       disabled={disabled}
+      {...rest}
     >
       {children}
     </button>

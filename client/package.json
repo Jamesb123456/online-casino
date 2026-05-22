@@ -13,8 +13,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pixi/react": "^7.1.2",
     "@tailwindcss/vite": "^4.0.0",
     "better-auth": "^1.5.6",
+    "canvas-confetti": "^1.9.4",
+    "framer-motion": "^12.40.0",
+    "gsap": "^3.15.0",
+    "howler": "^2.2.4",
+    "lottie-react": "^2.4.1",
+    "matter-js": "^0.20.0",
+    "pixi.js": "^7.4.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",

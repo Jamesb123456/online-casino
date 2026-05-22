@@ -38,6 +38,8 @@
   --color-game-roulette: #10B981;
   --color-game-blackjack: #3B82F6;
   --color-game-landmines: #F97316;
+  --color-game-dice: #14B8A6;
+  --color-game-slots: #EC4899;
 
   /* ── Status Colors ── */
   --color-status-success: #10B981;
@@ -50,6 +52,14 @@
   --shadow-glow-gold: 0 0 20px rgba(245, 158, 11, 0.3);
   --shadow-glow-purple: 0 0 20px rgba(124, 58, 237, 0.3);
   --shadow-glow-gold-lg: 0 0 40px rgba(245, 158, 11, 0.4), 0 0 80px rgba(245, 158, 11, 0.1);
+  --shadow-glow-amber: 0 0 24px rgba(251, 191, 36, 0.50);
+  --shadow-glow-jackpot: 0 0 40px rgba(251, 191, 36, 0.70), 0 0 80px rgba(251, 191, 36, 0.30);
+
+  /* ── Game Surfaces ── */
+  --color-bg-game: #07080F;
+
+  /* ── Easing ── */
+  --ease-casino: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* ── Animations ── */
   --animate-shimmer: shimmer 2s linear infinite;
@@ -57,6 +67,10 @@
   --animate-slide-up: slideUp 300ms ease-out;
   --animate-slide-right: slideRight 300ms ease-out;
   --animate-pulse-gold: pulseGold 2s ease-in-out infinite;
+  --animate-chip-bounce: chipBounce 600ms var(--ease-casino);
+  --animate-coin-flip: coinFlip 800ms var(--ease-casino);
+  --animate-multiplier-float: multiplierFloat 1200ms var(--ease-casino) forwards;
+  --animate-slot-blur: slotBlur 700ms var(--ease-casino);
 }
 
 /* ── Keyframes ── */
@@ -83,6 +97,43 @@
 @keyframes pulseGold {
   0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
   50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.5); }
+}
+
+@keyframes chipBounce {
+  0%   { transform: translateY(0) scale(1); }
+  40%  { transform: translateY(-12px) scale(1.05); }
+  70%  { transform: translateY(-4px) scale(0.98); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes coinFlip {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+
+@keyframes multiplierFloat {
+  0%   { opacity: 0; transform: translateY(0) scale(0.9); }
+  20%  { opacity: 1; transform: translateY(-8px) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1); }
+}
+
+@keyframes slotBlur {
+  0%   { filter: blur(0); }
+  50%  { filter: blur(8px); }
+  100% { filter: blur(0); }
+}
+
+@keyframes lossShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  15%      { transform: translate3d(-8px, 2px, 0); }
+  30%      { transform: translate3d(7px, -3px, 0); }
+  45%      { transform: translate3d(-6px, 3px, 0); }
+  60%      { transform: translate3d(5px, -2px, 0); }
+  75%      { transform: translate3d(-3px, 1px, 0); }
+}
+
+.animate-loss-shake {
+  animation: lossShake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 /* ── Base Styles ── */
@@ -168,4 +219,14 @@ body {
   background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.1), transparent);
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
+}
+
+/* ── Mesh Neon Background Utility (game surface) ── */
+.bg-mesh-neon {
+  background-color: var(--color-bg-game);
+  background-image:
+    radial-gradient(at 18% 22%, rgba(124, 58, 237, 0.18) 0px, transparent 55%),
+    radial-gradient(at 82% 18%, rgba(245, 158, 11, 0.10) 0px, transparent 50%),
+    radial-gradient(at 68% 84%, rgba(167, 139, 250, 0.14) 0px, transparent 55%),
+    radial-gradient(at 14% 86%, rgba(244, 63, 94, 0.10) 0px, transparent 55%);
 }

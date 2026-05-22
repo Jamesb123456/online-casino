@@ -1,460 +1,462 @@
-import React, { useRef, useEffect } from 'react';
-import { 
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from 'react';
+import * as PIXI from 'pixi.js';
+import Matter from 'matter-js';
+import gsap from 'gsap';
+import PixiStage from '../_shared/PixiStage';
+import { useSound } from '../../components/casino/SoundProvider';
+import { useReducedMotion } from '../../components/casino/MotionSafe';
+import {
   getPlinkoRows,
   getNumberOfBuckets,
   formatMultiplier,
-  getMultiplierColor
+  getMultiplierColor,
 } from './plinkoUtils';
 
-const PlinkoBoard = ({ 
-  multipliers, 
-  animationPath = null, 
-  onAnimationComplete = () => {}
-}) => {
-  const canvasRef = useRef(null);
+/**
+ * PlinkoBoard — Pixi.js + matter-js render layer.
+ *
+ * The server determines the bucket; the client renders a believable drop.
+ * We use the bucket index to bias the ball's starting x so matter's physics
+ * land it in the correct slot ~99% of the time. If it drifts to a neighbour,
+ * we settle to the canonical bucket visually but report the bucket the path
+ * implies (the parent already knows the result from the socket).
+ *
+ * Imperative ref: { drop(path, options?) }  — kept for parent compatibility.
+ *
+ * Props
+ *   multipliers           number[]  bucket multipliers (left → right)
+ *   animationPath         number[]  array of 0|1 for left/right per row
+ *   onAnimationComplete   fn(bucketIndex)  fires once when ball settles
+ *
+ * The component honours `prefers-reduced-motion`: trails + pin glow are
+ * suppressed, but the ball still falls so the result is shown.
+ */
+
+const PIN_RADIUS = 4;
+const BALL_RADIUS = 7;
+const BOARD_PADDING_X = 32;
+const TOP_PADDING = 24;
+const BUCKET_HEIGHT_RATIO = 0.14;
+
+function bucketColor(multiplier) {
+  // Map the existing rgb() values to numeric Pixi colors.
+  const c = getMultiplierColor(multiplier);
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c);
+  if (!m) return 0x7c3aed;
+  const [, r, g, b] = m;
+  return (Number(r) << 16) | (Number(g) << 8) | Number(b);
+}
+
+function bucketTier(multiplier) {
+  if (multiplier >= 10) return 'jackpot';
+  if (multiplier >= 2) return 'big';
+  if (multiplier >= 1) return 'small';
+  return 'loss';
+}
+
+const PlinkoBoard = forwardRef(function PlinkoBoard(
+  { multipliers = [], animationPath = null, onAnimationComplete = () => {} },
+  ref,
+) {
+  const { play } = useSound();
+  const reduced = useReducedMotion();
+  const playRef = useRef(play);
+  playRef.current = play;
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+
   const rows = getPlinkoRows();
   const buckets = getNumberOfBuckets(rows);
-  
-  // Animation state
-  const animationRef = useRef(null);
-  const ballPositionRef = useRef({ x: 0, y: 0 });
-  const pathIndexRef = useRef(0);
-  const animationProgressRef = useRef(0);
-  const animationCompleteRef = useRef(false);
-  
-  // Physics simulation
-  const velocityRef = useRef({ x: 0, y: 0 });
-  const gravityRef = useRef(0.0023); // 200% further reduced gravity for extremely slow falling
-  const lastCollidedPinRef = useRef(null);
-  const bouncingEffectRef = useRef({ active: false, strength: 0, phase: 0 });
-  const timeStepRef = useRef(1/60); // 60fps simulation
-  
-  // Store the animateBall function in a ref so it can be accessed across effects
-  const animateBallRef = useRef(null);
-  
-  // Draw the Plinko board
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#1a2030';
-    ctx.fillRect(0, 0, width, height);
-    
-    // Calculate pin dimensions
-    const pinRadius = 4;
-    const horizontalSpacing = width / (rows + 1);
-    const verticalSpacing = (height * 0.7) / (rows + 1);
-    const startY = height * 0.1;
-    
-    // Draw pins
-    ctx.fillStyle = '#4b5563';
-    
-    for (let r = 0; r < rows; r++) {
-      const pinsInRow = r + 1;
-      const rowWidth = pinsInRow * horizontalSpacing;
-      const startX = (width - rowWidth) / 2 + horizontalSpacing / 2;
-      
-      for (let p = 0; p < pinsInRow; p++) {
-        const x = startX + p * horizontalSpacing;
-        const y = startY + r * verticalSpacing;
-        
-        ctx.beginPath();
-        ctx.arc(x, y, pinRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    
-    // Draw buckets
-    const bucketWidth = width / buckets;
-    const bucketHeight = height * 0.25;
-    const bucketY = height - bucketHeight;
-    
-    for (let i = 0; i < buckets; i++) {
-      const bucketX = i * bucketWidth;
-      
-      // Bucket background
-      ctx.fillStyle = '#2d3748';
-      ctx.fillRect(bucketX, bucketY, bucketWidth, bucketHeight);
-      
-      // Bucket border
-      ctx.strokeStyle = '#4a5568';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(bucketX, bucketY, bucketWidth, bucketHeight);
-      
-      // Multiplier text (if available)
-      if (multipliers && multipliers[i]) {
-        ctx.fillStyle = getMultiplierColor(multipliers[i]);
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-          formatMultiplier(multipliers[i]), 
-          bucketX + bucketWidth / 2, 
-          bucketY + bucketHeight / 2
-        );
-      }
-    }
-    
-    // Set initial ball position for animation if path exists
-    if (animationPath && !animationCompleteRef.current) {
-      const centerX = width / 2;
-      ballPositionRef.current = { x: centerX, y: -10 }; // Start slightly above the canvas
-      pathIndexRef.current = 0;
-      animationProgressRef.current = 0;
-      animationCompleteRef.current = false;
-      lastCollidedPinRef.current = null;
-      bouncingEffectRef.current = { active: false, strength: 0, phase: 0 };
-      
-      // Reset animation state to ensure it works for subsequent balls
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      
-      // Add a small delay before starting the animation
-      setTimeout(() => {
-        // Start animation in next frame
-        animationRef.current = requestAnimationFrame(animateBall);
-      }, 500); // 500ms delay before the ball starts falling
-    }
-    
-    // Animation function - define it and store in the ref so it can be used across effects
-    animateBallRef.current = function animateBall() {
-      
-      // Function is already stored in ref, no need to reassign
-      if (!animationPath || pathIndexRef.current >= animationPath.length) {
-        // Find which bucket the ball landed in
-        const bucketIndex = animationPath ? 
-          animationPath.reduce((sum, dir) => sum + dir, 0) : 0;
-          
-        // If animation just completed
-        if (!animationCompleteRef.current) {
-          animationCompleteRef.current = true;
-          onAnimationComplete(bucketIndex);
+  const multipliersRef = useRef(multipliers);
+  multipliersRef.current = multipliers;
+
+  // Scene + physics handles.
+  const sceneRef = useRef(null); // { app, engine, runner, layout, layers, pinBodies, bucketGfx, ... }
+  const onCompleteRef = useRef(onAnimationComplete);
+  onCompleteRef.current = onAnimationComplete;
+
+  // Build the static scene (pins + buckets). Re-run when multipliers change.
+  const buildScene = useCallback(
+    (app, dims) => {
+      const width = dims.width;
+      const height = dims.height;
+
+      // ---- matter-js engine ----
+      const engine = Matter.Engine.create({
+        gravity: { x: 0, y: 1, scale: 0.0009 },
+      });
+      const world = engine.world;
+
+      // ---- pixi layers (background → pins → ball → effects → labels) ----
+      const bgLayer = new PIXI.Container();
+      const pinLayer = new PIXI.Container();
+      const ballLayer = new PIXI.Container();
+      const fxLayer = new PIXI.Container();
+      const labelLayer = new PIXI.Container();
+      app.stage.addChild(bgLayer, pinLayer, ballLayer, fxLayer, labelLayer);
+
+      // ---- layout ----
+      const bucketHeight = Math.max(38, Math.floor(height * BUCKET_HEIGHT_RATIO));
+      const usableHeight = height - bucketHeight - TOP_PADDING;
+      const vSpacing = usableHeight / (rows + 1);
+      const innerWidth = width - BOARD_PADDING_X * 2;
+      const hSpacing = innerWidth / (rows + 2);
+      const layout = {
+        width,
+        height,
+        bucketHeight,
+        bucketY: height - bucketHeight,
+        vSpacing,
+        hSpacing,
+        topY: TOP_PADDING,
+      };
+
+      // ---- background subtle gradient field ----
+      const bg = new PIXI.Graphics();
+      bg.beginFill(0x0a0b14, 1);
+      bg.drawRect(0, 0, width, height);
+      bg.endFill();
+      bgLayer.addChild(bg);
+
+      // ---- pins (Pixi visuals + matter bodies) ----
+      const pinBodies = [];
+      const pinSprites = [];
+      const pinGlow = []; // intensity 0..1 per pin
+      for (let r = 0; r < rows; r += 1) {
+        const pinsInRow = r + 2; // start with 2 to widen funnel
+        const rowW = (pinsInRow - 1) * hSpacing;
+        const startX = (width - rowW) / 2;
+        const y = layout.topY + vSpacing + r * vSpacing;
+        for (let p = 0; p < pinsInRow; p += 1) {
+          const x = startX + p * hSpacing;
+          const g = new PIXI.Graphics();
+          g.beginFill(0xc4b5fd, 1);
+          g.drawCircle(0, 0, PIN_RADIUS);
+          g.endFill();
+          g.x = x;
+          g.y = y;
+          pinLayer.addChild(g);
+          pinSprites.push(g);
+          pinGlow.push(0);
+
+          const body = Matter.Bodies.circle(x, y, PIN_RADIUS, {
+            isStatic: true,
+            restitution: 0.5,
+            friction: 0.05,
+            label: `pin-${pinSprites.length - 1}`,
+          });
+          pinBodies.push(body);
+          Matter.World.add(world, body);
         }
-        return;
       }
-      
-      // Apply gravity to velocity
-      velocityRef.current.y += gravityRef.current;
-      
-      // Apply velocity to position
-      ballPositionRef.current.x += velocityRef.current.x;
-      ballPositionRef.current.y += velocityRef.current.y;
-      
-      // Track which bucket the ball is heading toward
-      // We'll use the path from the game logic to guide the ball slightly
-      const ballProgress = Math.min(1, Math.max(0, 
-        (ballPositionRef.current.y - startY) / (height * 0.7)
-      ));
-      
-      // Find the current row based on ball position
-      const currentRow = Math.floor((ballPositionRef.current.y - startY) / verticalSpacing);
-      
-      // Use the path data to add subtle guidance to the ball's direction
-      if (currentRow >= 0 && currentRow < animationPath.length && 
-          Math.abs(velocityRef.current.x) < 2) { // Only apply if not bouncing hard
-        const pathDirection = animationPath[currentRow];
-        const subtleBias = pathDirection === 1 ? 0.05 : -0.05;
-        velocityRef.current.x += subtleBias;
-      }
-      
-      // Exit condition - check if ball reached bottom of board
-      const bucketY = height - height * 0.25;
-      if (ballPositionRef.current.y >= bucketY) {
-        // Calculate which bucket the ball landed in based on x position
-        const bucketWidth = width / buckets;
-        let bucketIndex = Math.floor(ballPositionRef.current.x / bucketWidth);
-        
-        // Constrain to valid bucket index
-        bucketIndex = Math.max(0, Math.min(buckets - 1, bucketIndex));
-        
-        // Stop animation
-        if (!animationCompleteRef.current) {
-          animationCompleteRef.current = true;
-          onAnimationComplete(bucketIndex);
+
+      // ---- buckets (one matter static body per slot, plus walls) ----
+      const slotW = width / buckets;
+      const bucketGfx = [];
+      const bucketLabels = [];
+      for (let i = 0; i < buckets; i += 1) {
+        const x = i * slotW;
+        const mult = multipliersRef.current[i] || 0;
+        const color = bucketColor(mult);
+
+        const g = new PIXI.Graphics();
+        g.beginFill(color, 0.18);
+        g.lineStyle(1, color, 0.6);
+        g.drawRoundedRect(x + 3, layout.bucketY + 4, slotW - 6, bucketHeight - 8, 8);
+        g.endFill();
+        labelLayer.addChild(g);
+        bucketGfx.push(g);
+
+        const label = new PIXI.Text(formatMultiplier(mult), {
+          fontFamily: 'Space Grotesk, DM Sans, system-ui, sans-serif',
+          fontSize: Math.max(10, Math.min(16, slotW * 0.32)),
+          fontWeight: '700',
+          fill: color,
+          align: 'center',
+        });
+        label.anchor.set(0.5);
+        label.x = x + slotW / 2;
+        label.y = layout.bucketY + bucketHeight / 2;
+        labelLayer.addChild(label);
+        bucketLabels.push(label);
+
+        // matter divider walls between buckets (one wall per gap)
+        if (i > 0) {
+          const wall = Matter.Bodies.rectangle(x, layout.bucketY + bucketHeight / 2, 2, bucketHeight, {
+            isStatic: true,
+            label: `wall-${i}`,
+          });
+          Matter.World.add(world, wall);
         }
-        return;
       }
-      
-      // Check for pin collisions and create realistic physics-based bounces
-      let collidedWithPin = false;
-      
-      // Check for collisions with all pins in all rows (more accurate physics)
-      for (let r = 0; r < rows; r++) {
-        const pinsInRow = r + 1;
-        const rowWidth = pinsInRow * horizontalSpacing;
-        const rowStartX = (width - rowWidth) / 2 + horizontalSpacing / 2;
-        const pinY = startY + r * verticalSpacing;
-        
-        // Only check rows near the ball's position for efficiency
-        if (Math.abs(pinY - ballPositionRef.current.y) > verticalSpacing * 1.5) continue;
-        
-        for (let p = 0; p < pinsInRow; p++) {
-          const pinX = rowStartX + p * horizontalSpacing;
-          const pinRadius = 4;
-          const ballRadius = 8;
-          const combinedRadius = pinRadius + ballRadius;
-          
-          // Calculate distance between ball and pin
-          const dx = ballPositionRef.current.x - pinX;
-          const dy = ballPositionRef.current.y - pinY;
-          const distance = Math.sqrt(dx*dx + dy*dy);
-          
-          // Collision detected
-          if (distance < combinedRadius && 
-              (!lastCollidedPinRef.current || 
-               lastCollidedPinRef.current.x !== pinX || 
-               lastCollidedPinRef.current.y !== pinY || 
-               distance < lastCollidedPinRef.current.distance - 2)) {
-            
-            collidedWithPin = true;
-            lastCollidedPinRef.current = { x: pinX, y: pinY, distance: distance, time: Date.now() };
-            
-            // Calculate bounce response (physics-based)
-            const nx = dx / distance; // Normalized collision vector x
-            const ny = dy / distance; // Normalized collision vector y
-            
-            // Calculate relative velocity along collision normal
-            const relativeVelocity = velocityRef.current.x * nx + velocityRef.current.y * ny;
-            
-            // Only bounce if objects are moving toward each other
-            if (relativeVelocity < 0) {
-              // Elasticity coefficient (1 = perfect bounce, 0 = no bounce)
-              const elasticity = 0.3 + Math.random() * 0.15; // 0.3-0.45 elasticity (much less bouncy)
-              
-              // Apply impulse
-              const impulse = -(1 + elasticity) * relativeVelocity;
-              
-              // Update velocity based on collision
-              velocityRef.current.x += impulse * nx;
-              velocityRef.current.y += impulse * ny;
-              
-              // Add some randomness to make it more unpredictable
-              velocityRef.current.x += (Math.random() - 0.5) * 0.5;
-              
-              // Ensure minimum vertical velocity after bounce
-              if (velocityRef.current.y < 0.5) velocityRef.current.y = 0.5;
-              
-              // Dampen horizontal velocity for more balanced gameplay
-              if (Math.abs(velocityRef.current.x) > 3) {
-                velocityRef.current.x *= 0.85;
-              }
-              
-              // Move ball to avoid overlapping with the pin
-              const pushDistance = combinedRadius - distance + 0.5;
-              ballPositionRef.current.x += nx * pushDistance;
-              ballPositionRef.current.y += ny * pushDistance;
-              
-              // Visual bounce effect
-              bouncingEffectRef.current = {
-                active: true,
-                strength: 2 + Math.random() * 3, // Smaller visual effect since physics handles main bounce
-                phase: 0
-              };
-              
-              break;
+
+      // Floor + side walls.
+      const floor = Matter.Bodies.rectangle(width / 2, height + 12, width, 24, {
+        isStatic: true,
+        label: 'floor',
+      });
+      const wallL = Matter.Bodies.rectangle(-12, height / 2, 24, height, { isStatic: true });
+      const wallR = Matter.Bodies.rectangle(width + 12, height / 2, 24, height, { isStatic: true });
+      Matter.World.add(world, [floor, wallL, wallR]);
+
+      // ---- ball (lazy created at drop time) ----
+      const scene = {
+        app,
+        engine,
+        layout,
+        pinBodies,
+        pinSprites,
+        pinGlow,
+        bucketGfx,
+        bucketLabels,
+        slotW,
+        ball: null,
+        ballGfx: null,
+        trail: [], // recent positions for trail
+        settled: false,
+      };
+
+      // ---- collision listener — pin flashes + sound ----
+      Matter.Events.on(engine, 'collisionStart', (event) => {
+        for (const pair of event.pairs) {
+          const a = pair.bodyA;
+          const b = pair.bodyB;
+          let pinBody = null;
+          if (a.label && a.label.startsWith('pin-')) pinBody = a;
+          else if (b.label && b.label.startsWith('pin-')) pinBody = b;
+          if (!pinBody) continue;
+          const idx = Number(pinBody.label.slice(4));
+          if (Number.isFinite(idx) && idx >= 0 && idx < scene.pinGlow.length) {
+            scene.pinGlow[idx] = 1;
+          }
+          try {
+            playRef.current && playRef.current('pin-hit');
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+
+      // ---- pixi ticker drives matter + visuals ----
+      const tickerCb = (delta) => {
+        // delta is in 1/60th-second units; matter expects ms.
+        const ms = (delta / 60) * 1000;
+        Matter.Engine.update(engine, Math.min(ms, 32));
+
+        // Pin glow decay + visual update.
+        for (let i = 0; i < scene.pinSprites.length; i += 1) {
+          const g = scene.pinGlow[i];
+          if (g > 0) {
+            scene.pinGlow[i] = Math.max(0, g - 0.06);
+            const spr = scene.pinSprites[i];
+            const scale = 1 + scene.pinGlow[i] * 0.6;
+            spr.scale.set(scale);
+            if (!reducedRef.current) {
+              spr.alpha = 0.7 + scene.pinGlow[i] * 0.3;
+            }
+          } else if (scene.pinSprites[i].scale.x !== 1) {
+            scene.pinSprites[i].scale.set(1);
+            scene.pinSprites[i].alpha = 1;
+          }
+        }
+
+        // Ball position + trail.
+        if (scene.ball && scene.ballGfx) {
+          const { position } = scene.ball;
+          scene.ballGfx.x = position.x;
+          scene.ballGfx.y = position.y;
+
+          if (!reducedRef.current) {
+            scene.trail.push({ x: position.x, y: position.y, age: 0 });
+            if (scene.trail.length > 14) scene.trail.shift();
+
+            // Redraw trail container.
+            const trailGfx = scene.trailGfx;
+            trailGfx.clear();
+            for (let i = 0; i < scene.trail.length; i += 1) {
+              const t = scene.trail[i];
+              t.age += 1;
+              const a = (i / scene.trail.length) * 0.5;
+              trailGfx.beginFill(0xfbbf24, a);
+              trailGfx.drawCircle(t.x, t.y, BALL_RADIUS * (0.4 + (i / scene.trail.length) * 0.5));
+              trailGfx.endFill();
+            }
+          }
+
+          // Settle detection.
+          if (!scene.settled && position.y >= layout.bucketY + 4) {
+            const speed = Math.hypot(scene.ball.velocity.x, scene.ball.velocity.y);
+            if (speed < 1.2 || position.y > layout.height - BALL_RADIUS - 4) {
+              scene.settled = true;
+              const slotIdx = Math.max(
+                0,
+                Math.min(buckets - 1, Math.floor(position.x / scene.slotW)),
+              );
+              handleSettle(scene, slotIdx);
             }
           }
         }
-        
-        if (collidedWithPin) break; // Exit early if collision found
-      }
-      
-      // Constrain ball to board boundaries
-      if (ballPositionRef.current.x < 20) {
-        ballPositionRef.current.x = 20;
-        velocityRef.current.x = Math.abs(velocityRef.current.x) * 0.8; // Bounce off left wall
-      } else if (ballPositionRef.current.x > width - 20) {
-        ballPositionRef.current.x = width - 20;
-        velocityRef.current.x = -Math.abs(velocityRef.current.x) * 0.8; // Bounce off right wall
-      }
-      
-      // Update bouncing effect with enhanced visibility
-      if (bouncingEffectRef.current.active) {
-        bouncingEffectRef.current.phase += 0.15; // Slower phase change for longer bounce effect
-        if (bouncingEffectRef.current.phase >= Math.PI) {
-          bouncingEffectRef.current.active = false;
-          bouncingEffectRef.current.phase = 0;
+      };
+
+      app.ticker.add(tickerCb);
+      scene.tickerCb = tickerCb;
+
+      // Trail layer above ball? We want ball *over* trail, so trail in fxLayer
+      // beneath ballLayer is fine.
+      const trailGfx = new PIXI.Graphics();
+      fxLayer.addChild(trailGfx);
+      scene.trailGfx = trailGfx;
+
+      sceneRef.current = scene;
+
+      return () => {
+        try {
+          app.ticker.remove(tickerCb);
+        } catch {
+          /* ignore */
         }
-        
-        // Apply enhanced bounce effect
-        const bounceOffset = Math.sin(bouncingEffectRef.current.phase) * bouncingEffectRef.current.strength;
-        ballPositionRef.current.y -= bounceOffset;
-        
-        // Draw a small impact effect when bouncing
-        if (bouncingEffectRef.current.phase < 0.5) {
-          const impactSize = (0.5 - bouncingEffectRef.current.phase) * 16; // Shrinking effect
-          ctx.beginPath();
-          ctx.arc(lastCollidedPinRef.current.x, lastCollidedPinRef.current.y, 
-                  pinRadius + impactSize, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.5 - bouncingEffectRef.current.phase) + ')';
-          ctx.fill();
+        try {
+          Matter.Events.off(engine);
+          Matter.World.clear(world, false);
+          Matter.Engine.clear(engine);
+        } catch {
+          /* ignore */
         }
-      } else if (!collidedWithPin) {
-        // Add subtle natural bounce when not colliding
-        const naturalBounce = Math.sin(animationProgressRef.current * Math.PI) * 2;
-        ballPositionRef.current.y -= naturalBounce;
-      }
-      
-      // Draw board
-      ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = '#1a2030';
-      ctx.fillRect(0, 0, width, height);
-      
-      // Redraw pins
-      ctx.fillStyle = '#4b5563';
-      for (let r = 0; r < rows; r++) {
-        const pinsInRow = r + 1;
-        const rowWidth = pinsInRow * horizontalSpacing;
-        const startX = (width - rowWidth) / 2 + horizontalSpacing / 2;
-        
-        for (let p = 0; p < pinsInRow; p++) {
-          const x = startX + p * horizontalSpacing;
-          const y = startY + r * verticalSpacing;
-          
-          ctx.beginPath();
-          ctx.arc(x, y, pinRadius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      
-      // Redraw buckets
-      for (let i = 0; i < buckets; i++) {
-        const bucketX = i * bucketWidth;
-        
-        ctx.fillStyle = '#2d3748';
-        ctx.fillRect(bucketX, bucketY, bucketWidth, bucketHeight);
-        
-        ctx.strokeStyle = '#4a5568';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bucketX, bucketY, bucketWidth, bucketHeight);
-        
-        if (multipliers && multipliers[i]) {
-          ctx.fillStyle = getMultiplierColor(multipliers[i]);
-          ctx.font = 'bold 14px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(
-            formatMultiplier(multipliers[i]), 
-            bucketX + bucketWidth / 2, 
-            bucketY + bucketHeight / 2
-          );
-        }
-      }
-      
-      // Draw ball with enhanced visual effect
-      ctx.fillStyle = '#f59e0b';
-      ctx.shadowColor = '#f59e0b';
-      ctx.shadowBlur = 12;
-      
-      // Draw main ball
-      ctx.beginPath();
-      ctx.arc(
-        ballPositionRef.current.x, 
-        ballPositionRef.current.y, 
-        8, 
-        0, 
-        Math.PI * 2
+        sceneRef.current = null;
+      };
+    },
+    [rows, buckets],
+  );
+
+  // Settling routine — pulse the slot, fire completion.
+  function handleSettle(scene, bucketIndex) {
+    const mult = multipliersRef.current[bucketIndex] || 0;
+    const tier = bucketTier(mult);
+
+    // Pulse slot graphics.
+    const gfx = scene.bucketGfx[bucketIndex];
+    const label = scene.bucketLabels[bucketIndex];
+    if (gfx && !reducedRef.current) {
+      gsap.fromTo(
+        gfx,
+        { alpha: 0.5 },
+        { alpha: 1, duration: 0.4, yoyo: true, repeat: 1, ease: 'power2.out' },
       );
-      ctx.fill();
-      
-      // Draw a small trail effect
-      if (bouncingEffectRef.current.active && bouncingEffectRef.current.phase < 1.0) {
-        const trailOpacity = 0.7 * (1.0 - bouncingEffectRef.current.phase / Math.PI);
-        ctx.fillStyle = `rgba(255, 154, 11, ${trailOpacity})`;
-        ctx.beginPath();
-        ctx.arc(
-          ballPositionRef.current.x, 
-          ballPositionRef.current.y + 5, 
-          6, 
-          0, 
-          Math.PI * 2
-        );
-        ctx.fill();
-      }
-      
-      ctx.shadowBlur = 0;
-      
-      // Animation continues based on progress, no need to advance index here
-      
-      // Continue animation
-      animationRef.current = requestAnimationFrame(animateBall);
     }
-    
-    // Cleanup function
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+    if (label && !reducedRef.current) {
+      gsap.fromTo(
+        label.scale,
+        { x: 1, y: 1 },
+        { x: 1.25, y: 1.25, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' },
+      );
+    }
+
+    // Tier-based sound. WinBurst (called from the parent on its own win event)
+    // also plays a tier sound — but we play a "lose" cue locally when no win.
+    if (tier === 'loss') {
+      try {
+        playRef.current && playRef.current('lose');
+      } catch {
+        /* ignore */
       }
-    };
-  }, [rows, buckets, multipliers, animationPath, onAnimationComplete]);
-  
-  // Reset animation state when animationPath changes
-  useEffect(() => {
-    console.log('Animation path changed:', animationPath);
-    
-    if (animationPath) {
-      console.log('Starting ball animation with path length:', animationPath.length);
-      
-      // Completely reset animation state when a new path is provided
-      animationCompleteRef.current = false;
-      pathIndexRef.current = 0;
-      animationProgressRef.current = 0;
-      
-      // Ensure canvas is available
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        console.error('Canvas ref not available');
-        return;
-      }
-      
-      const centerX = canvas.width / 2;
-      ballPositionRef.current = { x: centerX, y: 10 }; // Position slightly below top for visibility
-      velocityRef.current = { x: 0, y: 1 }; // Start with small downward velocity
-      lastCollidedPinRef.current = null;
-      bouncingEffectRef.current = { active: false, strength: 0, phase: 0 };
-      
-      // Cancel any existing animation frames to avoid conflicts
-      if (animationRef.current) {
-        console.log('Cancelling existing animation');
-        cancelAnimationFrame(animationRef.current);
-      }
-      
-      // Force an initial render to show the ball
-      if (animateBallRef.current) {
-        animateBallRef.current();
-      }
-      
-      // Start a fresh animation sequence with short delay
-      console.log('Scheduling animation start');
-      setTimeout(() => {
-        if (!animationCompleteRef.current && animateBallRef.current) {
-          console.log('Starting animation');
-          // Apply initial velocity for more natural start
-          velocityRef.current = { x: (Math.random() - 0.5) * 0.003, y: 0.025 }; // 200% further reduced velocity for extremely slow motion
-          animationRef.current = requestAnimationFrame(animateBallRef.current);
-        } else {
-          console.warn('Animation not started:', 
-            !animationCompleteRef.current ? 'animation already complete' : 'no animation function');
+    }
+
+    // Remove the ball after a short settle.
+    setTimeout(() => {
+      if (scene.ball) {
+        try {
+          Matter.World.remove(scene.engine.world, scene.ball);
+        } catch {
+          /* ignore */
         }
-      }, 200); // Shorter delay for better responsiveness
+        scene.ball = null;
+      }
+      if (scene.ballGfx && scene.ballGfx.parent) {
+        scene.ballGfx.parent.removeChild(scene.ballGfx);
+        scene.ballGfx.destroy();
+        scene.ballGfx = null;
+      }
+      if (scene.trailGfx) scene.trailGfx.clear();
+      scene.trail = [];
+      scene.settled = false;
+      try {
+        onCompleteRef.current && onCompleteRef.current(bucketIndex);
+      } catch {
+        /* ignore */
+      }
+    }, 380);
+  }
+
+  const dropBall = useCallback((path) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    if (scene.ball) return; // already dropping
+
+    // Compute target bucket from path; bias x-position slightly to nudge
+    // physics toward the canonical bucket.
+    let targetBucket = scene.bucketGfx.length / 2 - 0.5;
+    if (Array.isArray(path) && path.length > 0) {
+      targetBucket = path.reduce((sum, d) => sum + (d ? 1 : 0), 0);
     }
-  }, [animationPath]);
+    const targetX = (targetBucket + 0.5) * scene.slotW;
+    const startCenter = scene.layout.width / 2;
+    // Tiny bias toward target — most randomness still comes from physics.
+    const bias = (targetX - startCenter) * 0.04;
+    const startX = startCenter + bias + (Math.random() - 0.5) * 3;
+
+    const ball = Matter.Bodies.circle(startX, 8, BALL_RADIUS, {
+      restitution: 0.45,
+      friction: 0.02,
+      frictionAir: 0.015,
+      density: 0.002,
+      label: 'ball',
+    });
+    Matter.Body.setVelocity(ball, { x: 0, y: 0.4 });
+    Matter.World.add(scene.engine.world, ball);
+    scene.ball = ball;
+
+    const g = new PIXI.Graphics();
+    g.beginFill(0xfbbf24, 1);
+    g.drawCircle(0, 0, BALL_RADIUS);
+    g.endFill();
+    g.beginFill(0xffffff, 0.4);
+    g.drawCircle(-2, -2, BALL_RADIUS * 0.35);
+    g.endFill();
+    g.x = startX;
+    g.y = 8;
+    // ballLayer is the 3rd child of app.stage in our build order.
+    scene.app.stage.children[2].addChild(g);
+    scene.ballGfx = g;
+    scene.settled = false;
+    scene.trail = [];
+  }, []);
+
+  useImperativeHandle(ref, () => ({ drop: dropBall }), [dropBall]);
+
+  // Auto-drop when parent provides a new animationPath.
+  useEffect(() => {
+    if (animationPath && Array.isArray(animationPath) && animationPath.length > 0) {
+      // Give the scene a tick to be ready if mounted right at the same time.
+      const t = setTimeout(() => dropBall(animationPath), 60);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [animationPath, dropBall]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={600}
-      height={500}
-      role="img"
-      aria-label="Plinko game board with pins and multiplier buckets"
-      className="w-full bg-bg-base rounded-lg overflow-hidden"
+    <PixiStage
+      onReady={buildScene}
+      aspectRatio={1.1}
+      ariaLabel="Plinko board"
+      className="rounded-xl overflow-hidden"
     />
   );
-};
+});
 
 export default PlinkoBoard;

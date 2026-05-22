@@ -1,84 +1,88 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import Card from './Card';
 import { getHandStatus } from './blackjackUtils';
+import { useSound } from '../../components/casino/SoundProvider';
+import { useReducedMotion } from '../../components/casino/MotionSafe';
 
 /**
- * Component to render a single blackjack hand (player's or dealer's)
+ * BlackjackHand — renders a dealer's or player's hand of cards with
+ * Framer-driven deal + flip animations (handled inside <Card />). The dealer's
+ * hole card stays face-down until the reveal phase, at which point it flips.
+ *
+ * Props
+ *   hand          Array<{rank, suit}>
+ *   isDealer      boolean   — toggles label and hole-card behaviour
+ *   hideHoleCard  boolean   — dealer-only; holds the 2nd card face-down
+ *   label         string?   — override default label
  */
-const BlackjackHand = ({ hand = [], isDealer = false, hideHoleCard = false }) => {
-  // If this is a dealer hand and we need to hide the hole card
-  const displayedHand = hideHoleCard ? [hand[0]] : hand;
+const BlackjackHand = ({
+  hand = [],
+  isDealer = false,
+  hideHoleCard = false,
+  label,
+}) => {
+  const { play } = useSound();
+  const reduced = useReducedMotion();
+  const prevLenRef = useRef(0);
+  const prevHideRef = useRef(hideHoleCard);
+
   const handValue = hideHoleCard ? null : getHandStatus(hand);
+  const heading = label || (isDealer ? "Dealer's Hand" : 'Your Hand');
 
-  // Generate card image URLs
-  const renderCards = () => {
-    return displayedHand.map((card, index) => {
-      // If this is the dealer's hidden card
-      if (isDealer && hideHoleCard && index === 1) {
-        return (
-          <div key="hidden" className="relative w-20 h-28 sm:w-24 sm:h-32 bg-game-blackjack rounded-lg shadow-card m-1 flex items-center justify-center border border-border-light">
-            <div className="text-white">
-              <span className="text-2xl">♣♠♥♦</span>
-            </div>
-          </div>
-        );
+  // Card-flip SFX — rate-limited per change (one play per new card or reveal).
+  useEffect(() => {
+    if (reduced) {
+      prevLenRef.current = hand.length;
+      prevHideRef.current = hideHoleCard;
+      return;
+    }
+    const grew = hand.length > prevLenRef.current;
+    const revealed = prevHideRef.current && !hideHoleCard;
+    if (grew || revealed) {
+      try {
+        play('card-flip');
+      } catch {
+        /* ignore */
       }
-
-      const { suit, rank } = card;
-      const color = suit === 'hearts' || suit === 'diamonds' ? 'text-red-500' : 'text-text-primary';
-
-      return (
-        <div
-          key={`${rank}-${suit}-${index}`}
-          className="relative w-20 h-28 sm:w-24 sm:h-32 bg-bg-surface rounded-lg shadow-card m-1 flex flex-col border border-border-light"
-        >
-          <div className={`top-0 left-0 m-1 ${color}`}>
-            <div className="text-lg font-bold">{rank}</div>
-            <div className="text-lg">
-              {suit === 'hearts' && '♥'}
-              {suit === 'diamonds' && '♦'}
-              {suit === 'clubs' && '♣'}
-              {suit === 'spades' && '♠'}
-            </div>
-          </div>
-
-          <div className={`flex-grow flex items-center justify-center ${color}`}>
-            <span className="text-4xl">
-              {suit === 'hearts' && '♥'}
-              {suit === 'diamonds' && '♦'}
-              {suit === 'clubs' && '♣'}
-              {suit === 'spades' && '♠'}
-            </span>
-          </div>
-
-          <div className={`bottom-0 right-0 m-1 rotate-180 ${color}`}>
-            <div className="text-lg font-bold">{rank}</div>
-            <div className="text-lg">
-              {suit === 'hearts' && '♥'}
-              {suit === 'diamonds' && '♦'}
-              {suit === 'clubs' && '♣'}
-              {suit === 'spades' && '♠'}
-            </div>
-          </div>
-        </div>
-      );
-    });
-  };
+    }
+    prevLenRef.current = hand.length;
+    prevHideRef.current = hideHoleCard;
+  }, [hand.length, hideHoleCard, play, reduced]);
 
   return (
-    <div className="my-4">
-      <div className="flex flex-col items-center">
-        <h3 className="text-lg font-heading font-bold text-text-primary mb-2">{isDealer ? "Dealer's Hand" : "Your Hand"}</h3>
-        {handValue && (
-          <div className="text-lg font-heading font-bold text-accent-gold mb-2">
+    <div className="my-4 flex flex-col items-center">
+      <div className="mb-2 flex items-center gap-3">
+        <h3 className="font-heading text-sm font-semibold uppercase tracking-wider text-text-secondary">
+          {heading}
+        </h3>
+        {handValue ? (
+          <span className="rounded-full bg-accent-gold/15 px-2 py-0.5 font-mono text-xs font-bold text-accent-gold-light ring-1 ring-accent-gold/40">
             {handValue}
-          </div>
-        )}
+          </span>
+        ) : null}
+      </div>
 
-        <div className="flex flex-wrap justify-center">
-          {hand.length > 0 ? renderCards() : (
-            <div className="text-text-muted">Waiting for deal...</div>
-          )}
-        </div>
+      <div
+        className="flex min-h-[7.5rem] flex-wrap items-center justify-center gap-2 sm:min-h-[9rem]"
+        aria-label={`${heading} cards`}
+      >
+        {hand.length === 0 ? (
+          <span className="text-xs italic text-text-muted">Waiting for deal…</span>
+        ) : (
+          hand.map((card, index) => {
+            if (!card) return null;
+            const isHole = isDealer && hideHoleCard && index === 1;
+            return (
+              <Card
+                key={`${card.rank}-${card.suit}-${index}`}
+                rank={card.rank}
+                suit={card.suit}
+                index={index}
+                faceDown={isHole}
+              />
+            );
+          })
+        )}
       </div>
     </div>
   );

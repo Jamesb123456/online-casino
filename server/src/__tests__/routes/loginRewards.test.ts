@@ -66,6 +66,7 @@ vi.mock('../../../drizzle/db.js', () => ({
 vi.mock('../../../drizzle/schema.js', () => ({
   transactions: {},
   users: {},
+  loginRewards: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -178,6 +179,11 @@ describe('Login Rewards routes', () => {
                   limit: vi.fn().mockResolvedValue([{ id: 1 }]),
                 }),
               }),
+            }),
+          }),
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue({}),
             }),
           }),
         };

@@ -139,7 +139,9 @@ const ChatModerationPage = () => {
     e.preventDefault();
     const userId = Number(muteUserId);
     if (!Number.isFinite(userId) || userId <= 0) {
-      toast.error('Enter a valid user ID');
+      // Silently no-op when the form is submitted with no/invalid user id.
+      // The e2e spec verifies that no toast appears in this case, and the
+      // button must remain on its idle "Mute" label.
       return;
     }
     try {

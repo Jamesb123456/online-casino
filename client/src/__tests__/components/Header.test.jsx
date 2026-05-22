@@ -127,13 +127,13 @@ describe('Header', () => {
       balance: 1500,
     };
 
-    it('shows username when authenticated', () => {
+    it('shows profile link when authenticated', () => {
       renderHeader({
         user: authUser,
         isAuthenticated: true,
       });
 
-      expect(screen.getByText('testplayer')).toBeInTheDocument();
+      expect(screen.getByText('Profile')).toBeInTheDocument();
     });
 
     it('shows balance display when authenticated', () => {

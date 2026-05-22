@@ -35,17 +35,27 @@ export const apiRequest = async (endpoint, options = {}) => {
       credentials: 'include', // Include cookies in requests
     });
 
-    // For non-204 responses, try to parse JSON
-    const data = response.status !== 204 
-      ? await response.json() 
-      : {};
+    // Try to parse JSON; if the response is empty or non-JSON (e.g. a
+    // rate-limit plain-text response or an HTML error page), fall back to a
+    // synthesized error so callers can still pattern-match on the status.
+    let data = {};
+    if (response.status !== 204) {
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { message: `HTTP ${response.status}: ${response.statusText}` };
+        }
+      }
+    }
 
     // If response is not ok, throw error with message from API
     if (!response.ok) {
       const errorMessage = data.message || `HTTP ${response.status}: ${response.statusText}`;
       throw new Error(errorMessage);
     }
-    
+
     return data;
   } catch (error) {
     console.error('API request failed:', error);

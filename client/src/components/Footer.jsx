@@ -63,7 +63,7 @@ const Footer = () => {
               Legal
             </h3>
             <p className="text-text-muted text-sm">
-              This platform is for entertainment purposes only. No real money gambling is offered. All balances are virtual.
+              This platform is for entertainment purposes only. No real money gambling is offered. All credits are virtual.
             </p>
           </div>
         </div>

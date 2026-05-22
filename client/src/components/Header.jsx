@@ -116,7 +116,7 @@ const Header = () => {
               {isAuthenticated ? (
                 <>
                   <NavLink to="/profile" className={desktopLinkClass}>
-                    {user ? user.username : 'Profile'}
+                    Profile
                   </NavLink>
                   {user && user.role === 'admin' && (
                     <NavLink to="/admin/dashboard" className={desktopLinkClass}>

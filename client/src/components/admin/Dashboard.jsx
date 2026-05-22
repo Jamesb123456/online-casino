@@ -130,7 +130,7 @@ const Dashboard = () => {
         <div className="bg-gradient-to-br from-red-600 to-red-800 rounded-xl p-6 shadow-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-white text-sm font-medium">Alerts</p>
+              <p className="text-white text-sm font-medium">Notifications</p>
               <p className="text-white text-2xl font-bold">{stats.alerts?.length ?? 0}</p>
               <p className="text-red-200 text-xs">Requiring attention</p>
             </div>

@@ -132,7 +132,7 @@ const GameAnalytics = () => {
           <AnalyticsBarChart
             data={barData}
             xKey="game"
-            bars={[{ dataKey: 'houseProfit', color: '#F59E0B', name: 'House Profit' }]}
+            bars={[{ dataKey: 'houseProfit', color: '#F59E0B', name: 'Profit' }]}
             height={300}
             yAxisFormatter={(v) => `$${v}`}
             tooltipFormatter={formatCurrency}
@@ -194,7 +194,7 @@ const GameAnalytics = () => {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-text-muted">House Edge</p>
+                        <p className="text-xs text-text-muted">Edge %</p>
                         <p className="text-sm font-semibold text-text-primary">
                           {formatPercent(game.houseEdge)}
                         </p>

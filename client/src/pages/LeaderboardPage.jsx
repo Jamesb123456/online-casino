@@ -174,7 +174,7 @@ const LeaderboardPage = () => {
 
         {/* Info text */}
         <p className="text-center text-text-muted text-sm mt-4">
-          Leaderboard updates in real time. Only active players are shown.
+          Leaderboard updates in real time. Only active accounts are shown.
         </p>
       </div>
     </MainLayout>

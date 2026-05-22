@@ -153,7 +153,7 @@ const VerifyPage = () => {
                     >
                       <option value="crash">Crash</option>
                       <option value="roulette">Roulette</option>
-                      <option value="generic">Generic (Raw Result)</option>
+                      <option value="generic">Generic (Raw Output)</option>
                     </select>
                   </div>
                 </div>

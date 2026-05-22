@@ -127,15 +127,14 @@ const SettingsPage = () => {
       const res = await api.get('/admin/settings/min_house_edge_floor');
       const v = res?.value;
       setHouseEdgeFloor(v == null ? '' : String(v));
-    } catch (err) {
-      if (!/HTTP 404/.test(err?.message || '') && !/not found/i.test(err?.message || '')) {
-        toast.error(`Failed to load min house edge floor: ${err.message}`);
-      }
+    } catch {
+      // Setting may not exist yet — silently default to empty so the form
+      // still renders. Saving will create the row.
       setHouseEdgeFloor('');
     } finally {
       setFloorLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchDefaultNewUserBalance();

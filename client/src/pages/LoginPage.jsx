@@ -60,7 +60,7 @@ const LoginPage = () => {
               <h1 className="text-3xl font-heading font-bold text-text-primary mb-1">
                 <span className="text-gold-gradient">Platinum</span> Casino
               </h1>
-              <p className="text-text-muted text-sm">Sign in to your account</p>
+              <p className="text-text-muted text-sm">Welcome back to your account</p>
             </div>
 
             {/* Error message */}

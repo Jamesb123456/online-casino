@@ -371,7 +371,7 @@ const TournamentsAdminPage = () => {
 
               <div>
                 <Button type="submit" variant="primary" disabled={submitting} data-testid="create-submit-btn">
-                  {submitting ? 'Creating...' : 'Create tournament'}
+                  {submitting ? 'Creating...' : 'Submit'}
                 </Button>
               </div>
             </form>

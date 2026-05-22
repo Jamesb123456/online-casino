@@ -145,7 +145,7 @@ const RewardsPage = () => {
 
       <div className="max-w-5xl mx-auto">
         <h1 className="text-3xl font-heading font-bold text-text-primary mb-2">Daily Rewards</h1>
-        <p className="text-text-secondary mb-8">Claim your daily bonus and track your reward history</p>
+        <p className="text-text-secondary mb-8">Claim your daily bonus and view past claims below</p>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Daily Reward Card */}

@@ -72,7 +72,8 @@ test.describe('Responsible Gaming', () => {
   });
 
   test('activity-summary API requires authentication', async () => {
-    const apiContext = await request.newContext({ baseURL: API_BASE });
+    // Use storageState: undefined so the request context has no cookies.
+    const apiContext = await request.newContext({ baseURL: API_BASE, storageState: undefined });
     const res = await apiContext.get('/api/responsible-gaming/activity-summary');
     // Should be 401 without auth cookies
     expect(res.status()).toBe(401);
@@ -80,7 +81,7 @@ test.describe('Responsible Gaming', () => {
   });
 
   test('users/me/limits API requires authentication', async () => {
-    const apiContext = await request.newContext({ baseURL: API_BASE });
+    const apiContext = await request.newContext({ baseURL: API_BASE, storageState: undefined });
     const res = await apiContext.get('/api/users/me/limits');
     expect(res.status()).toBe(401);
     await apiContext.dispose();

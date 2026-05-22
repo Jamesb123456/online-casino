@@ -1,0 +1,18 @@
+# Local-test override: expose server + client to the host directly so you can
+# verify the prod stack without owning a public domain. Caddy is intentionally
+# excluded when you use this override (don't `up caddy`).
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.local.yml \
+#     --env-file .env.production up -d db server client
+#
+# Access:
+#   Client  -> http://localhost:8080
+#   Server  -> http://localhost:5005  (direct, mainly for /health probes)
+services:
+  server:
+    ports:
+      - "5005:5000"
+  client:
+    ports:
+      - "8080:80"

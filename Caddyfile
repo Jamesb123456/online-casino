@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Platinum Casino - Caddy reverse proxy / TLS terminator
+#
+# Caddy provisions and renews TLS certificates from Let's Encrypt
+# automatically. Set the domain and operator email via env vars in
+# .env.production (loaded by docker-compose.prod.yml):
+#
+#   DOMAIN=mycasino.example.com
+#   ADMIN_EMAIL=ops@example.com
+#
+# To test cert issuance without burning the LE rate limit, uncomment the
+# `acme_ca` line in the global block to point at the staging directory.
+# ---------------------------------------------------------------------------
+
+{
+	email {$ADMIN_EMAIL}
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMAIN}, www.{$DOMAIN} {
+	encode zstd gzip
+
+	# Long-lived HSTS. Only enable `preload` once you are sure the domain
+	# will stay HTTPS-only - it is hard to undo.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options    "nosniff"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		# Remove headers that might leak implementation details
+		-Server
+	}
+
+	# API
+	handle /api/* {
+		reverse_proxy server:5000
+	}
+
+	# Socket.IO - Caddy handles the WebSocket upgrade automatically when the
+	# upstream responds with 101 Switching Protocols.
+	handle /socket.io/* {
+		reverse_proxy server:5000
+	}
+
+	# Everything else is the React SPA served by the client (nginx) container.
+	handle {
+		reverse_proxy client:80
+	}
+}

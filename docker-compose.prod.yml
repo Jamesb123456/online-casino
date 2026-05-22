@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# Platinum Casino - production stack
+#
+# Bring up:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# - MySQL is NOT exposed to the host. The app reaches it on the docker network.
+# - The server and SPA are NOT exposed to the host. Caddy fronts both and
+#   terminates TLS.
+# - Caddy stores LE certs in the `caddy_data` named volume - DO NOT delete
+#   that volume or you will re-issue certs and risk rate limits.
+# ---------------------------------------------------------------------------
+
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      ${MYSQL_DATABASE}
+      MYSQL_USER:          ${MYSQL_USER}
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data_prod:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # intentionally no `ports:` - DB is reachable only via the compose network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV:            production
+      PORT:                5000
+      DATABASE_URL:        ${DATABASE_URL}
+      BETTER_AUTH_SECRET:  ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL:     ${BETTER_AUTH_URL}
+      CLIENT_URL:          ${CLIENT_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "5000"
+    # no host port mapping - Caddy reaches us via the compose network
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_CURRENCY_NAME: ${VITE_CURRENCY_NAME:-Credits}
+        VITE_API_URL:       ${VITE_API_URL:-/api}
+        VITE_SOCKET_URL:    ${VITE_SOCKET_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - server
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN:      ${DOMAIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+      - client
+
+volumes:
+  mysql_data_prod:
+  caddy_data:
+  caddy_config:

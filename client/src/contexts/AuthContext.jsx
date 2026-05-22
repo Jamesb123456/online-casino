@@ -33,7 +33,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: session, error: sessionError } = await authClient.getSession();
+        // disableCookieCache: true forces a DB-backed session check so that
+        // a stale session_data cookie (e.g. after a signOut that was cancelled
+        // mid-flight by an immediate navigation) cannot keep the user logged
+        // in. The session_token cookie is still required for auth — but if
+        // the underlying DB session was deleted by a signOut, this verifies.
+        const { data: session, error: sessionError } = await authClient.getSession({
+          query: { disableCookieCache: true },
+        });
         if (session?.user && !sessionError) {
           // Fetch full user data including balance from our API
           try {

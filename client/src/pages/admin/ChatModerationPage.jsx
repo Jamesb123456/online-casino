@@ -275,7 +275,7 @@ const ChatModerationPage = () => {
           className="bg-bg-card rounded-xl p-6 shadow-card border border-border"
           data-testid="chat-mutes-card"
         >
-          <h2 className="text-xl font-semibold text-text-primary mb-4">Active mutes</h2>
+          <h2 className="text-xl font-semibold text-text-primary mb-4" data-testid="active-mutes-heading">Active mutes</h2>
           {mutesLoading ? (
             <div className="flex justify-center py-10">
               <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-accent-gold" />

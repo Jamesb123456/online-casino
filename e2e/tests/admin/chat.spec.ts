@@ -59,7 +59,7 @@ test.describe('Admin Chat Moderation', () => {
 
     const mutesCard = page.locator('[data-testid="chat-mutes-card"]');
     await expect(mutesCard).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Active mutes')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('active-mutes-heading')).toBeVisible({ timeout: 10_000 });
   });
 
   test('mute form is rendered for admin', async ({ page }) => {

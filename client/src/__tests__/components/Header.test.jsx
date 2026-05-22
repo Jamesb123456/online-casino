@@ -114,7 +114,8 @@ describe('Header', () => {
       renderHeader({ isAuthenticated: false });
 
       // Balance display should not be present
-      expect(screen.queryByText('1,000')).not.toBeInTheDocument();
+      expect(screen.queryByText('1,000.00')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('header-balance')).not.toBeInTheDocument();
     });
   });
 
@@ -141,8 +142,8 @@ describe('Header', () => {
         isAuthenticated: true,
       });
 
-      // Balance should be displayed (formatted with toLocaleString)
-      const balanceElements = screen.getAllByText('1,500');
+      // AnimatedBalance formats with 2 decimals via toLocaleString
+      const balanceElements = screen.getAllByText('1,500.00');
       expect(balanceElements.length).toBeGreaterThan(0);
     });
 
@@ -237,13 +238,13 @@ describe('Header', () => {
   });
 
   describe('Balance formatting', () => {
-    it('shows "0" balance when user has no balance', () => {
+    it('shows "0.00" balance when user has no balance', () => {
       renderHeader({
         user: { id: 1, username: 'broke', role: 'user', balance: 0 },
         isAuthenticated: true,
       });
 
-      const balanceElements = screen.getAllByText('0');
+      const balanceElements = screen.getAllByText('0.00');
       expect(balanceElements.length).toBeGreaterThan(0);
     });
   });

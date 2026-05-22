@@ -55,6 +55,12 @@ vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
 }));
 
+// WinBurst fires canvas-confetti which leaks rAF callbacks past test teardown
+// in jsdom. Stub it out so we test behaviour, not the celebration internals.
+vi.mock('@/components/casino/WinBurst', () => ({
+  useWinBurst: () => ({ burst: vi.fn(), WinBurst: () => null }),
+}));
+
 vi.mock('@/contexts/AudioContext', () => ({
   useAudio: () => ({
     play: playSpy,

@@ -18,7 +18,10 @@ vi.mock('@/games/roulette/rouletteUtils', () => ({
     { number: 0, color: 'green' },
     { number: 1, color: 'red' },
     { number: 2, color: 'black' },
-    { number: 7, color: 'red' },
+    ...Array.from({ length: 34 }, (_, i) => ({
+      number: i + 3,
+      color: (i + 3) % 2 === 0 ? 'black' : 'red',
+    })),
   ],
 }));
 
@@ -42,34 +45,34 @@ describe('RouletteBettingPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('renders bet input and Place Bet button', () => {
+  it('renders the felt bet board with outside bets', () => {
     renderPanel();
     expect(screen.getByLabelText(/Bet Amount/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Place Bet/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Place bet on Red/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Place bet on Black/i })).toBeInTheDocument();
   });
 
-  it('calls setBetAmount with the parsed numeric value', () => {
+  it('calls setBetAmount when the chip-value input changes', () => {
     const { props } = renderPanel();
     fireEvent.change(screen.getByLabelText(/Bet Amount/i), { target: { value: '75' } });
     expect(props.setBetAmount).toHaveBeenCalledWith(75);
   });
 
-  it('coerces NaN bet input to 0', () => {
+  it('coerces NaN chip input to 0', () => {
     const { props } = renderPanel();
     fireEvent.change(screen.getByLabelText(/Bet Amount/i), { target: { value: '' } });
     expect(props.setBetAmount).toHaveBeenCalledWith(0);
   });
 
-  it('disables inputs and presets while spinning', () => {
+  it('disables board cells and chip presets while spinning', () => {
     renderPanel({ isSpinning: true });
     expect(screen.getByLabelText(/Bet Amount/i)).toBeDisabled();
-    expect(screen.getByRole('button', { name: '25' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Wheel Spinning/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Place bet on Red/i })).toBeDisabled();
   });
 
-  it('emits onPlaceBet with the default straight bet (number 0)', () => {
+  it('emits onPlaceBet for a straight bet when clicking the 0 cell', () => {
     const { props } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Place Bet/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on 0/i }));
     expect(props.onPlaceBet).toHaveBeenCalledWith({
       type: 'STRAIGHT',
       value: '0',
@@ -77,11 +80,9 @@ describe('RouletteBettingPanel', () => {
     });
   });
 
-  it('emits onPlaceBet with a different straight number when selected', () => {
+  it('emits onPlaceBet for a straight number cell', () => {
     const { props } = renderPanel();
-    // Select number 7 from the number grid
-    fireEvent.click(screen.getByRole('button', { name: '7' }));
-    fireEvent.click(screen.getByRole('button', { name: /Place Bet/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on 7/i }));
     expect(props.onPlaceBet).toHaveBeenCalledWith({
       type: 'STRAIGHT',
       value: '7',
@@ -91,23 +92,29 @@ describe('RouletteBettingPanel', () => {
 
   it('emits onPlaceBet with bet type RED for outside bets', () => {
     const { props } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Red/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Place Bet/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
     expect(props.onPlaceBet).toHaveBeenCalledWith(expect.objectContaining({
       type: 'RED',
       amount: 10,
     }));
   });
 
-  it('does not emit onPlaceBet when betAmount is 0 or negative', () => {
+  it('does not emit onPlaceBet when betAmount is 0', () => {
     const { props } = renderPanel({ betAmount: 0 });
-    fireEvent.click(screen.getByRole('button', { name: /Place Bet/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
     expect(props.onPlaceBet).not.toHaveBeenCalled();
   });
 
   it('does not emit onPlaceBet while spinning', () => {
     const { props } = renderPanel({ isSpinning: true });
-    fireEvent.click(screen.getByRole('button', { name: /Wheel Spinning/i }));
+    // Cell is disabled — clicking should be a no-op.
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
+    expect(props.onPlaceBet).not.toHaveBeenCalled();
+  });
+
+  it('does not emit onPlaceBet when bet amount exceeds balance', () => {
+    const { props } = renderPanel({ betAmount: 1000, balance: 50 });
+    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
     expect(props.onPlaceBet).not.toHaveBeenCalled();
   });
 });

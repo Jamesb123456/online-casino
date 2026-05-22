@@ -48,6 +48,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+vi.mock('@/components/casino/WinBurst', () => ({
+  useWinBurst: () => ({ burst: vi.fn(), WinBurst: () => null }),
+}));
+
 vi.mock('@/contexts/AudioContext', () => ({
   useAudio: () => ({
     play: vi.fn(),
@@ -91,7 +95,8 @@ describe('DiceBettingPanel (DiceGame betting controls)', () => {
     renderGame();
     const input = screen.getByLabelText(/Bet amount/i);
     fireEvent.change(input, { target: { value: '50' } });
-    expect(input.value).toBe('50');
+    // BetPanel formats the value to two decimals.
+    expect(Number(input.value)).toBe(50);
   });
 
   it('emits the correct socket payload on roll click', () => {

@@ -1,130 +1,87 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import React from 'react';
 
-vi.mock('@/games/plinko/plinkoUtils', () => ({
-  getPlinkoRows: () => 4, // small board for predictable physics path
-  getNumberOfBuckets: (rows) => rows + 1,
-  formatMultiplier: (m) => `${Number(m).toFixed(2)}x`,
-  getMultiplierColor: () => '#ffffff',
+// Mock the PixiStage so we never touch real WebGL in jsdom. The stub just
+// renders the wrapper div with the expected aria-label so behavioural checks
+// can find it.
+vi.mock('@/games/_shared/PixiStage', () => ({
+  default: ({ ariaLabel = 'Game canvas', className = '' }) => (
+    <div role="img" aria-label={ariaLabel} className={className} data-testid="pixi-stage" />
+  ),
 }));
 
-let rafCallbacks = [];
+// Stub pixi.js + matter-js so importing them never blows up in jsdom.
+vi.mock('pixi.js', () => ({
+  Application: vi.fn(),
+  Container: vi.fn(),
+  Graphics: vi.fn(),
+  Text: vi.fn(),
+}));
+
+vi.mock('matter-js', () => ({
+  default: {
+    Engine: { create: vi.fn(), update: vi.fn(), clear: vi.fn() },
+    World: { add: vi.fn(), remove: vi.fn(), clear: vi.fn() },
+    Bodies: { circle: vi.fn(), rectangle: vi.fn() },
+    Body: { setVelocity: vi.fn() },
+    Events: { on: vi.fn(), off: vi.fn() },
+  },
+}));
+
+vi.mock('gsap', () => ({
+  default: { fromTo: vi.fn(), to: vi.fn() },
+}));
+
+vi.mock('@/games/plinko/plinkoUtils', () => ({
+  getPlinkoRows: () => 4,
+  getNumberOfBuckets: (rows) => rows + 1,
+  formatMultiplier: (m) => `${Number(m).toFixed(2)}x`,
+  getMultiplierColor: () => 'rgb(124, 58, 237)',
+  getPlinkoMultipliers: () => [0.5, 1, 2, 5, 0.5],
+}));
+
 beforeEach(() => {
-  vi.useFakeTimers();
-  rafCallbacks = [];
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
-    clearRect: vi.fn(),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    arc: vi.fn(),
-    closePath: vi.fn(),
-    stroke: vi.fn(),
-    fill: vi.fn(),
-    fillRect: vi.fn(),
-    strokeRect: vi.fn(),
-    fillText: vi.fn(),
-    measureText: vi.fn(() => ({ width: 0 })),
-    save: vi.fn(),
-    restore: vi.fn(),
-    translate: vi.fn(),
-    rotate: vi.fn(),
-    canvas: { width: 600, height: 500 },
-    shadowColor: '',
-    shadowBlur: 0,
-    fillStyle: '',
-    strokeStyle: '',
-    lineWidth: 1,
-    font: '',
-    textAlign: '',
-    textBaseline: '',
-  }));
-  // Capture but do not execute rAF callbacks automatically to control loop length.
-  vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-    rafCallbacks.push(cb);
-    return rafCallbacks.length;
-  });
-  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
-  // Silence the console.log/.error/.warn used during animation lifecycle.
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 import PlinkoBoard from '@/games/plinko/PlinkoBoard';
 
 describe('PlinkoBoard', () => {
-  it('renders an accessible canvas', () => {
+  it('renders an accessible canvas stage', () => {
     render(<PlinkoBoard multipliers={[1, 2, 3, 4, 5]} />);
-    const canvas = screen.getByRole('img', { name: /Plinko game board/i });
-    expect(canvas).toBeInTheDocument();
-    expect(canvas.tagName).toBe('CANVAS');
+    const stage = screen.getByRole('img', { name: /Plinko board/i });
+    expect(stage).toBeInTheDocument();
   });
 
   it('renders without multipliers and without animation path', () => {
     render(<PlinkoBoard />);
-    expect(screen.getByRole('img')).toBeInTheDocument();
+    expect(screen.getByTestId('pixi-stage')).toBeInTheDocument();
   });
 
-  // Skipped: PlinkoBoard.jsx has a pre-existing bug (line 121 references
-  // `animateBall` which is not in scope — only `animateBallRef.current` is
-  // defined). This is the same `animateBall is not defined` lint error
-  // documented in Phase D-10. Pre-existing on main; not a Phase D regression.
-  it.skip('initializes animation when an animationPath is provided', () => {
+  it('accepts an animationPath prop without throwing', () => {
     const path = [0, 1, 0, 1];
-    render(<PlinkoBoard multipliers={[1, 2, 3, 4, 5]} animationPath={path} />);
-
-    // Flush the 200ms and 500ms delayed setTimeouts that schedule rAF.
-    act(() => {
-      vi.advanceTimersByTime(600);
-    });
-
-    // The animateBall ref render should have been invoked at least once.
-    expect(rafCallbacks.length).toBeGreaterThanOrEqual(1);
+    expect(() =>
+      render(
+        <PlinkoBoard
+          multipliers={[1, 2, 3, 4, 5]}
+          animationPath={path}
+          onAnimationComplete={() => {}}
+        />,
+      ),
+    ).not.toThrow();
   });
 
-  // Skipped: same pre-existing PlinkoBoard `animateBall is not defined` bug.
-  it.skip('runs the animation loop until the ball reaches the bottom and reports a bucket', () => {
-    const onAnimationComplete = vi.fn();
-    const path = [0, 1, 0, 1];
-    render(
-      <PlinkoBoard
-        multipliers={[1, 2, 3, 4, 5]}
-        animationPath={path}
-        onAnimationComplete={onAnimationComplete}
-      />,
-    );
-
-    // Trigger scheduled timeouts.
-    act(() => {
-      vi.advanceTimersByTime(600);
-    });
-
-    // Manually crank the animation by invoking captured rAF callbacks until
-    // animation completes or we hit a safety limit.
-    let safety = 5000;
-    while (rafCallbacks.length > 0 && safety-- > 0) {
-      const cb = rafCallbacks.shift();
-      act(() => {
-        cb && cb();
-      });
-      if (onAnimationComplete.mock.calls.length > 0) break;
-    }
-    expect(onAnimationComplete).toHaveBeenCalled();
-  });
-
-  it('cleans up animation on unmount', () => {
+  it('cleans up on unmount', () => {
     const { unmount } = render(
       <PlinkoBoard multipliers={[1, 2, 3, 4, 5]} animationPath={[0, 1, 0, 1]} />,
     );
-    unmount();
-    // Should not throw
-    expect(true).toBe(true);
+    expect(() => unmount()).not.toThrow();
   });
 });

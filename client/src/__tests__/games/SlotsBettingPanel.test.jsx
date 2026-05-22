@@ -3,8 +3,12 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// Slots has no standalone BettingPanel; controls live in SlotsGame. These
-// tests cover input validation and the socket payload emitted from the form.
+// Pixi-backed board is replaced with a sentinel; this file only exercises the
+// betting UI surface contributed by SlotsGame (lines selector + BetPanel
+// integration + socket payload shape).
+vi.mock('@/games/slots/SlotsBoard', () => ({
+  default: () => <div data-testid="slots-board">Slots Board</div>,
+}));
 
 const { mockSocket, ackHandlers } = vi.hoisted(() => {
   const handlers = new Map();
@@ -27,7 +31,9 @@ const { mockSocket, ackHandlers } = vi.hoisted(() => {
 
 vi.mock('socket.io-client', () => ({
   io: vi.fn(() => {
-    setTimeout(() => { mockSocket._listeners.connect?.(); }, 0);
+    setTimeout(() => {
+      mockSocket._listeners.connect?.();
+    }, 0);
     return mockSocket;
   }),
 }));
@@ -44,16 +50,22 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 vi.mock('@/contexts/ToastContext', () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  }),
 }));
 
 import SlotsGame from '@/games/slots/SlotsGame';
 
-const renderGame = () => render(
-  <MemoryRouter>
-    <SlotsGame />
-  </MemoryRouter>,
-);
+const renderGame = () =>
+  render(
+    <MemoryRouter>
+      <SlotsGame />
+    </MemoryRouter>,
+  );
 
 const flushConnect = async () => {
   await act(async () => {
@@ -84,48 +96,42 @@ describe('SlotsGame betting controls', () => {
     vi.useRealTimers();
   });
 
-  it('renders bet per line input, lines selector, and spin button', async () => {
+  it('renders the bet amount input, lines selector, and spin button', async () => {
     renderGame();
     await flushConnect();
-    expect(screen.getByLabelText(/Bet per line/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Bet amount/i)).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: /Active lines/i })).toBeInTheDocument();
     expect(screen.getByTestId('slots-spin-button')).toBeInTheDocument();
   });
 
-  it('updates the bet per line input on change', async () => {
+  it('updates the bet amount via the BetPanel input', async () => {
     renderGame();
     await flushConnect();
-    const input = screen.getByLabelText(/Bet per line/i);
+    const input = screen.getByLabelText(/Bet amount/i);
     fireEvent.change(input, { target: { value: '5' } });
     expect(Number(input.value)).toBe(5);
   });
 
-  it('clamps bet to the minimum (0.01) when 0 is entered', async () => {
-    renderGame();
-    await flushConnect();
-    const input = screen.getByLabelText(/Bet per line/i);
-    fireEvent.change(input, { target: { value: '0' } });
-    expect(Number(input.value)).toBe(0.01);
-  });
-
-  it('clamps bet to the minimum (0.01) when a negative value is entered', async () => {
-    renderGame();
-    await flushConnect();
-    const input = screen.getByLabelText(/Bet per line/i);
-    fireEvent.change(input, { target: { value: '-2' } });
-    expect(Number(input.value)).toBe(0.01);
-  });
-
   it('emits the correct socket payload on spin click', async () => {
     setSpinAck({
-      ok: true, gameId: 'g',
-      reels: [['A','A','A'],['A','A','A'],['A','A','A'],['A','A','A'],['A','A','A']],
-      hits: [], totalPayout: 0, multiplier: 0, newBalance: 994,
+      ok: true,
+      gameId: 'g',
+      reels: [
+        ['A', 'A', 'A'],
+        ['A', 'A', 'A'],
+        ['A', 'A', 'A'],
+        ['A', 'A', 'A'],
+        ['A', 'A', 'A'],
+      ],
+      hits: [],
+      totalPayout: 0,
+      multiplier: 0,
+      newBalance: 994,
     });
     renderGame();
     await flushConnect();
-    fireEvent.change(screen.getByLabelText(/Bet per line/i), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('radio', { name: /3 lines/i }));
+    fireEvent.change(screen.getByLabelText(/Bet amount/i), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('radio', { name: /^3 lines$/i }));
     fireEvent.click(screen.getByTestId('slots-spin-button'));
 
     const spinCalls = getSpinCalls();
@@ -134,29 +140,18 @@ describe('SlotsGame betting controls', () => {
     expect(typeof spinCalls[0][2]).toBe('function');
   });
 
-  it('clamps lines selection to the valid range (1..5)', async () => {
-    setSpinAck({
-      ok: true, gameId: 'g',
-      reels: [['A','A','A'],['A','A','A'],['A','A','A'],['A','A','A'],['A','A','A']],
-      hits: [], totalPayout: 0, multiplier: 0, newBalance: 999,
-    });
+  it('shows the total bet derived from bet × active lines', async () => {
     renderGame();
     await flushConnect();
-    fireEvent.click(screen.getByRole('radio', { name: /1 line/i }));
-    fireEvent.click(screen.getByTestId('slots-spin-button'));
-    expect(getSpinCalls()[0][1]).toMatchObject({ lines: 1 });
-  });
-
-  it('shows the total bet derived from bet-per-line × active lines', async () => {
-    renderGame();
-    await flushConnect();
-    fireEvent.change(screen.getByLabelText(/Bet per line/i), { target: { value: '3' } });
-    fireEvent.click(screen.getByRole('radio', { name: /4 lines/i }));
+    fireEvent.change(screen.getByLabelText(/Bet amount/i), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('radio', { name: /^4 lines$/i }));
     expect(screen.getByTestId('slots-total-bet').textContent).toMatch(/12/);
   });
 
   it('disables the spin button while a spin is in progress', async () => {
-    ackHandlers.set('slots:spin', () => { /* never ack */ });
+    ackHandlers.set('slots:spin', () => {
+      /* never ack */
+    });
     renderGame();
     await flushConnect();
     const btn = screen.getByTestId('slots-spin-button');

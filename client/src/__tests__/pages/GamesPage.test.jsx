@@ -50,7 +50,7 @@ describe('GamesPage', () => {
   it('should link to correct game routes', () => {
     renderPage();
     const playButtons = screen.getAllByText(/play now/i);
-    expect(playButtons).toHaveLength(6);
+    expect(playButtons).toHaveLength(8);
 
     const links = playButtons.map(btn => btn.closest('a'));
     const hrefs = links.map(link => link?.getAttribute('href'));
@@ -60,6 +60,8 @@ describe('GamesPage', () => {
     expect(hrefs).toContain('/games/roulette');
     expect(hrefs).toContain('/games/blackjack');
     expect(hrefs).toContain('/games/landmines');
+    expect(hrefs).toContain('/games/dice');
+    expect(hrefs).toContain('/games/slots');
   });
 
   it('should render virtual currency notice', () => {

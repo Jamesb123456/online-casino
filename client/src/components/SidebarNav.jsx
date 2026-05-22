@@ -1,5 +1,6 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 // Game data with colors matching the design system game tokens
 const casinoGames = [
@@ -21,15 +22,47 @@ const supportLinks = [
   { path: '/responsible-gaming', label: 'Responsible Gaming', icon: ShieldIcon },
 ];
 
-// NavLink style helper
-const linkClass = ({ isActive }) =>
-  `flex items-center gap-3 px-4 py-2 text-sm rounded-r-lg transition-colors duration-200 ${
-    isActive
-      ? 'bg-accent-gold/10 text-accent-gold border-l-2 border-accent-gold'
-      : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated border-l-2 border-transparent'
-  }`;
+/**
+ * SidebarLink — wraps NavLink to render a Framer Motion morphing pill behind
+ * the active route. Uses a shared layoutId so the pill smoothly transitions
+ * between sections as the route changes.
+ */
+function SidebarLink({ to, end = false, children }) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) =>
+        `relative flex items-center gap-3 px-4 py-2 text-sm rounded-r-lg cursor-pointer transition-colors duration-200 ${
+          isActive
+            ? 'text-accent-gold'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span
+              layoutId="sidebar-active"
+              aria-hidden="true"
+              className="absolute inset-0 -z-0 rounded-r-lg bg-accent-gold/10 border-l-2 border-accent-gold"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <span className="relative z-10 flex items-center gap-3 w-full">
+            {children}
+          </span>
+        </>
+      )}
+    </NavLink>
+  );
+}
 
 const SidebarNav = () => {
+  // useLocation subscription keeps Framer's layoutId state in sync with route changes
+  useLocation();
+
   return (
     <aside
       className="fixed left-0 top-16 bottom-0 w-64 bg-bg-card/80 backdrop-blur-xl border-r border-border overflow-y-auto hidden lg:block"
@@ -44,13 +77,13 @@ const SidebarNav = () => {
           </p>
           <nav className="space-y-0.5" aria-label="Casino games">
             {casinoGames.map((game) => (
-              <NavLink key={game.path} to={game.path} className={linkClass}>
+              <SidebarLink key={game.path} to={game.path}>
                 <span
                   className={`w-2 h-2 rounded-full ${game.color} shrink-0`}
                   aria-hidden="true"
                 />
                 <span>{game.label}</span>
-              </NavLink>
+              </SidebarLink>
             ))}
           </nav>
         </div>
@@ -62,10 +95,10 @@ const SidebarNav = () => {
           </p>
           <nav className="space-y-0.5" aria-label="Account">
             {accountLinks.map((link) => (
-              <NavLink key={link.path} to={link.path} className={linkClass}>
+              <SidebarLink key={link.path} to={link.path}>
                 <link.icon />
                 <span>{link.label}</span>
-              </NavLink>
+              </SidebarLink>
             ))}
           </nav>
         </div>
@@ -77,10 +110,10 @@ const SidebarNav = () => {
           </p>
           <nav className="space-y-0.5" aria-label="Support">
             {supportLinks.map((link) => (
-              <NavLink key={link.path} to={link.path} className={linkClass}>
+              <SidebarLink key={link.path} to={link.path}>
                 <link.icon />
                 <span>{link.label}</span>
-              </NavLink>
+              </SidebarLink>
             ))}
           </nav>
         </div>

@@ -1,96 +1,247 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// Mock socket service — event listener methods must return unsubscribe functions
-vi.mock('@/services/socket/blackjackSocketService', () => {
-  const noop = () => {};
-  return {
-    default: {
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      onGameStarted: vi.fn(() => noop),
-      onCardDealt: vi.fn(() => noop),
-      onPlayerTurn: vi.fn(() => noop),
-      onDealerTurn: vi.fn(() => noop),
-      onGameResult: vi.fn(() => noop),
-      onBalanceUpdate: vi.fn(() => noop),
-      onError: vi.fn(() => noop),
-      placeBet: vi.fn(),
-      hit: vi.fn(),
-      stand: vi.fn(),
-      doubleDown: vi.fn(),
-    },
+// Capture events passed to useGameSocket and stub emit + status.
+const emitMock = vi.fn();
+let capturedEvents = {};
+
+vi.mock('@/games/_shared/useGameSocket', () => {
+  // Hook signature is (gameType, { events }).
+  const impl = (_gameType, options = {}) => {
+    const events = (options && options.events) || {};
+    capturedEvents = events;
+    return {
+      socket: null,
+      status: 'connected',
+      lastError: null,
+      serverSeedHash: 'abc123',
+      emit: emitMock,
+    };
   };
+  return { __esModule: true, default: impl, useGameSocket: impl };
 });
 
-vi.mock('@/contexts/AuthContext', () => ({
-  AuthContext: React.createContext({
-    user: { id: 1, username: 'testuser', balance: 1000 },
-    updateBalance: vi.fn(),
+vi.mock('@/contexts/AudioContext', () => ({
+  useAudio: () => ({
+    play: vi.fn(),
+    stop: vi.fn(),
+    stopAmbient: vi.fn(),
+    startAmbient: vi.fn(),
+    SFX: { BET: 'bet', WIN: 'win', LOSS: 'loss', BIG_WIN: 'big_win' },
   }),
+  AudioContext: React.createContext({}),
+  AudioProvider: ({ children }) => children,
 }));
 
-// Mock child components
-vi.mock('@/games/blackjack/BlackjackTable', () => ({
-  default: ({ playerHand, dealerHand }) => (
-    <div data-testid="blackjack-table">
-      <div data-testid="player-hand">Player: {playerHand?.length || 0} cards</div>
-      <div data-testid="dealer-hand">Dealer: {dealerHand?.length || 0} cards</div>
+vi.mock('@/hooks/useAuth', () => {
+  const value = {
+    user: { id: 1, username: 'testuser', balance: 1000 },
+    isAuthenticated: true,
+    updateBalance: vi.fn(),
+  };
+  return { useAuth: () => value, default: () => value };
+});
+
+// Canvas-confetti has no real backend under jsdom — neuter it so result banner
+// reveals don't try to allocate a particle canvas.
+vi.mock('canvas-confetti', () => {
+  const fn = vi.fn();
+  fn.reset = vi.fn();
+  return { __esModule: true, default: fn };
+});
+
+vi.mock('@/games/blackjack/BlackjackHand', () => ({
+  default: ({ hand = [], isDealer, hideHoleCard }) => (
+    <div
+      data-testid={isDealer ? 'dealer-hand' : 'player-hand'}
+      data-hide-hole={hideHoleCard ? 'true' : 'false'}
+    >
+      {hand.length} cards
     </div>
   ),
 }));
 
-vi.mock('@/games/blackjack/BlackjackBettingPanel', () => ({
-  default: ({ onPlaceBet, userBalance }) => (
-    <div data-testid="blackjack-betting-panel">
-      <span data-testid="balance">Balance: {userBalance}</span>
-      <button data-testid="place-bet" onClick={() => onPlaceBet?.(100)}>Place Bet</button>
-    </div>
-  ),
-}));
+vi.mock('@/components/games/RulesButton', () => ({ default: () => null }));
 
 import BlackjackGame from '@/games/blackjack/BlackjackGame';
 
-describe('BlackjackGame', () => {
+const renderGame = () =>
+  render(
+    <MemoryRouter>
+      <BlackjackGame />
+    </MemoryRouter>,
+  );
+
+describe('BlackjackGame (shared shell)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    emitMock.mockClear();
+    capturedEvents = {};
   });
 
-  const renderGame = () => {
-    return render(
-      <MemoryRouter>
-        <BlackjackGame />
-      </MemoryRouter>
-    );
-  };
-
-  it('should render without crashing', () => {
+  it('renders without crashing', () => {
     renderGame();
+    expect(screen.getByRole('heading', { name: /Blackjack/i })).toBeInTheDocument();
   });
 
-  it('should render blackjack table', () => {
+  it('renders dealer and player hand slots', () => {
     renderGame();
-    expect(screen.getByTestId('blackjack-table')).toBeInTheDocument();
+    expect(screen.getByTestId('dealer-hand')).toBeInTheDocument();
+    expect(screen.getByTestId('player-hand')).toBeInTheDocument();
   });
 
-  it('should render betting panel', () => {
+  it('shows the Deal CTA in betting phase', () => {
     renderGame();
-    expect(screen.getByTestId('blackjack-betting-panel')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Deal$/i })).toBeInTheDocument();
   });
 
-  it('should display user balance', () => {
+  it('deals cards: emits blackjack_start with the chosen amount', () => {
     renderGame();
-    // Balance is initialized from user.balance in useEffect, but the mock
-    // BettingPanel receives it as a prop. The initial state may be 0 before
-    // the effect runs, so just verify the element exists.
-    expect(screen.getByTestId('balance')).toBeInTheDocument();
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '25' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Deal$/i }));
+    expect(emitMock).toHaveBeenCalledWith('blackjack_start', { betAmount: 25 });
   });
 
-  it('should show initial empty hands', () => {
+  it('hit fetches another card: emits blackjack_hit', () => {
     renderGame();
-    expect(screen.getByTestId('player-hand')).toHaveTextContent('0 cards');
-    expect(screen.getByTestId('dealer-hand')).toHaveTextContent('0 cards');
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_1',
+        playerHand: [
+          { rank: 'A', suit: 'hearts' },
+          { rank: '7', suit: 'spades' },
+        ],
+        dealerHand: [{ rank: 'K', suit: 'clubs' }],
+        playerScore: 18,
+        betAmount: 10,
+        status: 'active',
+        canDouble: true,
+      });
+    });
+    const hitBtn = screen.getByRole('button', { name: /Hit/i });
+    fireEvent.click(hitBtn);
+    expect(emitMock).toHaveBeenCalledWith('blackjack_hit', {});
+  });
+
+  it('stand triggers dealer play: emits blackjack_stand', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_2',
+        playerHand: [
+          { rank: '10', suit: 'hearts' },
+          { rank: '8', suit: 'spades' },
+        ],
+        dealerHand: [{ rank: 'K', suit: 'clubs' }],
+        playerScore: 18,
+        betAmount: 10,
+        status: 'active',
+        canDouble: true,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Stand/i }));
+    expect(emitMock).toHaveBeenCalledWith('blackjack_stand', {});
+  });
+
+  it('double emits blackjack_double when canDouble is true', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_3',
+        playerHand: [
+          { rank: '5', suit: 'hearts' },
+          { rank: '6', suit: 'spades' },
+        ],
+        dealerHand: [{ rank: 'K', suit: 'clubs' }],
+        playerScore: 11,
+        betAmount: 10,
+        status: 'active',
+        canDouble: true,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Double \(D\)/i }));
+    expect(emitMock).toHaveBeenCalledWith('blackjack_double', {});
+  });
+
+  it('disables Double when canDouble is false', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_4',
+        playerHand: [
+          { rank: '5', suit: 'hearts' },
+          { rank: '6', suit: 'spades' },
+          { rank: '3', suit: 'clubs' },
+        ],
+        dealerHand: [{ rank: 'K', suit: 'clubs' }],
+        playerScore: 14,
+        betAmount: 10,
+        status: 'active',
+        canDouble: false,
+      });
+    });
+    expect(screen.getByRole('button', { name: /^Double \(D\)/i })).toBeDisabled();
+  });
+
+  it('keyboard H triggers hit, S triggers stand', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_5',
+        playerHand: [
+          { rank: '8', suit: 'hearts' },
+          { rank: '9', suit: 'spades' },
+        ],
+        dealerHand: [{ rank: 'K', suit: 'clubs' }],
+        playerScore: 17,
+        betAmount: 10,
+        status: 'active',
+        canDouble: true,
+      });
+    });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(emitMock).toHaveBeenCalledWith('blackjack_hit', {});
+    fireEvent.keyDown(window, { key: 's' });
+    expect(emitMock).toHaveBeenCalledWith('blackjack_stand', {});
+  });
+
+  it('shows result banner on completed state', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_game_state?.({
+        gameId: 'bj_6',
+        playerHand: [
+          { rank: 'A', suit: 'hearts' },
+          { rank: 'K', suit: 'spades' },
+        ],
+        dealerHand: [
+          { rank: '10', suit: 'clubs' },
+          { rank: '9', suit: 'clubs' },
+        ],
+        playerScore: 21,
+        dealerScore: 19,
+        betAmount: 10,
+        status: 'completed',
+        result: 'player_win',
+        winAmount: 20,
+      });
+    });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/You Win/i);
+    expect(alert).toHaveTextContent(/20/);
+    expect(screen.getByRole('button', { name: /New Hand/i })).toBeInTheDocument();
+  });
+
+  it('surfaces blackjack_error message via aria-live', () => {
+    renderGame();
+    act(() => {
+      capturedEvents.blackjack_error?.({ message: 'Insufficient balance' });
+    });
+    // The error text is collapsed into the BetControls status string.
+    expect(
+      screen.getByText((content) => /Insufficient balance/i.test(content)),
+    ).toBeInTheDocument();
   });
 });

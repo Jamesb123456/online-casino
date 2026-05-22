@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { FiVolume2, FiVolumeX, FiMenu, FiX } from 'react-icons/fi';
 import { AuthContext } from '../contexts/AuthContext';
+import AnimatedBalance from './casino/AnimatedBalance';
+import { useSound } from './casino/SoundProvider';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -8,12 +12,12 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useContext(AuthContext);
+  const { muted, setMute } = useSound();
 
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
     };
-
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -23,22 +27,18 @@ const Header = () => {
     setIsMenuOpen(false);
   }, [location.pathname]);
 
-  const toggleMenu = () => {
-    setIsMenuOpen((prev) => !prev);
-  };
+  const toggleMenu = () => setIsMenuOpen((prev) => !prev);
 
-  // Handle logout
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
-  // Get user balance from auth context
-  const userBalance = user?.balance?.toLocaleString() || '0';
+  const userBalance = Number.isFinite(user?.balance) ? user.balance : 0;
 
   // Desktop nav link style helper
   const desktopLinkClass = ({ isActive }) =>
-    `px-3 py-2 text-sm font-medium transition-colors duration-200 border-b-2 ${
+    `px-3 py-2 text-sm font-medium transition-colors duration-200 border-b-2 cursor-pointer ${
       isActive
         ? 'text-accent-gold border-accent-gold'
         : 'text-text-secondary hover:text-accent-gold border-transparent'
@@ -46,14 +46,19 @@ const Header = () => {
 
   // Mobile nav link style helper
   const mobileLinkClass = ({ isActive }) =>
-    `block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 ${
+    `block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 cursor-pointer ${
       isActive
         ? 'text-accent-gold bg-accent-gold/10'
         : 'text-text-secondary hover:text-text-primary hover:bg-bg-elevated'
     }`;
 
+  const toggleMute = () => setMute(!muted);
+
   return (
-    <header
+    <motion.header
+      initial={{ y: -16, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className={`fixed top-0 left-0 right-0 z-50 glass border-b border-white/10 transition-shadow duration-300 ${
         scrolled ? 'shadow-card' : ''
       }`}
@@ -61,7 +66,7 @@ const Header = () => {
       <div className="container mx-auto px-4 max-w-7xl">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-1 shrink-0">
+          <Link to="/" className="flex items-center gap-1 shrink-0 cursor-pointer">
             <span className="text-xl font-bold font-heading text-gold-gradient">
               Platinum
             </span>
@@ -86,45 +91,31 @@ const Header = () => {
             </NavLink>
           </nav>
 
-          {/* Right side: balance + auth */}
-          <div className="flex items-center gap-3">
-            {/* Balance display (desktop) */}
+          {/* Right side: balance + mute + auth */}
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Animated balance (desktop) */}
             {isAuthenticated && (
-              <div className="hidden md:flex items-center gap-2 bg-bg-elevated/60 backdrop-blur-sm rounded-full px-4 py-1.5 border border-accent-gold/20">
-                {/* Gold chip icon */}
-                <svg
-                  className="w-5 h-5 text-accent-gold shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
-                  <text
-                    x="12"
-                    y="16"
-                    textAnchor="middle"
-                    fill="currentColor"
-                    fontSize="12"
-                    fontWeight="bold"
-                    fontFamily="sans-serif"
-                  >
-                    $
-                  </text>
-                </svg>
-                <span className="text-accent-gold font-bold font-heading text-sm">
-                  {userBalance}
-                </span>
+              <div className="hidden md:flex" data-testid="header-balance">
+                <AnimatedBalance value={userBalance} currency="$" />
               </div>
             )}
+
+            {/* Sound mute toggle */}
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
+              aria-pressed={muted}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-text-secondary hover:text-accent-gold hover:bg-white/5 transition-colors duration-200 cursor-pointer"
+            >
+              {muted ? <FiVolumeX className="h-5 w-5" aria-hidden="true" /> : <FiVolume2 className="h-5 w-5" aria-hidden="true" />}
+            </button>
 
             {/* Desktop auth buttons */}
             <div className="hidden lg:flex items-center gap-2">
               {isAuthenticated ? (
                 <>
-                  <NavLink
-                    to="/profile"
-                    className={desktopLinkClass}
-                  >
+                  <NavLink to="/profile" className={desktopLinkClass}>
                     {user ? user.username : 'Profile'}
                   </NavLink>
                   {user && user.role === 'admin' && (
@@ -133,8 +124,9 @@ const Header = () => {
                     </NavLink>
                   )}
                   <button
+                    type="button"
                     onClick={handleLogout}
-                    className="ml-1 px-4 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 transition-colors duration-200"
+                    className="ml-1 px-4 py-1.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 transition-colors duration-200 cursor-pointer"
                   >
                     Logout
                   </button>
@@ -143,13 +135,13 @@ const Header = () => {
                 <>
                   <Link
                     to="/login"
-                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200"
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200 cursor-pointer"
                   >
                     Login
                   </Link>
                   <Link
                     to="/register"
-                    className="px-4 py-1.5 rounded-lg text-sm font-medium bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200"
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200 cursor-pointer"
                   >
                     Sign Up
                   </Link>
@@ -159,18 +151,13 @@ const Header = () => {
 
             {/* Mobile hamburger */}
             <button
+              type="button"
               onClick={toggleMenu}
-              className="lg:hidden p-2 text-text-secondary hover:text-accent-gold transition-colors duration-200"
+              className="lg:hidden inline-flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:text-accent-gold transition-colors duration-200 cursor-pointer"
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                {isMenuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
+              {isMenuOpen ? <FiX className="h-6 w-6" aria-hidden="true" /> : <FiMenu className="h-6 w-6" aria-hidden="true" />}
             </button>
           </div>
         </div>
@@ -198,31 +185,8 @@ const Header = () => {
 
             {/* Mobile balance display */}
             {isAuthenticated && (
-              <div className="flex items-center justify-between bg-bg-elevated/60 rounded-lg px-4 py-2.5 border border-accent-gold/20 my-2">
-                <div className="flex items-center gap-2">
-                  <svg
-                    className="w-5 h-5 text-accent-gold"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15" />
-                    <text
-                      x="12"
-                      y="16"
-                      textAnchor="middle"
-                      fill="currentColor"
-                      fontSize="12"
-                      fontWeight="bold"
-                      fontFamily="sans-serif"
-                    >
-                      $
-                    </text>
-                  </svg>
-                  <span className="text-accent-gold font-bold font-heading text-sm">
-                    {userBalance}
-                  </span>
-                </div>
+              <div className="flex items-center justify-between bg-bg-elevated/60 rounded-lg px-3 py-2 border border-accent-gold/20 my-2">
+                <AnimatedBalance value={userBalance} currency="$" />
               </div>
             )}
 
@@ -237,8 +201,9 @@ const Header = () => {
                   </NavLink>
                 )}
                 <button
+                  type="button"
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors duration-200"
+                  className="w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors duration-200 cursor-pointer"
                 >
                   Logout
                 </button>
@@ -247,13 +212,13 @@ const Header = () => {
               <div className="flex flex-col gap-2 pt-2">
                 <Link
                   to="/login"
-                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200"
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center text-text-secondary hover:text-text-primary border border-border-light hover:border-text-muted transition-colors duration-200 cursor-pointer"
                 >
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200"
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium text-center bg-accent-gold hover:bg-accent-gold-dark text-bg-base font-heading transition-colors duration-200 cursor-pointer"
                 >
                   Sign Up
                 </Link>
@@ -262,7 +227,7 @@ const Header = () => {
           </div>
         </nav>
       )}
-    </header>
+    </motion.header>
   );
 };
 

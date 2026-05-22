@@ -5,14 +5,12 @@ import React from 'react';
 
 vi.mock('@/services/socket/plinkoSocketService', () => ({
   default: {
-    connect: vi.fn(),
+    connect: vi.fn(() => Promise.resolve()),
     disconnect: vi.fn(),
     startGame: vi.fn(),
     onGameResult: vi.fn(() => vi.fn()),
     onError: vi.fn(() => vi.fn()),
-    onResult: vi.fn(() => vi.fn()),
     onBalanceUpdate: vi.fn(() => vi.fn()),
-    dropBall: vi.fn(),
   },
 }));
 
@@ -27,12 +25,9 @@ vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
 }));
 
-vi.mock('@/games/plinko/PlinkoBettingPanel', () => ({
-  default: (props) => <div data-testid="plinko-betting-panel">Betting Panel</div>,
-}));
-
+// Stub PlinkoBoard so we don't need pixi/matter in this test.
 vi.mock('@/games/plinko/PlinkoBoard', () => ({
-  default: (props) => <div data-testid="plinko-board">Board</div>,
+  default: () => <div data-testid="plinko-board" />,
 }));
 
 import PlinkoGame from '@/games/plinko/PlinkoGame';
@@ -42,25 +37,41 @@ describe('PlinkoGame', () => {
     vi.clearAllMocks();
   });
 
-  const renderGame = () => {
-    return render(
+  const renderGame = () =>
+    render(
       <MemoryRouter>
         <PlinkoGame />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
-  };
 
-  it('should render without crashing', () => {
+  it('renders without crashing', () => {
     renderGame();
   });
 
-  it('should render betting panel', () => {
-    renderGame();
-    expect(screen.getByTestId('plinko-betting-panel')).toBeInTheDocument();
-  });
-
-  it('should render game board', () => {
+  it('renders the Plinko board', () => {
     renderGame();
     expect(screen.getByTestId('plinko-board')).toBeInTheDocument();
+  });
+
+  it('renders the bet panel with the Drop ball CTA', () => {
+    renderGame();
+    expect(screen.getByRole('button', { name: /drop ball/i })).toBeInTheDocument();
+  });
+
+  it('exposes a bet amount input', () => {
+    renderGame();
+    expect(screen.getByLabelText(/bet amount/i)).toBeInTheDocument();
+  });
+
+  it('exposes risk-level controls', () => {
+    renderGame();
+    expect(screen.getByRole('button', { name: /^low$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^medium$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^high$/i })).toBeInTheDocument();
+  });
+
+  it('exposes a rows selector', () => {
+    renderGame();
+    expect(screen.getByLabelText(/rows/i)).toBeInTheDocument();
   });
 });

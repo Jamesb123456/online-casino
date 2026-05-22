@@ -5,10 +5,16 @@ import React from 'react';
 
 vi.mock('@/services/socket/wheelSocketService', () => ({
   default: {
-    connect: vi.fn(),
+    connect: vi.fn(() => Promise.resolve()),
     disconnect: vi.fn(),
     setUser: vi.fn(),
-    placeBet: vi.fn(),
+    placeBet: vi.fn(() => Promise.resolve({
+      segmentIndex: 0,
+      multiplier: 1,
+      winAmount: 1,
+      profit: 0,
+      targetAngle: 0,
+    })),
     onActivePlayers: vi.fn(() => vi.fn()),
     onCurrentBets: vi.fn(() => vi.fn()),
     onPlayerBet: vi.fn(() => vi.fn()),
@@ -34,53 +40,48 @@ vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
 }));
 
-vi.mock('@/games/wheel/WheelBettingPanel', () => ({
-  default: (props) => <div data-testid="wheel-betting-panel">Betting Panel</div>,
-}));
-
+// Replace the Pixi-backed board with a sentinel so this test stays focused on
+// the shell + bet panel composition.
 vi.mock('@/games/wheel/WheelBoard', () => ({
-  default: (props) => <div data-testid="wheel-board">Wheel Board</div>,
+  default: () => <div data-testid="wheel-board">Wheel Board</div>,
 }));
 
-vi.mock('@/games/wheel/WheelActiveBets', () => ({
-  default: (props) => <div data-testid="wheel-active-bets">Active Bets</div>,
-}));
-
-vi.mock('@/games/wheel/WheelPlayersList', () => ({
-  default: (props) => <div data-testid="wheel-players">Players</div>,
-}));
-
-import WheelGame from '@/games/wheel/WheelGame';
+// Bet panel is composed from the shared primitives; we render the real one to
+// catch integration issues with `extra`, `bet`, etc.
 
 describe('WheelGame', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  const renderGame = () => {
+  const renderGame = async () => {
+    const { default: WheelGame } = await import('@/games/wheel/WheelGame');
     return render(
       <MemoryRouter>
         <WheelGame />
-      </MemoryRouter>
+      </MemoryRouter>,
     );
   };
 
-  it('should render without crashing', () => {
-    renderGame();
+  it('renders the Wheel title via GameShell', async () => {
+    await renderGame();
+    expect(
+      screen.getByRole('heading', { name: /wheel/i, level: 1 }),
+    ).toBeInTheDocument();
   });
 
-  it('should render betting panel', () => {
-    renderGame();
-    expect(screen.getByTestId('wheel-betting-panel')).toBeInTheDocument();
-  });
-
-  it('should render wheel board', () => {
-    renderGame();
+  it('renders the wheel board sentinel', async () => {
+    await renderGame();
     expect(screen.getByTestId('wheel-board')).toBeInTheDocument();
   });
 
-  it('should render active bets', () => {
-    renderGame();
-    expect(screen.getByTestId('wheel-active-bets')).toBeInTheDocument();
+  it('renders the unified bet panel with risk tier controls', async () => {
+    await renderGame();
+    // Risk tier buttons present
+    expect(screen.getByRole('button', { name: /easy/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /medium/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /hard/i })).toBeInTheDocument();
+    // Primary CTA
+    expect(screen.getByRole('button', { name: /^Spin$/i })).toBeInTheDocument();
   });
 });

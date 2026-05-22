@@ -74,18 +74,6 @@ describe('PlayerManagement', () => {
     expect(screen.getByRole('button', { name: /add new player/i })).toBeInTheDocument();
   });
 
-  // SKIP: Bulk credit + role-based action hiding are not yet wired into
-  // PlayerManagement. BulkCreditModal exists in isolation and is covered by
-  // its own test (BulkCreditModal.test.jsx). When the feature is integrated,
-  // restore the original assertions in this block.
-  it.skip('hides Add New Player for non-admin (operator) users', async () => {
-    mockUseAuth.mockReturnValue({ user: { id: 99, username: 'op', role: 'operator' } });
-    renderPlayerManagement();
-    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /add new player/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /bulk credit/i })).toBeInTheDocument();
-  });
-
   it('renders an empty-state message when no players are returned', async () => {
     mockGetPlayers.mockResolvedValue({ players: [], totalCount: 0 });
     renderPlayerManagement();

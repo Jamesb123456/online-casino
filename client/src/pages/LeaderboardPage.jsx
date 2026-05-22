@@ -135,10 +135,10 @@ const LeaderboardPage = () => {
             <>
               {/* Table Header */}
               <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-bg-elevated text-xs font-heading font-medium text-text-secondary uppercase tracking-wider">
-                <div className="col-span-1">Rank</div>
-                <div className="col-span-5">Player</div>
-                <div className="col-span-3 text-right">Winnings</div>
-                <div className="col-span-3 text-right">Games</div>
+                <div className="col-span-1" data-testid="leaderboard-col-rank">Rank</div>
+                <div className="col-span-5" data-testid="leaderboard-col-player">Player</div>
+                <div className="col-span-3 text-right" data-testid="leaderboard-col-winnings">Winnings</div>
+                <div className="col-span-3 text-right" data-testid="leaderboard-col-games">Games</div>
               </div>
 
               {/* Table Body */}

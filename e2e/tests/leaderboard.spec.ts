@@ -92,10 +92,10 @@ test.describe('Leaderboard', () => {
 
     // If the leaderboard has data, verify the column headers exist
     if (body.includes('Rank')) {
-      await expect(page.getByText('Rank')).toBeVisible();
-      await expect(page.getByText('Player')).toBeVisible();
-      await expect(page.getByText('Winnings')).toBeVisible();
-      await expect(page.getByText('Games')).toBeVisible();
+      await expect(page.getByTestId('leaderboard-col-rank')).toBeVisible();
+      await expect(page.getByTestId('leaderboard-col-player')).toBeVisible();
+      await expect(page.getByTestId('leaderboard-col-winnings')).toBeVisible();
+      await expect(page.getByTestId('leaderboard-col-games')).toBeVisible();
     } else {
       // Empty state — just verify no crash
       expect(body.includes('No data') || body.includes('No winners')).toBeTruthy();

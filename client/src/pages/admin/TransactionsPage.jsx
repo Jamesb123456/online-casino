@@ -41,29 +41,13 @@ const TransactionsPage = () => {
           setTransactions(response.transactions);
           setTotalTransactions(response.total || response.transactions.length);
         } else {
-          // Fallback to mock data if API response is unexpected
-          console.warn('Using mock transaction data as API returned unexpected format');
-          setTransactions([
-            { id: 'TX001', username: 'player123', type: 'Deposit', amount: 500.00, date: '2025-06-22 15:32:21', status: 'Completed' },
-            { id: 'TX002', username: 'gambler456', type: 'Withdrawal', amount: -1200.00, date: '2025-06-22 12:15:43', status: 'Completed' },
-            { id: 'TX003', username: 'highroller22', type: 'Deposit', amount: 2000.00, date: '2025-06-22 09:23:05', status: 'Completed' },
-            { id: 'TX004', username: 'luckywin789', type: 'Game Win', amount: 750.00, date: '2025-06-22 08:45:12', status: 'Completed' },
-            { id: 'TX005', username: 'player123', type: 'Game Loss', amount: -150.00, date: '2025-06-22 07:32:15', status: 'Completed' }
-          ]);
-          setTotalTransactions(152);
+          setTransactions([]);
+          setTotalTransactions(0);
         }
       } catch (error) {
         console.error('Error fetching transactions:', error);
-
-        // Fallback to mock data if API call fails
-        setTransactions([
-          { id: 'TX001', username: 'player123', type: 'Deposit', amount: 500.00, date: '2025-06-22 15:32:21', status: 'Completed' },
-          { id: 'TX002', username: 'gambler456', type: 'Withdrawal', amount: -1200.00, date: '2025-06-22 12:15:43', status: 'Completed' },
-          { id: 'TX003', username: 'highroller22', type: 'Deposit', amount: 2000.00, date: '2025-06-22 09:23:05', status: 'Completed' },
-          { id: 'TX004', username: 'luckywin789', type: 'Game Win', amount: 750.00, date: '2025-06-22 08:45:12', status: 'Completed' },
-          { id: 'TX005', username: 'player123', type: 'Game Loss', amount: -150.00, date: '2025-06-22 07:32:15', status: 'Completed' }
-        ]);
-        setTotalTransactions(152);
+        setTransactions([]);
+        setTotalTransactions(0);
       } finally {
         setIsLoading(false);
       }
@@ -152,6 +136,16 @@ const TransactionsPage = () => {
                     </tr>
                   </thead>
                   <tbody>
+                    {transactions.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="py-8 px-4 text-center text-text-muted"
+                        >
+                          No transactions to display.
+                        </td>
+                      </tr>
+                    )}
                     {transactions.map((transaction) => (
                       <tr key={transaction.id} className="border-t border-border hover:bg-bg-elevated/50 transition-colors">
                         <td className="py-3 px-4 text-text-secondary">{transaction.id}</td>

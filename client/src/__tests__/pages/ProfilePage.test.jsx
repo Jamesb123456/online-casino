@@ -56,7 +56,7 @@ describe('ProfilePage', () => {
     renderWithUser({
       id: 1, username: 'testuser', role: 'user', balance: 5000, createdAt: '2024-01-01T00:00:00Z',
     });
-    expect(screen.getByText(/\$5,000/)).toBeInTheDocument();
+    expect(screen.getByText(/5,000 Credits/)).toBeInTheDocument();
   });
 
   it('should display member since date', () => {
@@ -66,12 +66,7 @@ describe('ProfilePage', () => {
     expect(screen.getByText(/member since/i)).toBeInTheDocument();
   });
 
-  it('should show admin dashboard link for admin users', () => {
-    renderWithUser({
-      id: 1, username: 'adminuser', role: 'admin', balance: 10000, createdAt: '2024-01-01T00:00:00Z',
-    });
-    expect(screen.getByText(/admin dashboard/i)).toBeInTheDocument();
-  });
+  // Removed: ProfilePage no longer renders an Admin Dashboard link (G-2 rewrite).
 
   it('should not show admin dashboard link for regular users', () => {
     renderWithUser({
@@ -94,19 +89,14 @@ describe('ProfilePage', () => {
     expect(screen.getByText(/account type/i)).toBeInTheDocument();
   });
 
-  it('should have edit profile button', () => {
+  it('should have save profile button', () => {
     renderWithUser({
       id: 1, username: 'testuser', role: 'user', balance: 0, createdAt: '2024-01-01T00:00:00Z',
     });
-    expect(screen.getByText(/edit profile/i)).toBeInTheDocument();
+    expect(screen.getByText(/save profile/i)).toBeInTheDocument();
   });
 
-  it('should show game history section', () => {
-    renderWithUser({
-      id: 1, username: 'testuser', role: 'user', balance: 0, createdAt: '2024-01-01T00:00:00Z',
-    });
-    expect(screen.getByText(/recent game activity/i)).toBeInTheDocument();
-  });
+  // Removed: ProfilePage no longer renders a "recent game activity" section (G-2 rewrite).
 
   it('should handle missing createdAt gracefully', () => {
     renderWithUser({
@@ -119,6 +109,6 @@ describe('ProfilePage', () => {
     renderWithUser({
       id: 1, username: 'testuser', role: 'user', balance: 0, createdAt: '2024-01-01T00:00:00Z',
     });
-    expect(screen.getByText(/balance can only be modified by administrators/i)).toBeInTheDocument();
+    expect(screen.getByText(/funds can only be modified by administrators/i)).toBeInTheDocument();
   });
 });

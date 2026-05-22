@@ -12,7 +12,10 @@ describe('Security: API service credentials', () => {
     vi.clearAllMocks();
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: 'OK',
       json: () => Promise.resolve({ data: 'test' }),
+      text: () => Promise.resolve(JSON.stringify({ data: 'test' })),
     });
   });
 

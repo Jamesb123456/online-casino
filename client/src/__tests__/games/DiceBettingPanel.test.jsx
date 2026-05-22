@@ -86,8 +86,8 @@ describe('DiceBettingPanel (DiceGame betting controls)', () => {
     renderGame();
     expect(screen.getByLabelText(/Bet amount/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Target/i)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Roll Under/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Roll Over/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Roll Under/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Roll Over/i })).toBeInTheDocument();
     expect(screen.getByTestId('dice-roll-button')).toBeInTheDocument();
   });
 
@@ -103,7 +103,7 @@ describe('DiceBettingPanel (DiceGame betting controls)', () => {
     renderGame();
     fireEvent.change(screen.getByLabelText(/Bet amount/i), { target: { value: '15' } });
     fireEvent.change(screen.getByLabelText(/Target/i), { target: { value: '40' } });
-    fireEvent.click(screen.getByRole('radio', { name: /Roll Over/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Roll Over/i }));
     fireEvent.click(screen.getByTestId('dice-roll-button'));
 
     const calls = rollCalls();

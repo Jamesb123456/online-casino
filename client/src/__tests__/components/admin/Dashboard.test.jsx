@@ -42,7 +42,7 @@ describe('Admin Dashboard', () => {
     expect(screen.getByText('Total Players')).toBeInTheDocument();
     expect(screen.getByText('Total Balance')).toBeInTheDocument();
     expect(screen.getByText('Total Games')).toBeInTheDocument();
-    expect(screen.getByText('Alerts')).toBeInTheDocument();
+    expect(screen.getByText('Notifications')).toBeInTheDocument();
   });
 
   it('renders game-stats rows when provided', async () => {

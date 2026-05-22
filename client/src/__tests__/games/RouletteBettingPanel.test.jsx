@@ -48,8 +48,8 @@ describe('RouletteBettingPanel', () => {
   it('renders the felt bet board with outside bets', () => {
     renderPanel();
     expect(screen.getByLabelText(/Bet Amount/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Place bet on Red/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Place bet on Black/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Red' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Black' })).toBeInTheDocument();
   });
 
   it('calls setBetAmount when the chip-value input changes', () => {
@@ -67,12 +67,12 @@ describe('RouletteBettingPanel', () => {
   it('disables board cells and chip presets while spinning', () => {
     renderPanel({ isSpinning: true });
     expect(screen.getByLabelText(/Bet Amount/i)).toBeDisabled();
-    expect(screen.getByRole('button', { name: /Place bet on Red/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Red' })).toBeDisabled();
   });
 
   it('emits onPlaceBet for a straight bet when clicking the 0 cell', () => {
     const { props } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on 0/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Select bet on 0/i }));
     expect(props.onPlaceBet).toHaveBeenCalledWith({
       type: 'STRAIGHT',
       value: '0',
@@ -82,7 +82,7 @@ describe('RouletteBettingPanel', () => {
 
   it('emits onPlaceBet for a straight number cell', () => {
     const { props } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on 7/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Select bet on 7/i }));
     expect(props.onPlaceBet).toHaveBeenCalledWith({
       type: 'STRAIGHT',
       value: '7',
@@ -92,7 +92,7 @@ describe('RouletteBettingPanel', () => {
 
   it('emits onPlaceBet with bet type RED for outside bets', () => {
     const { props } = renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }));
     expect(props.onPlaceBet).toHaveBeenCalledWith(expect.objectContaining({
       type: 'RED',
       amount: 10,
@@ -101,20 +101,20 @@ describe('RouletteBettingPanel', () => {
 
   it('does not emit onPlaceBet when betAmount is 0', () => {
     const { props } = renderPanel({ betAmount: 0 });
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }));
     expect(props.onPlaceBet).not.toHaveBeenCalled();
   });
 
   it('does not emit onPlaceBet while spinning', () => {
     const { props } = renderPanel({ isSpinning: true });
     // Cell is disabled — clicking should be a no-op.
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }));
     expect(props.onPlaceBet).not.toHaveBeenCalled();
   });
 
   it('does not emit onPlaceBet when bet amount exceeds balance', () => {
     const { props } = renderPanel({ betAmount: 1000, balance: 50 });
-    fireEvent.click(screen.getByRole('button', { name: /Place bet on Red/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Red' }));
     expect(props.onPlaceBet).not.toHaveBeenCalled();
   });
 });

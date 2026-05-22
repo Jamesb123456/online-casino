@@ -80,7 +80,7 @@ describe('LoginPage', () => {
   it('renders branding text', () => {
     renderLoginPage();
     expect(screen.getByText('Platinum')).toBeInTheDocument();
-    expect(screen.getByText(/sign in to your account/i)).toBeInTheDocument();
+    expect(screen.getByText(/welcome back to your account/i)).toBeInTheDocument();
   });
 
   it('renders a link to the register page', () => {

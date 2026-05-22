@@ -232,7 +232,7 @@ describe('DiceGame component', () => {
 
   it('toggles direction to over and uses (100 - t)/100 win prob', () => {
     renderGame();
-    fireEvent.click(screen.getByRole('radio', { name: /Roll Over/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Roll Over/i }));
     expect(screen.getByTestId('dice-win-chance').textContent).toMatch(/50\.00%/);
   });
 

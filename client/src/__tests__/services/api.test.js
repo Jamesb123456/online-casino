@@ -16,11 +16,13 @@ afterEach(() => {
 
 // Helper to create a mock Response
 function mockResponse(body, { status = 200, statusText = 'OK', ok = true } = {}) {
+  const serialized = typeof body === 'string' ? body : JSON.stringify(body);
   return {
     ok,
     status,
     statusText,
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(serialized),
   };
 }
 

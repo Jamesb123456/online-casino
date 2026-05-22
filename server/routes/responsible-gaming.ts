@@ -112,22 +112,22 @@ router.get('/activity-summary', authenticate, async (req: Request, res: Response
     const [summary7d] = await db.execute(rawSql`
       SELECT
         COUNT(*) as totalTransactions,
-        COALESCE(SUM(CASE WHEN type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
-        COALESCE(SUM(CASE WHEN type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
+        COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
+        COALESCE(SUM(CASE WHEN transaction_type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
       FROM transactions
       WHERE user_id = ${userId}
-        AND type IN ('game_win', 'game_loss')
+        AND transaction_type IN ('game_win', 'game_loss')
         AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     `) as any;
 
     const [summary30d] = await db.execute(rawSql`
       SELECT
         COUNT(*) as totalTransactions,
-        COALESCE(SUM(CASE WHEN type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
-        COALESCE(SUM(CASE WHEN type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
+        COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
+        COALESCE(SUM(CASE WHEN transaction_type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
       FROM transactions
       WHERE user_id = ${userId}
-        AND type IN ('game_win', 'game_loss')
+        AND transaction_type IN ('game_win', 'game_loss')
         AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     `) as any;
 

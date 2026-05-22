@@ -33,7 +33,26 @@ router.get('/users', auth, adminOnly, async (req: Request, res: Response) => {
   try {
     const users = await UserModel.find();
 
-    const safeUsers = users.map(user => ({
+    // Apply optional filters: searchTerm (username substring), activeOnly, role.
+    const searchTerm = (req.query.searchTerm ? String(req.query.searchTerm) : '').trim().toLowerCase();
+    const activeOnlyRaw = req.query.activeOnly;
+    const activeOnly = activeOnlyRaw === undefined ? null : activeOnlyRaw === 'true' || activeOnlyRaw === true;
+    const roleFilter = req.query.role ? String(req.query.role) : '';
+
+    const filtered = users.filter(user => {
+      if (searchTerm && !String(user.username || '').toLowerCase().includes(searchTerm)) {
+        return false;
+      }
+      if (activeOnly !== null && Boolean(user.isActive) !== activeOnly) {
+        return false;
+      }
+      if (roleFilter && roleFilter !== 'all' && String(user.role) !== roleFilter) {
+        return false;
+      }
+      return true;
+    });
+
+    const safeUsers = filtered.map(user => ({
       id: user.id,
       username: user.username,
       role: user.role,

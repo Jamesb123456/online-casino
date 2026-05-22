@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import { db } from '../drizzle/db.js';
-import { transactions } from '../drizzle/schema.js';
+import { transactions, loginRewards, users } from '../drizzle/schema.js';
 import UserModel from '../drizzle/models/User.js';
 import LoginRewardModel from '../drizzle/models/LoginReward.js';
 import { authenticate } from '../middleware/auth.js';
@@ -65,7 +65,7 @@ router.post('/claim', authenticate, async (req: Request, res: Response) => {
     // Start a transaction to ensure data consistency
     await db.transaction(async (tx) => {
       // Create transaction record
-      const result = await tx.insert(transactions).values({
+      await tx.insert(transactions).values({
         userId,
         type: 'login_reward',
         amount: rewardAmount.toString(),
@@ -74,7 +74,7 @@ router.post('/claim', authenticate, async (req: Request, res: Response) => {
         description: `Daily login reward: $${rewardAmount.toFixed(2)}`,
         status: 'completed',
       });
-      
+
       // Get the inserted transaction
       const [transaction] = await tx
         .select()
@@ -87,17 +87,19 @@ router.post('/claim', authenticate, async (req: Request, res: Response) => {
         throw new Error('Failed to create transaction record');
       }
 
-      // Create login reward record
-      await LoginRewardModel.create({
+      // Create login reward record using the same tx so the FK to the
+      // not-yet-committed transactions row resolves.
+      await tx.insert(loginRewards).values({
         userId,
-        amount: rewardAmount,
-        transactionId: transaction.id
+        amount: rewardAmount.toString(),
+        transactionId: transaction.id,
       });
 
-      // Update user balance
-      await UserModel.updateById(userId, {
-        balance: balanceAfter.toString()
-      });
+      // Update user balance directly within the tx.
+      await tx
+        .update(users)
+        .set({ balance: balanceAfter.toString(), updatedAt: new Date() })
+        .where(eq(users.id, userId));
     });
 
     return res.json({ 

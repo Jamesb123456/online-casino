@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { authenticate as auth } from '../middleware/auth.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 import LoggingService from '../src/services/loggingService.js';
+import userLimitsService from '../src/services/userLimitsService.js';
 
 // Import Drizzle models
 import UserModel from '../drizzle/models/User.js';
@@ -10,6 +11,22 @@ import Balance from '../drizzle/models/Balance.js';
 import Transaction from '../drizzle/models/Transaction.js';
 
 const router = express.Router();
+
+// Get the current user's limits (read-only; admins manage limits separately)
+router.get('/me/limits', auth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limits = await userLimitsService.getLimits(req.user.userId);
+    res.json({
+      maxBetPerRound: limits.maxBetPerRound,
+      maxLossPerDay: limits.maxLossPerDay,
+      lockedUntil: limits.lockedUntil ? limits.lockedUntil.toISOString() : null,
+      sessionLimitMinutes: limits.sessionLimitMinutes,
+    });
+  } catch (error) {
+    LoggingService.logSystemEvent('fetch_me_limits_error', { error: (error as Error)?.message }, 'error');
+    res.status(500).json({ message: 'Error fetching limits' });
+  }
+});
 
 // Get current user data
 router.get('/me', auth, async (req: AuthenticatedRequest, res: Response) => {

@@ -140,6 +140,7 @@ export async function createApp(): Promise<AppInstance> {
   // In production, only admin-created users can log in.
   app.use('/api/auth/sign-up', (req, res, next) => {
     if (process.env.NODE_ENV === 'test') return next();
+    if (process.env.NODE_ENV !== 'production') return next();
     return res.status(404).json({ message: 'Not found' });
   });
 
@@ -156,10 +157,12 @@ export async function createApp(): Promise<AppInstance> {
   app.use(cookieParser());
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-  // Global API rate limiting
+  // Global API rate limiting. In production a tight cap protects against abuse;
+  // in dev/test the e2e suite legitimately makes >120 requests per minute, so
+  // raise the cap dramatically so test runs are not throttled.
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 120,
+    max: isProduction ? 120 : 5000,
     standardHeaders: true,
     legacyHeaders: false
   });

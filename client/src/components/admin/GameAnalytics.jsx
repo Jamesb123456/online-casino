@@ -100,22 +100,26 @@ const GameAnalytics = () => {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
+          testId="kpi-total-sessions"
           label="Total Sessions"
           value={formatNumber(totals.totalSessions)}
           icon={'\uD83C\uDFAE'}
         />
         <StatCard
+          testId="kpi-total-wagered"
           label="Total Wagered"
           value={formatCurrency(totals.totalBetsAmount)}
           icon={'\uD83D\uDCB0'}
         />
         <StatCard
+          testId="kpi-house-profit"
           label="House Profit"
           value={formatCurrency(totals.houseProfit)}
           icon={'\uD83D\uDCC8'}
           className={Number(totals.houseProfit) >= 0 ? 'border-status-success/30' : 'border-status-error/30'}
         />
         <StatCard
+          testId="kpi-house-edge"
           label="House Edge"
           value={formatPercent(totals.overallHouseEdge)}
           icon={'%'}
@@ -126,7 +130,10 @@ const GameAnalytics = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bar Chart - House Profit by Game */}
         <div className="bg-bg-card rounded-xl border border-white/5 p-6">
-          <h2 className="text-lg font-bold text-text-primary font-heading mb-4">
+          <h2
+            data-testid="chart-house-profit-by-game"
+            className="text-lg font-bold text-text-primary font-heading mb-4"
+          >
             House Profit by Game
           </h2>
           <AnalyticsBarChart

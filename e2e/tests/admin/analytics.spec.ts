@@ -47,10 +47,10 @@ test.describe('Admin Game Analytics', () => {
     }
 
     // With data, KPI cards should be visible
-    await expect(page.getByText('Total Sessions')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Total Wagered')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('House Profit')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('House Edge')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('kpi-total-sessions')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('kpi-total-wagered')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('kpi-house-profit')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('kpi-house-edge')).toBeVisible({ timeout: 10_000 });
   });
 
   test('chart sections are visible when data exists', async ({ page }) => {
@@ -68,7 +68,7 @@ test.describe('Admin Game Analytics', () => {
     }
 
     // Chart headings
-    await expect(page.getByText('House Profit by Game')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('chart-house-profit-by-game')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Revenue Distribution')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Games Overview')).toBeVisible({ timeout: 10_000 });
   });

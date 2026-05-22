@@ -12,12 +12,13 @@ import React from 'react';
  * @param {string} [props.icon] - Emoji icon displayed in top-left
  * @param {string} [props.className] - Additional CSS classes
  */
-const StatCard = ({ label, value, change, changeLabel, icon, className = '' }) => {
+const StatCard = ({ label, value, change, changeLabel, icon, className = '', testId }) => {
   const isPositive = change > 0;
   const isNegative = change < 0;
 
   return (
     <div
+      data-testid={testId}
       className={`bg-bg-card rounded-xl border border-white/5 p-5 hover:border-accent-gold/20 transition-colors ${className}`}
     >
       <div className="flex items-start justify-between mb-3">

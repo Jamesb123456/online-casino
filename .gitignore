@@ -49,8 +49,24 @@ client/vitest_json.txt
 
 # Visual audit / ad-hoc verification artifacts (Phase E ergonomic ignore)
 visual-audit-*.mjs
+visual-audit.mjs
 screenshots/
 dashboard-check.png
 player-profile-check.png
 revenue-check.png
 transactions-check.png
+
+# Production secrets (Phase G ignore) - commit the .example only
+.env.production
+
+# Local DB backup dumps
+backups/
+
+# Ad-hoc coverage / scratch artifacts
+client/check-cov.cjs
+client/coverage-output.txt
+client/coverage-table.txt
+server/__cov_report.cjs
+server/__lcov_report.cjs
+server/coverage-lm/
+server/coverage-sockets/

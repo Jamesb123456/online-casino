@@ -211,7 +211,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('STRAIGHT', 0)}
             disabled={isSpinning}
-            aria-label="Place bet on 0 (green)"
+            aria-label="Select bet on 0 (green)"
             className={[cellBase, 'rounded-md bg-emerald-700', 'h-auto w-12 px-2 text-lg'].join(' ')}
           >
             0
@@ -230,7 +230,7 @@ function RouletteBettingPanel({
                       type="button"
                       onClick={() => placeBet('STRAIGHT', n)}
                       disabled={isSpinning}
-                      aria-label={`Place bet on ${n} (${color})`}
+                      aria-label={`Select bet on ${n} (${color})`}
                       className={[cellBase, 'rounded-md text-sm', felByColor(color)].join(' ')}
                     >
                       {n}
@@ -251,7 +251,7 @@ function RouletteBettingPanel({
               type="button"
               onClick={() => placeBet('DOZEN', d)}
               disabled={isSpinning}
-              aria-label={`Place bet on ${BET_TYPES.DOZEN.name} ${d === 1 ? '1-12' : d === 2 ? '13-24' : '25-36'}`}
+              aria-label={`Select bet on ${BET_TYPES.DOZEN.name} ${d === 1 ? '1-12' : d === 2 ? '13-24' : '25-36'}`}
               className={outsideBase}
             >
               {d === 1 ? '1 to 12' : d === 2 ? '13 to 24' : '25 to 36'}
@@ -266,7 +266,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('LOW')}
             disabled={isSpinning}
-            aria-label="Place bet on Low (1-18)"
+            aria-label="Low (1-18)"
             className={outsideBase}
           >
             1-18
@@ -276,7 +276,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('EVEN')}
             disabled={isSpinning}
-            aria-label="Place bet on Even"
+            aria-label="Even"
             className={outsideBase}
           >
             Even
@@ -286,7 +286,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('RED')}
             disabled={isSpinning}
-            aria-label="Place bet on Red"
+            aria-label="Red"
             className={[outsideBase, '!bg-red-700 border-red-400/40'].join(' ')}
           >
             Red
@@ -296,7 +296,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('BLACK')}
             disabled={isSpinning}
-            aria-label="Place bet on Black"
+            aria-label="Black"
             className={[outsideBase, '!bg-neutral-900 border-white/20'].join(' ')}
           >
             Black
@@ -306,7 +306,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('ODD')}
             disabled={isSpinning}
-            aria-label="Place bet on Odd"
+            aria-label="Odd"
             className={outsideBase}
           >
             Odd
@@ -316,7 +316,7 @@ function RouletteBettingPanel({
             type="button"
             onClick={() => placeBet('HIGH')}
             disabled={isSpinning}
-            aria-label="Place bet on High (19-36)"
+            aria-label="High (19-36)"
             className={outsideBase}
           >
             19-36

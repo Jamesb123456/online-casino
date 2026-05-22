@@ -269,13 +269,11 @@ const DiceGame = () => {
           Direction
         </span>
         <div
-          role="radiogroup"
           aria-labelledby="dice-direction-label"
           className="flex gap-2"
         >
           <button
             type="button"
-            role="radio"
             aria-checked={direction === 'under'}
             aria-pressed={direction === 'under'}
             onClick={() => setDirection('under')}
@@ -293,7 +291,6 @@ const DiceGame = () => {
           </button>
           <button
             type="button"
-            role="radio"
             aria-checked={direction === 'over'}
             aria-pressed={direction === 'over'}
             onClick={() => setDirection('over')}

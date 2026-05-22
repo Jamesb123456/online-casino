@@ -37,6 +37,7 @@ const RewardsPage = lazy(() => import('./pages/RewardsPage'))
 const VerifyPage = lazy(() => import('./pages/VerifyPage'))
 const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
 const ResponsibleGamingPage = lazy(() => import('./pages/ResponsibleGamingPage'))
+const TournamentsPage = lazy(() => import('./pages/TournamentsPage'))
 
 // Lazy loaded admin pages
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'))
@@ -96,6 +97,13 @@ const router = createBrowserRouter(
         <Suspense fallback={<Loading size="lg" message="Loading leaderboard..." />}>
           <LeaderboardPage />
         </Suspense>
+      } />
+      <Route path="/tournaments" element={
+        <AuthGuard>
+          <Suspense fallback={<Loading size="lg" message="Loading tournaments..." />}>
+            <TournamentsPage />
+          </Suspense>
+        </AuthGuard>
       } />
       <Route path="/responsible-gaming" element={
         <Suspense fallback={<Loading size="lg" message="Loading..." />}>

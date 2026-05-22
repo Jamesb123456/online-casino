@@ -430,7 +430,7 @@ const SlotsGame = () => {
             disabled={isSpinning || insufficient || status !== 'connected'}
             tabIndex={-1}
           >
-            {isSpinning ? 'Spinning…' : 'Spin alias'}
+            {isSpinning ? 'Spinning…' : 'Spin'}
           </button>
           <div data-testid="slots-reels">
             {Array.from({ length: REELS }, (_, i) => {

@@ -234,6 +234,37 @@ describe('AuthContext balance propagation', () => {
     });
   });
 
+  it('coerces string-numeric `balance` payloads to Number (MySQL DECIMAL contract)', async () => {
+    // MySQL DECIMAL columns are returned as strings by mysql2 (default
+    // behavior), so a server-side `BalanceService` push may emit
+    // `{ balance: '1234.50' }` after a JSON round-trip. AuthContext must
+    // coerce to Number so downstream arithmetic (`balance - bet`,
+    // `balance * multiplier`) doesn't silently produce string concatenation
+    // or NaN.
+    await renderWithAuth(<GoodConsumer />, { initialBalance: 100 });
+
+    await waitFor(() => {
+      expect(capturedBalanceHandler).toBeTypeOf('function');
+    });
+
+    act(() => {
+      capturedBalanceHandler({ balance: '1234.50' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('good-balance')).toHaveTextContent('1234.5');
+    });
+
+    // Bare string-number payload should also coerce.
+    act(() => {
+      capturedBalanceHandler('999.99');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('good-balance')).toHaveTextContent('999.99');
+    });
+  });
+
   it('ignores malformed `balanceUpdate` payloads instead of crashing', async () => {
     await renderWithAuth(<GoodConsumer />, { initialBalance: 100 });
 

@@ -7,6 +7,24 @@ import { api } from '../services/api';
 export const AuthContext = createContext();
 
 /**
+ * Coerce a server-supplied balance value to a finite Number.
+ *
+ * MySQL DECIMAL columns are returned as strings by mysql2 (default behavior),
+ * so values arriving from the server (`/users/me`, `balanceUpdate` socket
+ * pushes, Better Auth session payloads) can be strings like '1234.50'.
+ * Storing them verbatim breaks arithmetic at call sites (`balance * x` →
+ * string concatenation, `balance - y` → NaN).
+ *
+ * Returns `Number(value)` if it parses to a finite number, otherwise
+ * `fallback` — never NaN, never a string. The fallback preserves the previous
+ * balance when a malformed payload arrives so we don't blow away good state.
+ */
+function coerceBalance(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
  * Map Better Auth session user to the shape the app expects
  */
 function mapUser(sessionUser) {
@@ -15,9 +33,19 @@ function mapUser(sessionUser) {
     id: Number(sessionUser.id),
     username: sessionUser.username || sessionUser.name,
     role: sessionUser.role || 'user',
-    balance: parseFloat(sessionUser.balance || '0'),
+    balance: coerceBalance(sessionUser.balance, 0),
     isActive: sessionUser.isActive,
   };
+}
+
+/**
+ * Defensively coerce the `balance` field of a `/users/me` payload before
+ * storing it in context. The server returns DECIMAL as a string; downstream
+ * components assume a Number.
+ */
+function normalizeUser(userData) {
+  if (!userData) return userData;
+  return { ...userData, balance: coerceBalance(userData.balance, 0) };
 }
 
 /**
@@ -45,7 +73,7 @@ export const AuthProvider = ({ children }) => {
           // Fetch full user data including balance from our API
           try {
             const userData = await api.get('/users/me');
-            setUser(userData);
+            setUser(normalizeUser(userData));
           } catch {
             // Fallback to session data
             setUser(mapUser(session.user));
@@ -92,8 +120,9 @@ export const AuthProvider = ({ children }) => {
       socketService.disconnectSocket();
       socketService.initializeSocket();
 
-      setUser(userData);
-      return userData;
+      const normalized = normalizeUser(userData);
+      setUser(normalized);
+      return normalized;
     } catch (err) {
       setError(err.message || 'Login failed');
       throw err;
@@ -133,11 +162,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Update user balance (for game wins/losses)
+  // Update user balance (for game wins/losses).
+  //
+  // Coerces server-supplied values to a finite Number before storing. MySQL
+  // DECIMAL returns as a string from mysql2, so `newBalance` may be e.g.
+  // '1234.50' on a `balanceUpdate` socket push. If the value can't be coerced
+  // (null/undefined/NaN/non-numeric string/empty object), we leave the
+  // existing balance untouched rather than corrupt context state.
   const updateBalance = useCallback((newBalance) => {
     setUser(prev => {
       if (!prev) return prev;
-      return { ...prev, balance: newBalance };
+      const next = coerceBalance(newBalance, prev.balance);
+      if (next === prev.balance) return prev;
+      return { ...prev, balance: next };
     });
   }, []);
 
@@ -148,8 +185,15 @@ export const AuthProvider = ({ children }) => {
     if (!user?.id) return undefined;
 
     const handler = (payload) => {
-      const next = typeof payload === 'number' ? payload : payload?.balance;
-      if (typeof next !== 'number' || Number.isNaN(next)) return;
+      // Server pushes can be either a bare number, a string-number (e.g.
+      // '1234.50' from MySQL DECIMAL), or `{ balance }`. Reject null/undefined
+      // up front (Number(null) === 0, which would silently zero the balance),
+      // then extract the candidate value and require a finite coercion.
+      if (payload === null || payload === undefined) return;
+      const raw = typeof payload === 'object' ? payload.balance : payload;
+      if (raw === null || raw === undefined) return;
+      const next = Number(raw);
+      if (!Number.isFinite(next)) return;
       if (import.meta.env.DEV) {
         console.debug('[AuthContext] balanceUpdate received:', next);
       }
@@ -163,8 +207,9 @@ export const AuthProvider = ({ children }) => {
   // Refresh user from server (e.g. after profile edit). Errors propagate to caller.
   const refreshUser = useCallback(async () => {
     const userData = await api.get('/users/me');
-    setUser(userData);
-    return userData;
+    const normalized = normalizeUser(userData);
+    setUser(normalized);
+    return normalized;
   }, []);
 
   // Context value

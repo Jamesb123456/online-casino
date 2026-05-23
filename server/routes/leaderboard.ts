@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
-import { db } from '../drizzle/db.js';
-import { sql } from 'drizzle-orm';
 import LoggingService from '../src/services/loggingService.js';
+import LeaderboardService from '../src/services/leaderboardService.js';
 
 const router = express.Router();
 
@@ -35,39 +34,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Query top winners by total winnings from transactions
     // Uses game_win transaction type to calculate total winnings
-    let results;
-    if (dateFilter) {
-      const dateStr = dateFilter.toISOString().slice(0, 19).replace('T', ' ');
-      results = await db.execute(sql`
-        SELECT
-          u.id,
-          u.username,
-          COALESCE(SUM(CASE WHEN t.transaction_type = 'game_win' THEN CAST(t.amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWinnings,
-          COUNT(CASE WHEN t.transaction_type IN ('game_win', 'game_loss') THEN 1 END) as totalGames
-        FROM users u
-        LEFT JOIN transactions t ON u.id = t.user_id AND t.created_at >= ${dateStr}
-        WHERE u.is_active = 1
-        GROUP BY u.id, u.username
-        HAVING totalWinnings > 0
-        ORDER BY totalWinnings DESC
-        LIMIT ${limitNum}
-      `);
-    } else {
-      results = await db.execute(sql`
-        SELECT
-          u.id,
-          u.username,
-          COALESCE(SUM(CASE WHEN t.transaction_type = 'game_win' THEN CAST(t.amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWinnings,
-          COUNT(CASE WHEN t.transaction_type IN ('game_win', 'game_loss') THEN 1 END) as totalGames
-        FROM users u
-        LEFT JOIN transactions t ON u.id = t.user_id
-        WHERE u.is_active = 1
-        GROUP BY u.id, u.username
-        HAVING totalWinnings > 0
-        ORDER BY totalWinnings DESC
-        LIMIT ${limitNum}
-      `);
-    }
+    const results = await LeaderboardService.getTopWinners(dateFilter, limitNum);
 
     // mysql2 returns [rows, fields] tuple
     const rows = Array.isArray(results) && Array.isArray(results[0]) ? results[0] : results;

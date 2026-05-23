@@ -1,51 +1,50 @@
 // Smoke / characterization tests for WheelGame.
 //
-// Locks the current pre-refactor behaviour: Spin button -> wheelSocketService
-// .placeBet({ betAmount, difficulty }) -> WheelBoard onSpinComplete -> history
-// pill renders.
+// Locks post-B1.3 behaviour: Spin -> useGameSocket emit('wheel:place_bet',
+// { betAmount, difficulty }, cb) -> WheelBoard onSpinComplete -> history pill
+// renders. Wire-level contract (event name + payload keys + ack shape) is
+// preserved from the legacy wheelSocketService.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// --- Socket service mock --------------------------------------------------
-const { capturedHandlers, wheelSocketServiceMock } = vi.hoisted(() => {
-  const handlers = {};
-  const makeOn = (key) => vi.fn((cb) => {
-    handlers[key] = cb;
-    return vi.fn();
-  });
-  return {
-    capturedHandlers: handlers,
-    wheelSocketServiceMock: {
-      setUser: vi.fn(),
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn(),
-      placeBet: vi.fn().mockResolvedValue({
+// --- useGameSocket mock ---------------------------------------------------
+// Captures the `events` map handed to the hook so the test can drive
+// individual socket events (balanceUpdate, etc.) imperatively. The `emit`
+// spy resolves the place_bet ack with a deterministic success payload.
+const { capturedEvents, useGameSocketMock, emitMock } = vi.hoisted(() => {
+  const events = { current: {} };
+  const emit = vi.fn((event, _payload, cb) => {
+    if (event === 'wheel:place_bet') {
+      cb?.({
+        success: true,
         segmentIndex: 2,
         multiplier: 2,
         winAmount: 20,
         profit: 10,
         targetAngle: 120,
-      }),
-      onActivePlayers: makeOn('activePlayers'),
-      onCurrentBets: makeOn('currentBets'),
-      onPlayerBet: makeOn('playerBet'),
-      onPlayerJoined: makeOn('playerJoined'),
-      onPlayerLeft: makeOn('playerLeft'),
-      onGameState: makeOn('gameState'),
-      onResult: makeOn('result'),
-      onError: makeOn('error'),
-      onBetsUpdate: makeOn('betsUpdate'),
-      onPlayersUpdate: makeOn('playersUpdate'),
-      onBalanceUpdate: makeOn('balanceUpdate'),
-    },
-  };
+      });
+    }
+  });
+  const hook = vi.fn((_gameType, opts) => {
+    events.current = (opts && opts.events) || {};
+    return {
+      socket: null,
+      status: 'connected',
+      lastError: null,
+      serverSeedHash: null,
+      emit,
+    };
+  });
+  return { capturedEvents: events, useGameSocketMock: hook, emitMock: emit };
 });
 
-vi.mock('@/services/socket/wheelSocketService', () => ({
-  default: wheelSocketServiceMock,
+vi.mock('@/games/_shared/useGameSocket', () => ({
+  __esModule: true,
+  default: useGameSocketMock,
+  useGameSocket: useGameSocketMock,
 }));
 
 // canvas-confetti has no real backend under jsdom — neuter it so WinBurst
@@ -90,7 +89,7 @@ const renderGame = () =>
 describe('WheelGame (smoke)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(capturedHandlers).forEach((k) => delete capturedHandlers[k]);
+    capturedEvents.current = {};
     wheelBoardCtx.onSpinComplete = null;
   });
 
@@ -107,42 +106,50 @@ describe('WheelGame (smoke)', () => {
     expect(screen.getByText(/^Balance$/i)).toBeInTheDocument();
   });
 
-  it('clicking Spin invokes wheelSocketService.placeBet with { betAmount, difficulty }', async () => {
+  it('opens the wheel socket via useGameSocket', () => {
     renderGame();
-    await waitFor(() => expect(wheelSocketServiceMock.connect).toHaveBeenCalled());
+    expect(useGameSocketMock).toHaveBeenCalled();
+    expect(useGameSocketMock.mock.calls[0][0]).toBe('wheel');
+  });
+
+  it('clicking Spin emits wheel:place_bet with { betAmount, difficulty } + ack', async () => {
+    renderGame();
 
     fireEvent.click(screen.getByRole('button', { name: /^Spin$/i }));
 
-    await waitFor(() =>
-      expect(wheelSocketServiceMock.placeBet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          betAmount: expect.any(Number),
-          difficulty: 'medium',
-        }),
-      ),
+    await waitFor(() => expect(emitMock).toHaveBeenCalled());
+    const betCall = emitMock.mock.calls.find(([event]) => event === 'wheel:place_bet');
+    expect(betCall).toBeDefined();
+    const [, payload, ack] = betCall;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        betAmount: expect.any(Number),
+        difficulty: 'medium',
+      }),
     );
+    expect(typeof ack).toBe('function');
   });
 
   it('difficulty buttons change the difficulty payload sent on next Spin', async () => {
     renderGame();
-    await waitFor(() => expect(wheelSocketServiceMock.connect).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /^hard$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Spin$/i }));
 
-    await waitFor(() =>
-      expect(wheelSocketServiceMock.placeBet).toHaveBeenCalledWith(
-        expect.objectContaining({ difficulty: 'hard' }),
-      ),
-    );
+    await waitFor(() => {
+      const bets = emitMock.mock.calls.filter(([event]) => event === 'wheel:place_bet');
+      expect(bets.length).toBeGreaterThan(0);
+    });
+    const betCall = emitMock.mock.calls.find(([event]) => event === 'wheel:place_bet');
+    const [, payload] = betCall;
+    expect(payload.difficulty).toBe('hard');
   });
 
   it('completes the spin: WheelBoard.onSpinComplete triggers a history pill', async () => {
     renderGame();
-    await waitFor(() => expect(wheelSocketServiceMock.connect).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /^Spin$/i }));
-    await waitFor(() => expect(wheelSocketServiceMock.placeBet).toHaveBeenCalled());
+    await waitFor(() => expect(emitMock).toHaveBeenCalled());
 
     // Simulate the GSAP-driven spin completing.
     await act(async () => {
@@ -155,9 +162,13 @@ describe('WheelGame (smoke)', () => {
     });
   });
 
-  it('disconnects the socket on unmount', () => {
-    const { unmount } = renderGame();
-    unmount();
-    expect(wheelSocketServiceMock.disconnect).toHaveBeenCalled();
+  it('balanceUpdate event invokes the handler wired through useGameSocket', () => {
+    renderGame();
+    expect(capturedEvents.current.balanceUpdate).toBeTypeOf('function');
+    // Smoke check: handler is wired and accepts the documented payload shape.
+    act(() => {
+      capturedEvents.current.balanceUpdate?.({ balance: 1234 });
+    });
+    // No throw == subscription contract preserved.
   });
 });

@@ -12,7 +12,8 @@ import BetPanel from '../../components/casino/BetPanel';
 import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
 import { AuthContext } from '../../contexts/AuthContext';
-import wheelSocketService from '../../services/socket/wheelSocketService';
+import { useToast } from '../../contexts/ToastContext';
+import useGameSocket from '../_shared/useGameSocket';
 import TestShim from '../_shared/TestShim';
 import {
   getWheelSegments,
@@ -44,6 +45,7 @@ function ResultPill({ result }) {
 
 const WheelGame = () => {
   const { user, updateBalance } = useContext(AuthContext) || {};
+  const toast = useToast();
   const { play } = useSound();
   const { burst, WinBurst: WinBurstNode } = useWinBurst();
 
@@ -72,55 +74,27 @@ const WheelGame = () => {
     setSegments(getWheelSegments(difficulty));
   }, [difficulty]);
 
-  // Socket lifecycle.
-  useEffect(() => {
-    const unsubs = [];
-    let cancelled = false;
-
-    if (user) {
-      wheelSocketService.setUser({
-        userId: user.id,
-        username: user.username,
-        avatar: user.avatar,
-      });
-    }
-
-    const init = async () => {
-      try {
-        await wheelSocketService.connect();
-      } catch {
-        return;
-      }
-      if (cancelled) return;
-      if (typeof wheelSocketService.onBalanceUpdate === 'function') {
-        unsubs.push(
-          wheelSocketService.onBalanceUpdate((data) => {
-            if (data?.balance != null && typeof updateBalance === 'function') {
-              updateBalance(data.balance);
-            }
-          }),
-        );
-      }
-    };
-
-    init();
-
-    return () => {
-      cancelled = true;
-      unsubs.forEach((u) => {
-        try {
-          u && u();
-        } catch {
-          /* ignore */
+  // Socket wiring. `useGameSocket` owns connect/disconnect; we just declare
+  // the events we care about and read `status` for UI feedback.
+  const events = useMemo(
+    () => ({
+      balanceUpdate: (data) => {
+        if (data?.balance != null && typeof updateBalance === 'function') {
+          updateBalance(data.balance);
         }
-      });
-      try {
-        wheelSocketService.disconnect();
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [user, updateBalance]);
+      },
+    }),
+    [updateBalance],
+  );
+
+  const { status, emit } = useGameSocket('wheel', { events });
+
+  // Surface connect failures the same way the legacy service did.
+  useEffect(() => {
+    if (status === 'error') {
+      toast.error('Failed to connect to Wheel server. Please refresh.');
+    }
+  }, [status, toast]);
 
   // Cleanup the "recent win" pulse timer.
   useEffect(
@@ -134,31 +108,29 @@ const WheelGame = () => {
   );
 
   // Handle spin click.
-  const handleSpin = useCallback(async () => {
+  const handleSpin = useCallback(() => {
     if (isSpinning || betAmount <= 0) return;
     setIsSpinning(true);
 
-    try {
-      const response = await wheelSocketService.placeBet({
-        betAmount,
-        difficulty,
-      });
-      setPendingServerResult({
-        segmentIndex: response.segmentIndex,
-        multiplier: response.multiplier,
-        winAmount: response.winAmount,
-        profit: response.profit,
-      });
-      const angle = response.targetAngle
-        || response.angle
-        || calculateRotationAngle(response.segmentIndex, segments.length);
-      setTargetAngle(angle);
-    } catch {
-      const result = generateWheelResult('', segments);
-      setPendingServerResult(null);
-      setTargetAngle(calculateRotationAngle(result.segmentIndex, segments.length));
-    }
-  }, [isSpinning, betAmount, difficulty, segments]);
+    emit('wheel:place_bet', { betAmount, difficulty }, (response) => {
+      if (response && response.success) {
+        setPendingServerResult({
+          segmentIndex: response.segmentIndex,
+          multiplier: response.multiplier,
+          winAmount: response.winAmount,
+          profit: response.profit,
+        });
+        const angle = response.targetAngle
+          || response.angle
+          || calculateRotationAngle(response.segmentIndex, segments.length);
+        setTargetAngle(angle);
+      } else {
+        const result = generateWheelResult('', segments);
+        setPendingServerResult(null);
+        setTargetAngle(calculateRotationAngle(result.segmentIndex, segments.length));
+      }
+    });
+  }, [isSpinning, betAmount, difficulty, segments, emit]);
 
   // Called by WheelBoard when spin animation completes.
   const handleSpinComplete = useCallback(() => {

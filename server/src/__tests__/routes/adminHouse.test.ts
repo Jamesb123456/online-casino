@@ -441,3 +441,245 @@ describe('Admin House routes', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wire contract — locked response shapes
+// Regression gate for the upcoming A5 refactor. The routes must remain
+// byte-identical when raw SQL is moved into a service; any drift in keys
+// or response shape will fail here.
+// ---------------------------------------------------------------------------
+
+function expectIs2dp(value: any) {
+  expect(typeof value).toBe('number');
+  expect(Number.isFinite(value)).toBe(true);
+  expect(Math.round(value * 100) / 100).toBe(value);
+}
+
+describe('Wire contract — Admin House', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthUser.role = 'admin';
+    mockAuthUser.userId = 1;
+    mockGetHouseBalance.mockResolvedValue(500000);
+    mockGetCaps.mockResolvedValue({ perRound: 1000000, perUserPerDay: 10000000, perDay: null });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /
+  // -------------------------------------------------------------------------
+  describe('GET /', () => {
+    it('locks { balance, caps } shape with caps sub-keys', async () => {
+      const res = await request(createApp()).get('/api/admin/house');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['balance', 'caps']);
+      expect(typeof res.body.balance).toBe('number');
+      expect(Number.isFinite(res.body.balance)).toBe(true);
+      expect(Object.keys(res.body.caps).sort()).toEqual(['perDay', 'perRound', 'perUserPerDay']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockGetHouseBalance.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp()).get('/api/admin/house');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('403 yields { message }', async () => {
+      mockAuthUser.role = 'user';
+      const res = await request(createApp()).get('/api/admin/house');
+      expect(res.status).toBe(403);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /topup
+  // -------------------------------------------------------------------------
+  describe('POST /topup', () => {
+    it('locks { balance } shape on success', async () => {
+      mockTopUp.mockResolvedValue({ balanceAfter: 600000 });
+      const res = await request(createApp())
+        .post('/api/admin/house/topup')
+        .send({ amount: 100000 });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['balance']);
+      expect(typeof res.body.balance).toBe('number');
+    });
+
+    it('400 yields { message }', async () => {
+      const res = await request(createApp())
+        .post('/api/admin/house/topup')
+        .send({ amount: 0 });
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('403 yields { message }', async () => {
+      mockAuthUser.role = 'operator';
+      const res = await request(createApp())
+        .post('/api/admin/house/topup')
+        .send({ amount: 100 });
+      expect(res.status).toBe(403);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockTopUp.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp())
+        .post('/api/admin/house/topup')
+        .send({ amount: 100 });
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /set-balance
+  // -------------------------------------------------------------------------
+  describe('POST /set-balance', () => {
+    it('locks { balance } shape on success', async () => {
+      mockSetHouseBalance.mockResolvedValue({ balanceBefore: 500000, balanceAfter: 250000 });
+      const res = await request(createApp())
+        .post('/api/admin/house/set-balance')
+        .send({ balance: 250000 });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['balance']);
+      expect(typeof res.body.balance).toBe('number');
+    });
+
+    it('400 yields { message }', async () => {
+      const res = await request(createApp())
+        .post('/api/admin/house/set-balance')
+        .send({ balance: -1 });
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockSetHouseBalance.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp())
+        .post('/api/admin/house/set-balance')
+        .send({ balance: 1 });
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /caps
+  // -------------------------------------------------------------------------
+  describe('GET /caps', () => {
+    it('locks { caps } shape with three sub-keys', async () => {
+      const res = await request(createApp()).get('/api/admin/house/caps');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['caps']);
+      expect(Object.keys(res.body.caps).sort()).toEqual(['perDay', 'perRound', 'perUserPerDay']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockGetCaps.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp()).get('/api/admin/house/caps');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PUT /caps
+  // -------------------------------------------------------------------------
+  describe('PUT /caps', () => {
+    it('locks { caps } shape on success', async () => {
+      mockSetCap.mockResolvedValue(undefined);
+      mockGetCaps.mockResolvedValue({ perRound: 2000000, perUserPerDay: 10000000, perDay: null });
+      const res = await request(createApp())
+        .put('/api/admin/house/caps')
+        .send({ perRound: 2000000 });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['caps']);
+      expect(Object.keys(res.body.caps).sort()).toEqual(['perDay', 'perRound', 'perUserPerDay']);
+    });
+
+    it('400 yields { message }', async () => {
+      const res = await request(createApp())
+        .put('/api/admin/house/caps')
+        .send({ perRound: -10 });
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockSetCap.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp())
+        .put('/api/admin/house/caps')
+        .send({ perRound: 1000 });
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /transactions
+  // -------------------------------------------------------------------------
+  describe('GET /transactions', () => {
+    it('locks paginated wrapper and row shape with numeric 2dp fields', async () => {
+      mockDbExecute
+        .mockResolvedValueOnce([[
+          {
+            id: 1,
+            type: 'admin_topup',
+            amount: '500000.00',
+            balance_before: '0.00',
+            balance_after: '500000.00',
+            user_id: null,
+            user_username: null,
+            admin_id: 1,
+            admin_username: 'admin',
+            game_type: null,
+            game_session_id: null,
+            transaction_id: null,
+            reason: 'Initial',
+            metadata: null,
+            created_at: '2026-05-19T00:00:00.000Z',
+          },
+        ]])
+        .mockResolvedValueOnce([[{ total: 1 }]]);
+
+      const res = await request(createApp())
+        .get('/api/admin/house/transactions?limit=10&offset=0');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['limit', 'offset', 'rows', 'total']);
+      expect(Number.isInteger(res.body.total)).toBe(true);
+      expect(Number.isInteger(res.body.limit)).toBe(true);
+      expect(Number.isInteger(res.body.offset)).toBe(true);
+
+      const row = res.body.rows[0];
+      expect(Object.keys(row).sort()).toEqual([
+        'adminId',
+        'adminUsername',
+        'amount',
+        'balanceAfter',
+        'balanceBefore',
+        'createdAt',
+        'gameSessionId',
+        'gameType',
+        'id',
+        'metadata',
+        'reason',
+        'transactionId',
+        'type',
+        'userId',
+        'userUsername',
+      ]);
+      expectIs2dp(row.amount);
+      expectIs2dp(row.balanceBefore);
+      expectIs2dp(row.balanceAfter);
+    });
+
+    it('500 yields { message }', async () => {
+      mockDbExecute.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp()).get('/api/admin/house/transactions');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+});

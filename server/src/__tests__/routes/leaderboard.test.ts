@@ -163,3 +163,70 @@ describe('Leaderboard routes', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wire contract — locked response shapes
+// Regression gate for the upcoming A5 refactor. Any drift in keys or
+// response shape from the byte-identical contract will fail here.
+// ---------------------------------------------------------------------------
+
+describe('Wire contract — Leaderboard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('GET /', () => {
+    it('locks { period, leaderboard } shape (allTime)', async () => {
+      const rows = [
+        { id: 1, username: 'player1', totalWinnings: 5000, totalGames: 50 },
+        { id: 2, username: 'player2', totalWinnings: 3000, totalGames: 30 },
+      ];
+      mockDbExecute.mockResolvedValue(rows);
+      const res = await request(createApp()).get('/api/leaderboard');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['leaderboard', 'period']);
+      expect(typeof res.body.period).toBe('string');
+      expect(['daily', 'weekly', 'allTime']).toContain(res.body.period);
+      expect(Array.isArray(res.body.leaderboard)).toBe(true);
+    });
+
+    it('locks { period, leaderboard } shape (daily)', async () => {
+      mockDbExecute.mockResolvedValue([]);
+      const res = await request(createApp()).get('/api/leaderboard?period=daily');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['leaderboard', 'period']);
+      expect(res.body.period).toBe('daily');
+    });
+
+    it('locks { period, leaderboard } shape (weekly)', async () => {
+      mockDbExecute.mockResolvedValue([]);
+      const res = await request(createApp()).get('/api/leaderboard?period=weekly');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['leaderboard', 'period']);
+      expect(res.body.period).toBe('weekly');
+    });
+
+    it('handles mysql2 [rows, fields] tuple format without leaking fields', async () => {
+      const rows = [{ id: 1, username: 'p', totalWinnings: 100, totalGames: 1 }];
+      mockDbExecute.mockResolvedValue([rows, []]);
+      const res = await request(createApp()).get('/api/leaderboard');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['leaderboard', 'period']);
+      expect(res.body.leaderboard).toEqual(rows);
+    });
+
+    it('400 invalid period yields { message }', async () => {
+      const res = await request(createApp()).get('/api/leaderboard?period=yearly');
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+      expect(typeof res.body.message).toBe('string');
+    });
+
+    it('500 yields { message }', async () => {
+      mockDbExecute.mockRejectedValue(new Error('DB error'));
+      const res = await request(createApp()).get('/api/leaderboard');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+});

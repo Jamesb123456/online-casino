@@ -343,3 +343,132 @@ describe('Admin Settings routes', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wire contract — locked response shapes
+// Regression gate for the upcoming A5 refactor. Any drift in keys or
+// response shape from the byte-identical contract will fail here.
+// ---------------------------------------------------------------------------
+
+describe('Wire contract — Admin Settings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthUser.role = 'admin';
+    mockAuthUser.userId = 1;
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /
+  // -------------------------------------------------------------------------
+  describe('GET /', () => {
+    it('locks { rows } shape with per-row keys', async () => {
+      mockExecute.mockResolvedValueOnce([[
+        { key: 'default_new_user_balance', value: '500', updated_at: '2026-05-19T00:00:00Z', updated_by: 1 },
+      ]]);
+      const res = await request(createApp()).get('/api/admin/settings');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['rows']);
+      expect(Array.isArray(res.body.rows)).toBe(true);
+      expect(Object.keys(res.body.rows[0]).sort()).toEqual([
+        'key',
+        'updatedAt',
+        'updatedBy',
+        'value',
+      ]);
+      expect(typeof res.body.rows[0].key).toBe('string');
+    });
+
+    it('500 yields { message }', async () => {
+      mockExecute.mockRejectedValueOnce(new Error('boom'));
+      const res = await request(createApp()).get('/api/admin/settings');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('403 yields { message }', async () => {
+      mockAuthUser.role = 'user';
+      const res = await request(createApp()).get('/api/admin/settings');
+      expect(res.status).toBe(403);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /:key
+  // -------------------------------------------------------------------------
+  describe('GET /:key', () => {
+    it('locks single row shape', async () => {
+      mockExecute.mockResolvedValueOnce([[
+        { key: 'min_house_edge_floor', value: '0.05', updated_at: '2026-05-19T00:00:00Z', updated_by: 1 },
+      ]]);
+      const res = await request(createApp()).get('/api/admin/settings/min_house_edge_floor');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['key', 'updatedAt', 'updatedBy', 'value']);
+      expect(typeof res.body.key).toBe('string');
+    });
+
+    it('404 yields { message }', async () => {
+      mockExecute.mockResolvedValueOnce([[]]);
+      const res = await request(createApp()).get('/api/admin/settings/does_not_exist');
+      expect(res.status).toBe(404);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockExecute.mockRejectedValueOnce(new Error('boom'));
+      const res = await request(createApp()).get('/api/admin/settings/default_new_user_balance');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PUT /:key
+  // -------------------------------------------------------------------------
+  describe('PUT /:key', () => {
+    it('locks { key, value } shape on success', async () => {
+      mockExecute.mockResolvedValueOnce([[]]);
+      const res = await request(createApp())
+        .put('/api/admin/settings/default_new_user_balance')
+        .send({ value: 1000 });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['key', 'value']);
+      expect(res.body.key).toBe('default_new_user_balance');
+      expect(res.body.value).toBe(1000);
+    });
+
+    it('400 (disallowed key) yields { message }', async () => {
+      const res = await request(createApp())
+        .put('/api/admin/settings/max_payout_per_round')
+        .send({ value: 999 });
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('400 (missing value) yields { message }', async () => {
+      const res = await request(createApp())
+        .put('/api/admin/settings/default_new_user_balance')
+        .send({});
+      expect(res.status).toBe(400);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('403 yields { message }', async () => {
+      mockAuthUser.role = 'operator';
+      const res = await request(createApp())
+        .put('/api/admin/settings/default_new_user_balance')
+        .send({ value: 1 });
+      expect(res.status).toBe(403);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockExecute.mockRejectedValueOnce(new Error('boom'));
+      const res = await request(createApp())
+        .put('/api/admin/settings/default_new_user_balance')
+        .send({ value: 100 });
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+});

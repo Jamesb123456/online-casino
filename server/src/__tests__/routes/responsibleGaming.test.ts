@@ -314,3 +314,162 @@ describe('Responsible Gaming routes', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wire contract — locked response shapes
+// Regression gate for the upcoming A5 refactor. Any drift in keys or
+// response shape from the byte-identical contract will fail here.
+// ---------------------------------------------------------------------------
+
+function expectIs2dp(value: any) {
+  expect(typeof value).toBe('number');
+  expect(Number.isFinite(value)).toBe(true);
+  expect(Math.round(value * 100) / 100).toBe(value);
+}
+
+describe('Wire contract — Responsible Gaming', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    selectChain.where.mockResolvedValue([{ isActive: true }]);
+    updateChain.where.mockResolvedValue([]);
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /limits
+  // -------------------------------------------------------------------------
+  describe('GET /limits', () => {
+    it('locks full limits shape with null placeholders', async () => {
+      selectChain.where.mockResolvedValue([{ isActive: true }]);
+      const res = await request(createApp()).get('/api/responsible-gaming/limits');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual([
+        'cooldownUntil',
+        'dailyDepositLimit',
+        'dailyLossLimit',
+        'isActive',
+        'selfExcluded',
+        'sessionTimeLimit',
+      ]);
+      expect(typeof res.body.isActive).toBe('boolean');
+      expect(typeof res.body.selfExcluded).toBe('boolean');
+      expect(res.body.dailyDepositLimit).toBeNull();
+      expect(res.body.dailyLossLimit).toBeNull();
+      expect(res.body.sessionTimeLimit).toBeNull();
+      expect(res.body.cooldownUntil).toBeNull();
+    });
+
+    it('401 yields { message }', async () => {
+      const { authenticate } = await import('../../../middleware/auth.js');
+      (authenticate as any).mockImplementationOnce((req, _res, next) => {
+        req.user = {};
+        next();
+      });
+      const res = await request(createApp()).get('/api/responsible-gaming/limits');
+      expect(res.status).toBe(401);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('404 yields { message }', async () => {
+      selectChain.where.mockResolvedValue([]);
+      const res = await request(createApp()).get('/api/responsible-gaming/limits');
+      expect(res.status).toBe(404);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      selectChain.where.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp()).get('/api/responsible-gaming/limits');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /self-exclude
+  // -------------------------------------------------------------------------
+  describe('POST /self-exclude', () => {
+    it('locks { success, message, reactivateAt } shape', async () => {
+      updateChain.where.mockResolvedValue([]);
+      const res = await request(createApp())
+        .post('/api/responsible-gaming/self-exclude')
+        .send({ days: 7 });
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['message', 'reactivateAt', 'success']);
+      expect(typeof res.body.success).toBe('boolean');
+      expect(res.body.success).toBe(true);
+      expect(typeof res.body.message).toBe('string');
+      expect(typeof res.body.reactivateAt).toBe('string');
+      // ISO timestamp parsable
+      expect(Number.isFinite(Date.parse(res.body.reactivateAt))).toBe(true);
+    });
+
+    it('401 yields { message }', async () => {
+      const { authenticate } = await import('../../../middleware/auth.js');
+      (authenticate as any).mockImplementationOnce((req, _res, next) => {
+        req.user = {};
+        next();
+      });
+      const res = await request(createApp())
+        .post('/api/responsible-gaming/self-exclude')
+        .send({ days: 7 });
+      expect(res.status).toBe(401);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      updateChain.where.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp())
+        .post('/api/responsible-gaming/self-exclude')
+        .send({ days: 7 });
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /activity-summary
+  // -------------------------------------------------------------------------
+  describe('GET /activity-summary', () => {
+    it('locks { last7Days, last30Days } shape with 2dp numeric fields', async () => {
+      mockDbExecute
+        .mockResolvedValueOnce([{ totalTransactions: 10, totalLosses: '200', totalWins: '500' }])
+        .mockResolvedValueOnce([{ totalTransactions: 50, totalLosses: '1000', totalWins: '2000' }]);
+
+      const res = await request(createApp()).get('/api/responsible-gaming/activity-summary');
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body).sort()).toEqual(['last30Days', 'last7Days']);
+
+      for (const key of ['last7Days', 'last30Days']) {
+        const bucket = res.body[key];
+        expect(Object.keys(bucket).sort()).toEqual([
+          'netResult',
+          'totalGames',
+          'totalLosses',
+          'totalWins',
+        ]);
+        expect(Number.isInteger(bucket.totalGames)).toBe(true);
+        expectIs2dp(bucket.totalWins);
+        expectIs2dp(bucket.totalLosses);
+        expectIs2dp(bucket.netResult);
+      }
+    });
+
+    it('401 yields { message }', async () => {
+      const { authenticate } = await import('../../../middleware/auth.js');
+      (authenticate as any).mockImplementationOnce((req, _res, next) => {
+        req.user = {};
+        next();
+      });
+      const res = await request(createApp()).get('/api/responsible-gaming/activity-summary');
+      expect(res.status).toBe(401);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+
+    it('500 yields { message }', async () => {
+      mockDbExecute.mockRejectedValue(new Error('boom'));
+      const res = await request(createApp()).get('/api/responsible-gaming/activity-summary');
+      expect(res.status).toBe(500);
+      expect(Object.keys(res.body)).toEqual(['message']);
+    });
+  });
+});

@@ -16,6 +16,7 @@ import type {
   GameType,
   JoinPayload,
   PlayerCtx,
+  SlotsBetPayload,
 } from '../_engine/types.js';
 import {
   REELS,
@@ -27,11 +28,6 @@ import {
 } from './paytable.js';
 import { drawReels } from './rng.js';
 
-interface SlotsSpinPayload {
-  betPerLine: number;
-  lines: number;
-}
-
 export class SlotsEngine extends InstantResolveEngine {
   readonly gameType: GameType = 'slots';
 
@@ -41,7 +37,7 @@ export class SlotsEngine extends InstantResolveEngine {
     return super.onJoin(ctx);
   }
 
-  override async onBet(ctx: PlayerCtx, payload: SlotsSpinPayload): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: SlotsBetPayload): Promise<BetResult> {
     const { betPerLine, lines } = this.validate(payload);
     const totalBet = Math.round(betPerLine * lines * 100) / 100;
 
@@ -81,7 +77,7 @@ export class SlotsEngine extends InstantResolveEngine {
 
   // ── Validation ──────────────────────────────────────────────────────
 
-  protected validate(payload: SlotsSpinPayload): { betPerLine: number; lines: number } {
+  protected validate(payload: SlotsBetPayload): { betPerLine: number; lines: number } {
     if (!payload || typeof payload !== 'object') {
       throw new Error('invalid_payload');
     }

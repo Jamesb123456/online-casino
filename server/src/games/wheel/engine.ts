@@ -24,6 +24,7 @@ import type {
   PersistedSeeds,
   PlayerCtx,
   SeedBundle,
+  WheelBetPayload,
 } from '../_engine/types.js';
 import pf from '../_engine/provablyFair.js';
 import { drawSegment, spinAngles } from './rng.js';
@@ -107,7 +108,7 @@ export class WheelEngine extends RoundBasedEngine {
 
   // ── Validation ────────────────────────────────────────────────────────
 
-  protected betSchema(payload: any): { betAmount: number; choice: { difficulty: WheelDifficulty } } {
+  protected betSchema(payload: WheelBetPayload): { betAmount: number; choice: { difficulty: WheelDifficulty } } {
     if (!payload || typeof payload !== 'object') {
       throw new Error('invalid_payload');
     }
@@ -189,7 +190,7 @@ export class WheelEngine extends RoundBasedEngine {
     }
   }
 
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: WheelBetPayload): Promise<BetResult> {
     return this.runExclusive(ctx.user.userId, async () => {
       if (this.round.phase !== 'betting') {
         throw new Error('not_betting_phase');

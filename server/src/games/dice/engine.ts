@@ -21,6 +21,7 @@ import pf from '../_engine/provablyFair.js';
 import { capMultiplier, MAX_PAYOUT_MULTIPLIER } from '../../utils/gameUtils.js';
 import type {
   BetResult,
+  DiceBetPayload,
   GameType,
   JoinPayload,
   PlayerCtx,
@@ -52,7 +53,7 @@ export function computeMultiplier(target: number, direction: DiceDirection, hous
  * `code-string` message that the socket bridge maps onto the ack
  * `{ ok: false, error }` shape.
  */
-export function betSchema(payload: any): {
+export function betSchema(payload: DiceBetPayload): {
   betAmount: number;
   target: number;
   direction: DiceDirection;
@@ -99,7 +100,7 @@ export class DiceEngine extends InstantResolveEngine {
    * The bindEvents caller (C-7) translates the returned `BetResult` into the
    * legacy ack shape.
    */
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: DiceBetPayload): Promise<BetResult> {
     const { betAmount, target, direction } = betSchema(payload);
 
     return this.oneShot(ctx, betAmount, async ({ seed, houseEdge }) => {

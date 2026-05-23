@@ -18,7 +18,7 @@ import { RingBuffer } from '../_engine/history.js';
 import { generatePath } from './path.js';
 import { resolveBucketMultiplier, type PlinkoRisk } from './buckets.js';
 import LoggingService from '../../services/loggingService.js';
-import type { BetResult, GameType, JoinPayload, PlayerCtx } from '../_engine/types.js';
+import type { BetResult, GameType, JoinPayload, PlayerCtx, PlinkoBetPayload as WirePlinkoBetPayload } from '../_engine/types.js';
 
 const VALID_RISKS: ReadonlyArray<PlinkoRisk> = ['low', 'medium', 'high'];
 const MIN_ROWS = 8;
@@ -50,7 +50,7 @@ export class PlinkoEngine extends InstantResolveEngine {
 
   // ── Validation ─────────────────────────────────────────────────────
 
-  protected validatePayload(payload: any): PlinkoBetPayload {
+  protected validatePayload(payload: WirePlinkoBetPayload): PlinkoBetPayload {
     if (!payload || typeof payload !== 'object') {
       throw new Error('invalid_payload');
     }
@@ -87,7 +87,7 @@ export class PlinkoEngine extends InstantResolveEngine {
 
   // ── Bet flow ───────────────────────────────────────────────────────
 
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: WirePlinkoBetPayload): Promise<BetResult> {
     const { betAmount, risk, rows } = this.validatePayload(payload);
 
     const result = await this.oneShot(ctx, betAmount, async ({ seed, payoutTable }) => {

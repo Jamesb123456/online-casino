@@ -38,6 +38,8 @@ import type { BlackjackSession } from './types.js';
 import type {
   ActionResult,
   BetResult,
+  BlackjackActionPayload,
+  BlackjackBetPayload,
   GameType,
   JoinPayload,
   PersistedSeeds,
@@ -81,7 +83,7 @@ export class BlackjackEngine extends InstantResolveEngine<BlackjackSession> {
 
   // ── Bet ───────────────────────────────────────────────────────────
 
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: BlackjackBetPayload): Promise<BetResult> {
     return this.runExclusive(ctx.user.userId, async () => {
       // One active hand per user.
       const existing = this.sessions.get(ctx.user.userId);
@@ -189,7 +191,7 @@ export class BlackjackEngine extends InstantResolveEngine<BlackjackSession> {
 
   // ── Actions ───────────────────────────────────────────────────────
 
-  override async onAction(ctx: PlayerCtx, action: string, _payload: any): Promise<ActionResult> {
+  override async onAction(ctx: PlayerCtx, action: string, _payload: BlackjackActionPayload): Promise<ActionResult> {
     switch (action) {
       case 'hit':
         return this.runExclusive(ctx.user.userId, () => this.doHit(ctx));

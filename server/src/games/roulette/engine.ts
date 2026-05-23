@@ -39,6 +39,7 @@ import type {
   JoinPayload,
   PersistedSeeds,
   PlayerCtx,
+  RouletteBetPayload,
   SeedBundle,
 } from '../_engine/types.js';
 
@@ -121,7 +122,7 @@ export class RouletteEngine extends RoundBasedEngine {
    * for downstream evaluation. Throws with stable error codes that
    * `runExclusive` surfaces to the client.
    */
-  protected betSchema(payload: any): { betAmount: number; choice: { type: RouletteBetType; value: string | number | null } } {
+  protected betSchema(payload: RouletteBetPayload): { betAmount: number; choice: { type: RouletteBetType; value: string | number | null } } {
     const validated = validateSocketData(roulettePlaceBetSchema, payload);
     const { type, value, amount } = validated;
 
@@ -299,7 +300,7 @@ export class RouletteEngine extends RoundBasedEngine {
    * track multiple-bets-per-user state, broadcast `roulette:playerBet`, and
    * emit `balanceUpdate` on success.
    */
-  async placeBet(ctx: PlayerCtx, data: any): Promise<{ betId: string; balance: number; currentBets: PlacedBet[] }> {
+  async placeBet(ctx: PlayerCtx, data: RouletteBetPayload): Promise<{ betId: string; balance: number; currentBets: PlacedBet[] }> {
     if (this.currentPhase !== 'betting') {
       throw new Error('Betting is closed');
     }

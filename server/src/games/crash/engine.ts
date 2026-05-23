@@ -50,6 +50,7 @@ import type {
 import type {
   ActionResult,
   BetResult,
+  CrashBetPayload,
   JoinPayload,
   PersistedSeeds,
   PlayerCtx,
@@ -113,7 +114,7 @@ export class CrashEngine extends RoundBasedEngine {
     return Number(process.env.CRASH_NEXT_GAME_MS) || 3000;
   }
 
-  betSchema(payload: any): { betAmount: number; choice: any } {
+  betSchema(payload: CrashBetPayload): { betAmount: number; choice: any } {
     // Reuse the same Zod schema the legacy handler used — keeps the contract
     // pixel-identical (min 0.10, max 5000, optional autoCashoutAt 1.01..50).
     const validated = validateSocketData(crashPlaceBetSchema, payload);
@@ -314,7 +315,7 @@ export class CrashEngine extends RoundBasedEngine {
    * Wraps the base's startSession bookkeeping (gameSessions + balance debit)
    * inside `runExclusive` so concurrent bets from the same user serialise.
    */
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: CrashBetPayload): Promise<BetResult> {
     return this.runExclusive(ctx.user.userId, async () => {
       if (this.round.phase !== 'betting') {
         throw new Error('Cannot bet while game is running');

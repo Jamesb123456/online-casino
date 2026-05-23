@@ -35,6 +35,8 @@ import type { LandminesSession } from './types.js';
 import type {
   BetResult,
   GameType,
+  LandminesActionPayload,
+  LandminesBetPayload,
   PersistedSeeds,
   PlayerCtx,
 } from '../_engine/types.js';
@@ -45,7 +47,7 @@ export class LandminesEngine extends InstantResolveEngine<LandminesSession> {
 
   // ── Bet ────────────────────────────────────────────────────────────
 
-  override async onBet(ctx: PlayerCtx, payload: any): Promise<BetResult> {
+  override async onBet(ctx: PlayerCtx, payload: LandminesBetPayload): Promise<BetResult> {
     return this.runExclusive(ctx.user.userId, async () => {
       const userId = ctx.user.userId;
 
@@ -125,13 +127,13 @@ export class LandminesEngine extends InstantResolveEngine<LandminesSession> {
 
   // ── Actions ────────────────────────────────────────────────────────
 
-  override async onAction(ctx: PlayerCtx, action: string, payload: any): Promise<ActionResult> {
+  override async onAction(ctx: PlayerCtx, action: string, payload: LandminesActionPayload): Promise<ActionResult> {
     if (action === 'reveal') return this.doReveal(ctx, payload);
     if (action === 'cashout') return this.doCashout(ctx);
     throw new Error(`unknown_action_${action}`);
   }
 
-  private async doReveal(ctx: PlayerCtx, payload: any): Promise<ActionResult> {
+  private async doReveal(ctx: PlayerCtx, payload: LandminesActionPayload): Promise<ActionResult> {
     return this.runExclusive(ctx.user.userId, async () => {
       const userId = ctx.user.userId;
       const session = this.sessions.get(userId);

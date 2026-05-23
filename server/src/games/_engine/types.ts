@@ -110,3 +110,90 @@ export interface JoinPayload {
 
 /** A factory that constructs a fresh engine instance — used by `registerGameNamespace`. */
 export type EngineFactory<T> = () => T;
+
+// ── Per-game bet/action payload shapes ─────────────────────────────────
+//
+// These types narrow the engine ↔ bindEvents boundary. The bindEvents layer
+// still accepts raw `any` payloads from socket.io and passes them through to
+// engines; engines validate (via Zod or inline checks) before reading fields.
+// The shapes here describe what an engine *will look at* on the payload, with
+// optional fields used generously so the existing validators still see the
+// same wire-format. Types are intentionally permissive — `strict: false`.
+
+/** `placeBet` payload for Crash. */
+export interface CrashBetPayload {
+  amount?: number;
+  autoCashoutAt?: number;
+  [k: string]: any;
+}
+
+/** `roulette:place_bet` payload for Roulette. */
+export interface RouletteBetPayload {
+  type?: string;
+  value?: string | number | null;
+  amount?: number;
+  [k: string]: any;
+}
+
+/** `wheel:place_bet` payload for Wheel. */
+export interface WheelBetPayload {
+  betAmount?: number;
+  difficulty?: 'easy' | 'medium' | 'hard' | string;
+  [k: string]: any;
+}
+
+/** `blackjack_start` payload for Blackjack. */
+export interface BlackjackBetPayload {
+  betAmount?: number;
+  [k: string]: any;
+}
+
+/**
+ * Blackjack action payloads. Hit/stand/double take no fields in the legacy
+ * wire format, so this is effectively empty — kept as an interface so the
+ * binding layer has a stable name to import.
+ */
+export interface BlackjackActionPayload {
+  [k: string]: any;
+}
+
+/** `plinko:drop_ball` payload for Plinko. */
+export interface PlinkoBetPayload {
+  betAmount?: number;
+  risk?: 'low' | 'medium' | 'high' | string;
+  rows?: number;
+  [k: string]: any;
+}
+
+/** `landmines:start` payload (opens a Landmines session). */
+export interface LandminesBetPayload {
+  betAmount?: number;
+  mines?: number;
+  [k: string]: any;
+}
+
+/**
+ * Landmines action payload. `reveal` carries `{ row, col }`; `cashout` carries
+ * nothing. Combined into a single permissive shape so `onAction` can accept
+ * either.
+ */
+export interface LandminesActionPayload {
+  row?: number;
+  col?: number;
+  [k: string]: any;
+}
+
+/** `dice:roll` payload for Dice. */
+export interface DiceBetPayload {
+  betAmount?: number;
+  target?: number;
+  direction?: 'under' | 'over' | string;
+  [k: string]: any;
+}
+
+/** `slots:spin` payload for Slots. */
+export interface SlotsBetPayload {
+  betPerLine?: number;
+  lines?: number;
+  [k: string]: any;
+}

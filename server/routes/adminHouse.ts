@@ -1,9 +1,7 @@
 import express, { Request, Response } from 'express';
-import { sql } from 'drizzle-orm';
 import { authenticate as auth, adminOnly, adminOrOperatorOrViewer } from '../middleware/auth.js';
 import LoggingService from '../src/services/loggingService.js';
 import HouseService, { CAP_KEYS } from '../src/services/houseService.js';
-import { db } from '../drizzle/db.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = express.Router();
@@ -155,31 +153,7 @@ router.get('/transactions', auth, adminOrOperatorOrViewer, async (req: Request, 
     const from = typeof req.query.from === 'string' && req.query.from ? String(req.query.from) : null;
     const to = typeof req.query.to === 'string' && req.query.to ? String(req.query.to) : null;
 
-    // Build dynamic WHERE clauses
-    const conditions: any[] = [sql`1 = 1`];
-    if (type) conditions.push(sql`ht.type = ${type}`);
-    if (from) conditions.push(sql`ht.created_at >= ${from}`);
-    if (to) conditions.push(sql`ht.created_at <= ${to}`);
-    const whereClause = sql.join(conditions, sql` AND `);
-
-    const rowsResult = await db.execute(
-      sql`SELECT ht.id, ht.type, ht.amount, ht.balance_before, ht.balance_after,
-                 ht.user_id, ht.admin_id, ht.game_type, ht.game_session_id,
-                 ht.transaction_id, ht.reason, ht.metadata, ht.created_at,
-                 u.username AS user_username, a.username AS admin_username
-          FROM house_transactions ht
-          LEFT JOIN users u ON u.id = ht.user_id
-          LEFT JOIN users a ON a.id = ht.admin_id
-          WHERE ${whereClause}
-          ORDER BY ht.id DESC
-          LIMIT ${limit} OFFSET ${offset}`
-    );
-    const rawRows = (rowsResult as any)[0] || [];
-
-    const countResult = await db.execute(
-      sql`SELECT COUNT(*) AS total FROM house_transactions ht WHERE ${whereClause}`
-    );
-    const total = Number((countResult as any)[0]?.[0]?.total ?? 0);
+    const { rawRows, total } = await HouseService.getTransactions({ limit, offset, type, from, to });
 
     const rows = rawRows.map((r: any) => ({
       id: r.id,

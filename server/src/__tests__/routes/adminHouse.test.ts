@@ -13,6 +13,7 @@ const {
   mockTopUp,
   mockSetHouseBalance,
   mockSetCap,
+  mockGetTransactions,
   mockDbExecute,
 } = vi.hoisted(() => ({
   mockGetHouseBalance: vi.fn(),
@@ -20,6 +21,7 @@ const {
   mockTopUp: vi.fn(),
   mockSetHouseBalance: vi.fn(),
   mockSetCap: vi.fn(),
+  mockGetTransactions: vi.fn(),
   mockDbExecute: vi.fn(),
 }));
 
@@ -70,6 +72,7 @@ vi.mock('../../../src/services/houseService.js', () => ({
     topUp: mockTopUp,
     setHouseBalance: mockSetHouseBalance,
     setCap: mockSetCap,
+    getTransactions: mockGetTransactions,
   },
   CAP_KEYS: {
     perRound: 'max_payout_per_round',
@@ -128,9 +131,7 @@ describe('Admin House routes', () => {
 
     it('allows viewer on GET /transactions', async () => {
       mockAuthUser.role = 'viewer';
-      mockDbExecute
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[{ total: 0 }]]);
+      mockGetTransactions.mockResolvedValue({ rawRows: [], total: 0 });
       const res = await request(createApp()).get('/api/admin/house/transactions');
       expect(res.status).toBe(200);
     });
@@ -348,8 +349,8 @@ describe('Admin House routes', () => {
   // ---------------------------------------------------------------------------
   describe('GET /transactions', () => {
     it('returns paginated rows', async () => {
-      mockDbExecute
-        .mockResolvedValueOnce([[
+      mockGetTransactions.mockResolvedValue({
+        rawRows: [
           {
             id: 1,
             type: 'admin_topup',
@@ -367,8 +368,9 @@ describe('Admin House routes', () => {
             metadata: null,
             created_at: '2026-05-19T00:00:00.000Z',
           },
-        ]])
-        .mockResolvedValueOnce([[{ total: 1 }]]);
+        ],
+        total: 1,
+      });
 
       const res = await request(createApp())
         .get('/api/admin/house/transactions?limit=10&offset=0');
@@ -386,9 +388,7 @@ describe('Admin House routes', () => {
     });
 
     it('clamps limit', async () => {
-      mockDbExecute
-        .mockResolvedValueOnce([[]])
-        .mockResolvedValueOnce([[{ total: 0 }]]);
+      mockGetTransactions.mockResolvedValue({ rawRows: [], total: 0 });
       const res = await request(createApp())
         .get('/api/admin/house/transactions?limit=999');
       expect(res.status).toBe(200);
@@ -396,7 +396,7 @@ describe('Admin House routes', () => {
     });
 
     it('returns 500 on db error', async () => {
-      mockDbExecute.mockRejectedValue(new Error('db boom'));
+      mockGetTransactions.mockRejectedValue(new Error('db boom'));
       const res = await request(createApp())
         .get('/api/admin/house/transactions');
       expect(res.status).toBe(500);
@@ -622,8 +622,8 @@ describe('Wire contract — Admin House', () => {
   // -------------------------------------------------------------------------
   describe('GET /transactions', () => {
     it('locks paginated wrapper and row shape with numeric 2dp fields', async () => {
-      mockDbExecute
-        .mockResolvedValueOnce([[
+      mockGetTransactions.mockResolvedValue({
+        rawRows: [
           {
             id: 1,
             type: 'admin_topup',
@@ -641,8 +641,9 @@ describe('Wire contract — Admin House', () => {
             metadata: null,
             created_at: '2026-05-19T00:00:00.000Z',
           },
-        ]])
-        .mockResolvedValueOnce([[{ total: 1 }]]);
+        ],
+        total: 1,
+      });
 
       const res = await request(createApp())
         .get('/api/admin/house/transactions?limit=10&offset=0');
@@ -676,7 +677,7 @@ describe('Wire contract — Admin House', () => {
     });
 
     it('500 yields { message }', async () => {
-      mockDbExecute.mockRejectedValue(new Error('boom'));
+      mockGetTransactions.mockRejectedValue(new Error('boom'));
       const res = await request(createApp()).get('/api/admin/house/transactions');
       expect(res.status).toBe(500);
       expect(Object.keys(res.body)).toEqual(['message']);

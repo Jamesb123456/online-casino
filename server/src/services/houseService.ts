@@ -256,6 +256,49 @@ class HouseService {
   }
 
   /**
+   * Paginated audit log of house transactions with optional filters.
+   * Returns raw DB rows (snake_case keys, string decimals) plus the total
+   * count of matching rows. The route layer is responsible for mapping
+   * raw rows into the public response shape.
+   */
+  async getTransactions(params: {
+    limit: number;
+    offset: number;
+    type?: string | null;
+    from?: string | null;
+    to?: string | null;
+  }): Promise<{ rawRows: any[]; total: number }> {
+    const { limit, offset, type = null, from = null, to = null } = params;
+
+    const conditions: any[] = [sql`1 = 1`];
+    if (type) conditions.push(sql`ht.type = ${type}`);
+    if (from) conditions.push(sql`ht.created_at >= ${from}`);
+    if (to) conditions.push(sql`ht.created_at <= ${to}`);
+    const whereClause = sql.join(conditions, sql` AND `);
+
+    const rowsResult = await db.execute(
+      sql`SELECT ht.id, ht.type, ht.amount, ht.balance_before, ht.balance_after,
+                 ht.user_id, ht.admin_id, ht.game_type, ht.game_session_id,
+                 ht.transaction_id, ht.reason, ht.metadata, ht.created_at,
+                 u.username AS user_username, a.username AS admin_username
+          FROM house_transactions ht
+          LEFT JOIN users u ON u.id = ht.user_id
+          LEFT JOIN users a ON a.id = ht.admin_id
+          WHERE ${whereClause}
+          ORDER BY ht.id DESC
+          LIMIT ${limit} OFFSET ${offset}`
+    );
+    const rawRows = (rowsResult as any)[0] || [];
+
+    const countResult = await db.execute(
+      sql`SELECT COUNT(*) AS total FROM house_transactions ht WHERE ${whereClause}`
+    );
+    const total = Number((countResult as any)[0]?.[0]?.total ?? 0);
+
+    return { rawRows, total };
+  }
+
+  /**
    * Pre-payout check.
    * Returns { ok: true } or { ok: false, reason: '...' }.
    */

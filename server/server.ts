@@ -69,7 +69,14 @@ import { PlinkoEngine } from './src/games/plinko/engine.js';
 import { LandminesEngine } from './src/games/landmines/engine.js';
 import { DiceEngine } from './src/games/dice/engine.js';
 import { SlotsEngine } from './src/games/slots/engine.js';
-import balanceService from './src/services/balanceService.js';
+import { bindEvents as bindCrashEvents } from './src/games/crash/bindEvents.js';
+import { bindEvents as bindRouletteEvents } from './src/games/roulette/bindEvents.js';
+import { bindEvents as bindBlackjackEvents } from './src/games/blackjack/bindEvents.js';
+import { bindEvents as bindPlinkoEvents } from './src/games/plinko/bindEvents.js';
+import { bindEvents as bindLandminesEvents } from './src/games/landmines/bindEvents.js';
+import { bindEvents as bindDiceEvents } from './src/games/dice/bindEvents.js';
+import { bindEvents as bindSlotsEvents } from './src/games/slots/bindEvents.js';
+import { bindEvents as bindWheelEvents } from './src/games/wheel/bindEvents.js';
 
 // Config
 dotenv.config();
@@ -233,26 +240,7 @@ export async function createApp(): Promise<AppInstance> {
       engine.startCycle();
       return engine;
     },
-    (engine, ctx) => {
-      ctx.socket.on('placeBet', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          ack?.({ success: true, ...result });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          ack?.({ success: false, error: message });
-        }
-      });
-      ctx.socket.on('cashOut', async (_payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.cashOut(ctx);
-          ack?.({ success: true, ...result });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          ack?.({ success: false, error: message });
-        }
-      });
-    },
+    bindCrashEvents,
   );
 
   // Roulette game namespace — new engine wiring (Phase B).
@@ -267,9 +255,7 @@ export async function createApp(): Promise<AppInstance> {
       engine.start();
       return engine;
     },
-    () => {
-      /* event listeners bound in RouletteEngine.onJoin */
-    },
+    bindRouletteEvents,
   );
 
   // Blackjack game namespace — new engine wiring (Phase C).
@@ -281,24 +267,7 @@ export async function createApp(): Promise<AppInstance> {
     io,
     'blackjack',
     () => new BlackjackEngine(),
-    (engine, ctx) => {
-      const safeEmitError = (err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        ctx.socket.emit('blackjack_error', { message });
-      };
-      ctx.socket.on('blackjack_start', async (payload: any) => {
-        try { await engine.onBet(ctx, payload); } catch (err) { safeEmitError(err); }
-      });
-      ctx.socket.on('blackjack_hit', async (payload: any) => {
-        try { await engine.onAction(ctx, 'hit', payload); } catch (err) { safeEmitError(err); }
-      });
-      ctx.socket.on('blackjack_stand', async (payload: any) => {
-        try { await engine.onAction(ctx, 'stand', payload); } catch (err) { safeEmitError(err); }
-      });
-      ctx.socket.on('blackjack_double', async (payload: any) => {
-        try { await engine.onAction(ctx, 'double', payload); } catch (err) { safeEmitError(err); }
-      });
-    },
+    bindBlackjackEvents,
   );
 
   // Plinko game namespace — new engine wiring (Phase C).
@@ -310,34 +279,7 @@ export async function createApp(): Promise<AppInstance> {
     io,
     'plinko',
     () => new PlinkoEngine(),
-    (engine, ctx) => {
-      ctx.socket.on('plinko:drop_ball', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          const ackPayload = (result.resultDetails as any)?.ack ?? null;
-          if (ack) {
-            if (ackPayload) ack(ackPayload);
-            else ack({ success: true, gameId: String(result.sessionId), balance: result.balance });
-          }
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('plinko:get_history', (data: any, ack?: (resp: any) => void) => {
-        try {
-          const limit = data?.limit || 10;
-          const history = engine.getHistory(limit);
-          if (ack) ack({ success: true, userHistory: [], globalHistory: history });
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      // Legacy no-op events kept for backwards compatibility with old clients.
-      ctx.socket.on('plinko:join', (_data: any, ack?: (resp: any) => void) => {
-        if (ack) ack({ success: true });
-      });
-      ctx.socket.on('plinko:leave', () => { /* state cleared by base.onDisconnect */ });
-    },
+    bindPlinkoEvents,
   );
 
   // Landmines game namespace — new engine wiring (Phase C).
@@ -348,72 +290,7 @@ export async function createApp(): Promise<AppInstance> {
     io,
     'landmines',
     () => new LandminesEngine(),
-    (engine, ctx) => {
-      ctx.socket.on('landmines:start', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          const details = (result.resultDetails ?? {}) as any;
-          if (ack) ack({
-            success: true,
-            gameId: details.gameId,
-            mines: details.mines,
-            gridSize: details.gridSize ?? 5,
-            balance: result.balance,
-          });
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('landmines:pick', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onAction(ctx, 'reveal', payload);
-          const details = (result.resultDetails ?? {}) as any;
-          if (details.hit === true) {
-            if (ack) ack({
-              success: true,
-              hit: true,
-              position: details.position,
-              gameOver: true,
-              fullGrid: details.fullGrid,
-              winAmount: 0,
-            });
-          } else {
-            if (ack) ack({
-              success: true,
-              hit: false,
-              position: details.position,
-              multiplier: details.multiplier,
-              potentialWin: details.potentialWin,
-              winAmount: details.winAmount,
-              profit: details.profit,
-              gameOver: !!details.gameOver,
-              fullGrid: details.fullGrid,
-              remainingSafeCells: details.remainingSafeCells,
-              autoCashout: details.autoCashout,
-            });
-          }
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('landmines:cashout', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onAction(ctx, 'cashout', payload);
-          const details = (result.resultDetails ?? {}) as any;
-          if (ack) ack({
-            success: true,
-            winAmount: details.winAmount,
-            multiplier: details.multiplier,
-            profit: details.profit,
-            cashedOut: !!details.cashedOut,
-            balance: result.balance,
-            fullGrid: details.fullGrid,
-          });
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-    },
+    bindLandminesEvents,
   );
 
   // Dice game namespace — new engine wiring (Phase C).
@@ -425,36 +302,7 @@ export async function createApp(): Promise<AppInstance> {
     io,
     'dice',
     () => new DiceEngine(),
-    (engine, ctx) => {
-      ctx.socket.on('dice:roll', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          const details = (result.resultDetails ?? {}) as any;
-          if (ack) ack({
-            ok: true,
-            gameId: String(result.sessionId),
-            result: details.result,
-            target: details.target,
-            direction: details.direction,
-            win: details.win,
-            multiplier: result.finalMultiplier ?? 0,
-            winAmount: result.outcome,
-            newBalance: result.balance,
-          });
-        } catch (err) {
-          if (ack) ack({ ok: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('dice:join', async (_data: any, ack?: (resp: any) => void) => {
-        try {
-          const balance = await balanceService.getBalance(ctx.user.userId);
-          if (ack) ack({ success: true, balance, history: [] });
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('dice:leave', () => { /* per-user state lives in seed cache only */ });
-    },
+    bindDiceEvents,
   );
 
   // Slots game namespace — new engine wiring (Phase C).
@@ -465,34 +313,7 @@ export async function createApp(): Promise<AppInstance> {
     io,
     'slots',
     () => new SlotsEngine(),
-    (engine, ctx) => {
-      ctx.socket.on('slots:spin', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          const details = (result.resultDetails ?? {}) as any;
-          if (ack) ack({
-            ok: true,
-            gameId: String(result.sessionId),
-            reels: details.reels,
-            hits: details.hits,
-            totalPayout: result.outcome,
-            multiplier: result.finalMultiplier ?? 0,
-            newBalance: result.balance,
-          });
-        } catch (err) {
-          if (ack) ack({ ok: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('slots:join', async (_data: any, ack?: (resp: any) => void) => {
-        try {
-          const balance = await balanceService.getBalance(ctx.user.userId);
-          if (ack) ack({ success: true, balance });
-        } catch (err) {
-          if (ack) ack({ success: false, error: err instanceof Error ? err.message : String(err) });
-        }
-      });
-      ctx.socket.on('slots:leave', () => { /* no per-connection state */ });
-    },
+    bindSlotsEvents,
   );
 
   // Wheel game namespace — new engine wiring (Phase B).
@@ -508,39 +329,7 @@ export async function createApp(): Promise<AppInstance> {
       engine.start();
       return engine;
     },
-    (engine, ctx) => {
-      ctx.socket.on('wheel:place_bet', async (payload: any, ack?: (resp: any) => void) => {
-        try {
-          const result = await engine.onBet(ctx, payload);
-          ack?.({ success: true, balance: result.balance, sessionId: result.sessionId });
-        } catch (err) {
-          const raw = err instanceof Error ? err.message : String(err);
-          const error = (() => {
-            switch (raw) {
-              case 'not_betting_phase':
-                return 'Betting is closed';
-              case 'already_placed_bet':
-                return 'You already placed a bet this round';
-              case 'invalid_bet':
-              case 'invalid_payload':
-                return 'Invalid bet';
-              case 'invalid_difficulty':
-                return 'Invalid difficulty';
-              default:
-                if (raw.startsWith('limit_')) return `Bet blocked: ${raw.slice(6)}`;
-                return raw;
-            }
-          })();
-          ack?.({ success: false, error });
-        }
-      });
-      ctx.socket.on('wheel:get_history', (_data: any, ack?: (resp: any) => void) => {
-        // History is engine-internal; expose via a tiny accessor on the engine.
-        const history = (engine as any).history ?? [];
-        const limit = _data?.limit || 10;
-        ack?.({ success: true, globalHistory: history.slice(-limit) });
-      });
-    },
+    bindWheelEvents,
   );
 
   // Apply authentication middleware to main namespace

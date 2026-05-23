@@ -17,12 +17,19 @@ import { renderHook, act } from '@testing-library/react';
 //     finish its `useEffect` without throwing; behavior is asserted in the
 //     sister test. ---
 function createFakeSocket() {
-  return {
-    on: vi.fn(),
+  const handlers = {};
+  const socket = {
+    handlers,
+    io: { opts: { reconnection: true } },
+    on: vi.fn((event, cb) => {
+      handlers[event] = cb;
+      return socket;
+    }),
     emit: vi.fn(),
     disconnect: vi.fn(),
     removeAllListeners: vi.fn(),
   };
+  return socket;
 }
 
 let fakeSocket;
@@ -168,6 +175,50 @@ describe('useGameSocket — public API contract', () => {
     expect(registered).toEqual(
       expect.arrayContaining(['blackjack_state', 'blackjack_error']),
     );
+  });
+
+  it("flips status to 'error' with source='server_disconnect' on 'io server disconnect'", async () => {
+    const useGameSocket = await importHook();
+    const { result } = renderHook(() => useGameSocket('dice'));
+
+    // Drive the captured 'disconnect' handler with the terminal reason.
+    act(() => {
+      fakeSocket.handlers.disconnect('io server disconnect');
+    });
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.lastError).toEqual({
+      source: 'server_disconnect',
+      reason: 'io server disconnect',
+    });
+    // The hook should have called .disconnect() to stop any further attempts.
+    expect(fakeSocket.disconnect).toHaveBeenCalled();
+  });
+
+  it("flips status to 'error' with source='auth' after 3 auth-like connect_error events", async () => {
+    const useGameSocket = await importHook();
+    const { result } = renderHook(() => useGameSocket('dice'));
+
+    act(() => {
+      fakeSocket.handlers.connect_error(new Error('Unauthorized: no session'));
+    });
+    // First two should be transient — status moves to 'error' (connect-style)
+    // but lastError.source is still 'connect', not 'auth'.
+    expect(result.current.lastError.source).toBe('connect');
+
+    act(() => {
+      fakeSocket.handlers.connect_error(new Error('auth required'));
+    });
+    expect(result.current.lastError.source).toBe('connect');
+
+    act(() => {
+      fakeSocket.handlers.connect_error(new Error('forbidden'));
+    });
+    // Third strike — terminal.
+    expect(result.current.status).toBe('error');
+    expect(result.current.lastError.source).toBe('auth');
+    expect(fakeSocket.io.opts.reconnection).toBe(false);
+    expect(fakeSocket.disconnect).toHaveBeenCalled();
   });
 
   it('appends the gameType verbatim to the namespace (no transforms)', async () => {

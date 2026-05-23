@@ -1,129 +1,106 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import chatSocketService from '../../services/socket/chatSocketService';
+import useGameSocket from '../../games/_shared/useGameSocket';
 
 /**
  * ChatBox Component
- * Displays a global chat interface for all authenticated users
+ * Displays a global chat interface for all authenticated users.
+ *
+ * Wired through the shared `useGameSocket` hook (B1.5 migration). The hook
+ * owns connect/disconnect and reconnection (Infinity attempts). The legacy
+ * `io server disconnect → setTimeout(connect, 3000)` heuristic from
+ * `chatSocketService` is intentionally dropped: deliberate server kicks
+ * should not be auto-retried, and all other failure modes are already
+ * covered by the hook's built-in reconnection.
  */
 const ChatBox = () => {
   const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // Connect to chat socket when component mounts
-  useEffect(() => {
-    if (user) {
-      console.log('Attempting to connect to chat service...');
-      chatSocketService.connect()
-        .then(() => {
-          setIsConnected(true);
-          console.log('Connected to chat service');
-        })
-        .catch(err => {
-          console.error('Failed to connect to chat:', err);
-          // Try one more time after a short delay
-          setTimeout(() => {
-            console.log('Retrying chat connection...');
-            chatSocketService.connect()
-              .then(() => {
-                setIsConnected(true);
-                console.log('Connected to chat service on retry');
-              })
-              .catch(retryErr => {
-                console.error('Failed to connect on retry:', retryErr);
-              });
-          }, 2000);
-        });
-      
-      // Clean up on unmount
-      return () => chatSocketService.disconnect();
-    }
-  }, [user]);
+  // Wire chat events through the shared hook. Event names match the
+  // server-side wire format (see chatSocketService for the legacy mapping
+  // that we've now flattened away).
+  const events = useMemo(() => {
+    const handleNewMessage = (message) => {
+      setMessages((prev) => [...prev, message]);
+    };
 
-  // Set up event handlers
-  useEffect(() => {
-    if (user) {
-      const handleNewMessage = (message) => {
-        setMessages(prevMessages => [...prevMessages, message]);
-      };
+    const handlePreviousMessages = (previousMessages) => {
+      setMessages(previousMessages);
+    };
 
-      const handlePreviousMessages = (previousMessages) => {
-        setMessages(previousMessages);
-      };
+    const handleUserJoined = (data) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          _id: `system-${Date.now()}`,
+          content: data.message,
+          system: true,
+          createdAt: data.timestamp,
+        },
+      ]);
+    };
 
-      const handleUserJoined = (data) => {
-        // Add system message
-        setMessages(prevMessages => [
-          ...prevMessages,
-          {
-            _id: `system-${Date.now()}`,
-            content: data.message,
-            system: true,
-            createdAt: data.timestamp
-          }
-        ]);
-      };
+    const handleUserLeft = (data) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          _id: `system-${Date.now()}`,
+          content: data.message,
+          system: true,
+          createdAt: data.timestamp,
+        },
+      ]);
+      setTypingUsers((users) =>
+        users.filter((username) => username !== data.user?.username)
+      );
+    };
 
-      const handleUserLeft = (data) => {
-        // Add system message
-        setMessages(prevMessages => [
-          ...prevMessages,
-          {
-            _id: `system-${Date.now()}`,
-            content: data.message,
-            system: true,
-            createdAt: data.timestamp
-          }
-        ]);
-
-        // Remove user from typing list if they were typing
-        setTypingUsers(users => 
-          users.filter(username => username !== data.user?.username)
-        );
-      };
-
-      const handleUserTyping = (data) => {
-        if (data.username !== user.username) {
-          setTypingUsers(users => {
-            if (!users.includes(data.username)) {
-              return [...users, data.username];
-            }
-            return users;
-          });
+    const handleUserTyping = (data) => {
+      if (!user || data.username === user.username) return;
+      setTypingUsers((users) => {
+        if (!users.includes(data.username)) {
+          return [...users, data.username];
         }
-      };
+        return users;
+      });
+    };
 
-      const handleUserStoppedTyping = (data) => {
-        setTypingUsers(users => 
-          users.filter(username => username !== data.username)
-        );
-      };
+    const handleUserStoppedTyping = (data) => {
+      setTypingUsers((users) =>
+        users.filter((username) => username !== data.username)
+      );
+    };
 
-      // Register event handlers
-      const unsubscribeNewMessage = chatSocketService.on('newMessage', handleNewMessage);
-      const unsubscribePreviousMessages = chatSocketService.on('previousMessages', handlePreviousMessages);
-      const unsubscribeUserJoined = chatSocketService.on('userJoined', handleUserJoined);
-      const unsubscribeUserLeft = chatSocketService.on('userLeft', handleUserLeft);
-      const unsubscribeUserTyping = chatSocketService.on('userTyping', handleUserTyping);
-      const unsubscribeUserStoppedTyping = chatSocketService.on('userStoppedTyping', handleUserStoppedTyping);
+    const handleChatError = (error) => {
+      // Mirror the legacy service which logged both `error` and `chat_error`.
+      console.error('Chat socket error:', error);
+    };
 
-      // Cleanup
-      return () => {
-        unsubscribeNewMessage();
-        unsubscribePreviousMessages();
-        unsubscribeUserJoined();
-        unsubscribeUserLeft();
-        unsubscribeUserTyping();
-        unsubscribeUserStoppedTyping();
-      };
-    }
+    return {
+      new_message: handleNewMessage,
+      message_history: handlePreviousMessages,
+      user_joined: handleUserJoined,
+      userLeft: handleUserLeft,
+      userTyping: handleUserTyping,
+      userStoppedTyping: handleUserStoppedTyping,
+      // The hook auto-subscribes to `error` and calls our handler too; we
+      // also add `chat_error` since the legacy service fanned both names
+      // into the same listener.
+      error: handleChatError,
+      chat_error: handleChatError,
+    };
   }, [user]);
+
+  // Only open a socket for authenticated users. Passing `null` short-circuits
+  // the hook's connect effect.
+  const { status, emit } = useGameSocket(user ? 'chat' : null, { events });
+  const isConnected = status === 'connected';
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -133,42 +110,42 @@ const ChatBox = () => {
   // Handle sending messages
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (messageInput.trim() && isConnected) {
-      chatSocketService.sendMessage(messageInput.trim());
+      emit('send_message', { content: messageInput.trim() });
       setMessageInput('');
-      
+
       // Clear typing indicator
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      chatSocketService.sendStopTyping();
+      emit('stopTyping');
     }
   };
 
   // Handle typing indicator
   const handleInputChange = (e) => {
     setMessageInput(e.target.value);
-    
+
     // Send typing indicator
     if (isConnected) {
-      chatSocketService.sendTyping();
-      
+      emit('typing');
+
       // Clear previous timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
+
       // Set a timeout to stop typing indicator
       typingTimeoutRef.current = setTimeout(() => {
-        chatSocketService.sendStopTyping();
+        emit('stopTyping');
       }, 2000);
     }
   };
 
   // Toggle chat open/closed
   const toggleChat = () => {
-    setIsOpen(prev => !prev);
+    setIsOpen((prev) => !prev);
   };
 
   // Format timestamp

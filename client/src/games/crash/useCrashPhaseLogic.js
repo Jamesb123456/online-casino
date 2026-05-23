@@ -13,9 +13,9 @@ import { useReducedMotion } from '@/components/casino/MotionSafe';
 
 import useGameSocket from '@/games/_shared/useGameSocket';
 import useAnnouncer from '@/games/_shared/hooks/useAnnouncer';
+import useGameError from '@/games/_shared/hooks/useGameError';
 
 import { AuthContext } from '@/contexts/AuthContext';
-import { useToast } from '@/contexts/ToastContext';
 import { useAudio } from '@/contexts/AudioContext';
 
 /**
@@ -80,7 +80,6 @@ const FLASH_MS = 500;
  */
 export function useCrashPhaseLogic() {
   const { user, isAuthenticated, loading } = useContext(AuthContext);
-  const toast = useToast();
   // Legacy audio context — kept so existing tests + the per-tick chime keep
   // working. New event-named SFX go through useSound() below.
   const { play: playLegacy, stopAmbient, SFX } = useAudio();
@@ -88,6 +87,13 @@ export function useCrashPhaseLogic() {
   const { announcement, announce } = useAnnouncer();
   const { burst, WinBurst } = useWinBurst();
   const reduced = useReducedMotion();
+
+  // Error toasts are routed through the shared `useGameError` helper. The
+  // events map below is built before `useGameSocket` runs, so it reads the
+  // current `reportError` via a ref to avoid a chicken-and-egg dependency.
+  // No connect-failure auto-toast: legacy Crash had none (only per-ack and
+  // per-server-error toasts), so `gameName` is intentionally omitted.
+  const reportErrorRef = useRef(() => {});
 
   useEffect(() => {
     stopAmbient();
@@ -269,13 +275,16 @@ export function useCrashPhaseLogic() {
       },
       error: (payload) => {
         const code = payload?.code || payload?.message;
-        if (code) toast.error(String(code));
+        if (code) reportErrorRef.current(null, String(code));
       },
     }),
-    [SFX, announce, betAmount, burst, playFx, playLegacy, toast, triggerFlash, triggerShake],
+    [SFX, announce, betAmount, burst, playFx, playLegacy, triggerFlash, triggerShake],
   );
 
   const { status, lastError, serverSeedHash, emit } = useGameSocket('crash', { events });
+
+  const { reportError } = useGameError({ status, lastError });
+  reportErrorRef.current = reportError;
 
   const canPlaceBet =
     isAuthenticated &&
@@ -298,10 +307,10 @@ export function useCrashPhaseLogic() {
         setLastResult(null);
       } else {
         setBetStatus('idle');
-        toast.error(resp?.error || resp?.message || 'Failed to place bet');
+        reportError(resp?.error || resp?.message, 'Failed to place bet');
       }
     });
-  }, [canPlaceBet, emit, betAmount, autoCashoutAt, playLegacy, playFx, SFX, toast]);
+  }, [canPlaceBet, emit, betAmount, autoCashoutAt, playLegacy, playFx, SFX, reportError]);
 
   const cashOut = useCallback(() => {
     if (!canCashout) return;
@@ -319,7 +328,7 @@ export function useCrashPhaseLogic() {
         announce(`Cashed out at ${m.toFixed(2)}x for ${profit.toFixed(2)}`);
       } else {
         setBetStatus('placed');
-        toast.error(resp?.error || resp?.message || 'Failed to cash out');
+        reportError(resp?.error || resp?.message, 'Failed to cash out');
       }
     });
   }, [
@@ -330,7 +339,7 @@ export function useCrashPhaseLogic() {
     playLegacy,
     playFx,
     SFX,
-    toast,
+    reportError,
     announce,
     burst,
     triggerFlash,

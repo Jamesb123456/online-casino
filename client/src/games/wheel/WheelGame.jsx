@@ -12,8 +12,8 @@ import BetPanel from '../../components/casino/BetPanel';
 import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
 import { AuthContext } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
 import useGameSocket from '../_shared/useGameSocket';
+import useGameError from '../_shared/hooks/useGameError';
 import TestShim from '../_shared/TestShim';
 import {
   getWheelSegments,
@@ -45,7 +45,6 @@ function ResultPill({ result }) {
 
 const WheelGame = () => {
   const { user, updateBalance } = useContext(AuthContext) || {};
-  const toast = useToast();
   const { play } = useSound();
   const { burst, WinBurst: WinBurstNode } = useWinBurst();
 
@@ -87,14 +86,10 @@ const WheelGame = () => {
     [updateBalance],
   );
 
-  const { status, emit } = useGameSocket('wheel', { events });
+  const { status, lastError, emit } = useGameSocket('wheel', { events });
 
-  // Surface connect failures the same way the legacy service did.
-  useEffect(() => {
-    if (status === 'error') {
-      toast.error('Failed to connect to Wheel server. Please refresh.');
-    }
-  }, [status, toast]);
+  // Surface connect failures via the shared `useGameError` helper.
+  useGameError({ gameName: 'Wheel', status, lastError });
 
   // Cleanup the "recent win" pulse timer.
   useEffect(

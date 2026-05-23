@@ -11,6 +11,7 @@ import { useSound } from '../../components/casino/SoundProvider';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import useGameSocket from '../_shared/useGameSocket';
+import useGameError from '../_shared/hooks/useGameError';
 import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
 
 const numberColor = (n) =>
@@ -148,6 +149,11 @@ const RouletteGame = () => {
   const { status, emit } = useGameSocket('roulette', { events });
   const isConnected = status === 'connected';
 
+  // No connect-failure toast effect historically — `gameName` is omitted so
+  // `useGameError` only provides the stable `reportError` helper. Per-action
+  // toasts below preserve their original copy.
+  const { reportError } = useGameError();
+
   // Tiny helper: wrap `emit` in a Promise that resolves on a success-ack and
   // rejects on an error-ack. Local-only; not promoted to the hook because most
   // games don't need it.
@@ -180,7 +186,7 @@ const RouletteGame = () => {
       const amt = Number(bet?.amount || 0);
       if (amt <= 0) return;
       if (amt > balance) {
-        toast.error?.('Insufficient balance');
+        reportError(null, 'Insufficient balance');
         return;
       }
 
@@ -190,14 +196,14 @@ const RouletteGame = () => {
             setBalance(response.balance);
             setCurrentBets(response.currentBets || []);
           } else {
-            toast.error?.(response?.error || 'Failed to place bet');
+            reportError(response?.error, 'Failed to place bet');
           }
         })
         .catch((err) => {
-          toast.error?.(err?.message || 'Failed to place bet');
+          reportError(err, 'Failed to place bet');
         });
     },
-    [isSpinning, balance, toast, emitWithAck],
+    [isSpinning, balance, toast, reportError, emitWithAck],
   );
 
   const handleSpin = useCallback(async () => {
@@ -207,7 +213,7 @@ const RouletteGame = () => {
       return;
     }
     if (status !== 'connected') {
-      toast.error?.('Cannot connect to game server. Please refresh the page.');
+      reportError(null, 'Cannot connect to game server. Please refresh the page.');
       return;
     }
 
@@ -222,7 +228,7 @@ const RouletteGame = () => {
     const timeoutId = setTimeout(() => {
       if (settled) return;
       settled = true;
-      toast.error?.('Spin request timed out');
+      reportError(null, 'Spin request timed out');
       setIsSpinning(false);
     }, 10000);
 
@@ -239,16 +245,16 @@ const RouletteGame = () => {
       clearTimeout(timeoutId);
 
       if (!response?.success) {
-        toast.error?.('Error spinning the wheel. Please try again.');
+        reportError(null, 'Error spinning the wheel. Please try again.');
       }
     } catch (error) {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
-      toast.error?.(error?.message || 'An unexpected error occurred.');
+      reportError(error, 'An unexpected error occurred.');
       setIsSpinning(false);
     }
-  }, [isSpinning, currentBets, status, toast, emit]);
+  }, [isSpinning, currentBets, status, toast, reportError, emit]);
 
   const totalPlaced = currentBets.reduce((sum, b) => sum + Number(b.amount || 0), 0);
 

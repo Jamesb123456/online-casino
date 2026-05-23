@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useMemo, useRef, useState } from 'react';
 import GameShell from '../../components/casino/GameShell';
 import BetPanel from '../../components/casino/BetPanel';
 import { useWinBurst } from '../../components/casino/WinBurst';
@@ -6,8 +6,8 @@ import { useSound } from '../../components/casino/SoundProvider';
 import PlinkoBoard from './PlinkoBoard';
 import { getPlinkoMultipliers } from './plinkoUtils';
 import useGameSocket from '../_shared/useGameSocket';
+import useGameError from '../_shared/hooks/useGameError';
 import TestShim from '../_shared/TestShim';
-import { useToast } from '../../contexts/ToastContext';
 import { AuthContext } from '../../contexts/AuthContext';
 
 const RISK_LEVELS = ['low', 'medium', 'high'];
@@ -45,7 +45,6 @@ function HistoryPills({ history }) {
 }
 
 const PlinkoGame = () => {
-  const toast = useToast();
   const { user, updateBalance } = useContext(AuthContext);
   const { play } = useSound();
   const { burst, WinBurst } = useWinBurst();
@@ -61,6 +60,12 @@ const PlinkoGame = () => {
 
   const multipliers = useMemo(() => getPlinkoMultipliers(risk, rows), [risk, rows]);
 
+  // `useGameError` needs `status` / `lastError` from `useGameSocket`, but the
+  // socket's `events` map needs `reportError`. Resolve the cycle with a ref —
+  // the hook below is registered ONCE on mount, and the events map reads
+  // `reportErrorRef.current` at call time.
+  const reportErrorRef = useRef(() => {});
+
   // Socket wiring. `useGameSocket` owns connect/disconnect; we just declare
   // the events we care about and read `status` / `lastError` for UI feedback.
   const events = useMemo(
@@ -73,28 +78,24 @@ const PlinkoGame = () => {
       },
       'plinko:error': (error) => {
         setIsAnimating(false);
-        toast.error(error?.message || 'An error occurred. Please try again.');
+        reportErrorRef.current(error, 'An error occurred. Please try again.');
       },
       balanceUpdate: (data) => {
         if (data?.balance != null) updateBalance(data.balance);
       },
     }),
-    [toast, updateBalance],
+    [updateBalance],
   );
 
   const { status, lastError, emit } = useGameSocket('plinko', { events });
 
-  // Surface connect failures the same way the legacy service did.
-  useEffect(() => {
-    if (status === 'error') {
-      toast.error('Failed to connect to Plinko server. Please refresh.');
-    }
-  }, [status, lastError, toast]);
+  const { reportError } = useGameError({ gameName: 'Plinko', status, lastError });
+  reportErrorRef.current = reportError;
 
   const handlePlaceBet = useCallback(() => {
     if (isAnimating || betAmount <= 0) return;
     if (status !== 'connected') {
-      toast.error('Not connected to Plinko server. Please wait or refresh.');
+      reportError(null, 'Not connected to Plinko server. Please wait or refresh.');
       return;
     }
     setAnimationPath(null);
@@ -107,10 +108,10 @@ const PlinkoGame = () => {
       } else {
         setIsAnimating(false);
         pendingBetRef.current = null;
-        toast.error(result?.error || 'Failed to start game. Please try again.');
+        reportError(result?.error, 'Failed to start game. Please try again.');
       }
     });
-  }, [isAnimating, betAmount, risk, rows, status, emit, toast]);
+  }, [isAnimating, betAmount, risk, rows, status, emit, reportError]);
 
   const handleAnimationComplete = useCallback(
     (bucketIndex) => {

@@ -70,7 +70,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 }));
 
 // --- Heavy child sentinels -----------------------------------------------
-// Keep the real RouletteBettingPanel so we exercise the placeBet click wiring.
+// Keep the real RouletteFelt + BetControls so we exercise the placeBet wiring.
 vi.mock('@/games/roulette/RouletteWheel', () => ({
   default: () => <div data-testid="roulette-wheel">Wheel</div>,
 }));
@@ -104,12 +104,12 @@ describe('RouletteGame (smoke)', () => {
   it('renders core UI: wheel, betting board, bet-amount input, spin CTA, balance', () => {
     renderGame();
     expect(screen.getByTestId('roulette-wheel')).toBeInTheDocument();
-    // Bet amount input from the unified BetPanel.
-    expect(document.getElementById('roulette-stake-amount')).not.toBeNull();
+    // Bet amount input from the shared BetControls.
+    expect(screen.getByLabelText(/^Bet amount$/i)).toBeInTheDocument();
     // Primary CTA label is "Spin" while not spinning.
     expect(screen.getByRole('button', { name: /^Spin$/i })).toBeInTheDocument();
-    // Balance label is shown in the BetPanel.
-    expect(screen.getByText(/^Balance$/i)).toBeInTheDocument();
+    // Balance readout is rendered by BetControls.
+    expect(screen.getByText(/Balance:/i)).toBeInTheDocument();
   });
 
   it('opens the roulette socket via useGameSocket', () => {

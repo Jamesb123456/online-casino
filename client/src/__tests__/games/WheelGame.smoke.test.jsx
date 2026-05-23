@@ -101,9 +101,11 @@ describe('WheelGame (smoke)', () => {
   it('renders core UI: wheel board, bet input, Spin CTA, balance label', () => {
     renderGame();
     expect(screen.getByTestId('wheel-board')).toBeInTheDocument();
-    expect(document.getElementById('wheel-bet-amount')).not.toBeNull();
+    // Bet amount input from the shared BetControls.
+    expect(screen.getByLabelText(/^Bet amount$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Spin$/i })).toBeInTheDocument();
-    expect(screen.getByText(/^Balance$/i)).toBeInTheDocument();
+    // Balance readout is rendered by BetControls.
+    expect(screen.getByText(/Balance:/i)).toBeInTheDocument();
   });
 
   it('opens the wheel socket via useGameSocket', () => {

@@ -1,10 +1,10 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import RouletteWheel from './RouletteWheel';
-import RouletteBettingPanel from './RouletteBettingPanel';
+import RouletteFelt from './RouletteFelt';
 import RoulettePlayersList from './RoulettePlayersList';
 import RouletteActiveBets from './RouletteActiveBets';
 import GameShell from '../../components/casino/GameShell';
-import BetPanel from '../../components/casino/BetPanel';
+import BetControls from '../_shared/BetControls';
 import TestShim from '../_shared/TestShim';
 import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
@@ -16,6 +16,8 @@ import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
 
 const numberColor = (n) =>
   ROULETTE_NUMBERS.find((x) => x.number === Number(n))?.color || 'green';
+
+const CHIP_DENOMS = [1, 5, 10, 25, 50, 100];
 
 function ResultPill({ result }) {
   const color = numberColor(result.winningNumber);
@@ -260,22 +262,34 @@ const RouletteGame = () => {
 
   const totalPlaced = currentBets.reduce((sum, b) => sum + Number(b.amount || 0), 0);
 
-  const extras = (
-    <div className="flex flex-col gap-2">
-      <div className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-text-secondary">Bets placed</span>
-          <span className="font-mono tabular-nums text-text-primary">
-            {currentBets.length}
-          </span>
-        </div>
-        <div className="mt-1 flex items-center justify-between text-xs">
-          <span className="text-text-secondary">Total wagered</span>
-          <span className="font-mono tabular-nums text-accent-gold-light">
-            ${totalPlaced.toFixed(2)}
-          </span>
-        </div>
-      </div>
+  const panel = (
+    <div className="flex flex-col gap-4">
+      <BetControls
+        value={betAmount}
+        onChange={setBetAmount}
+        min={1}
+        max={1000}
+        balance={balance}
+        quickAmounts={CHIP_DENOMS}
+        halveDouble
+        primaryAction={handleSpin}
+        primaryLabel={isSpinning ? 'Wait…' : 'Spin'}
+        primaryDisabled={isSpinning || currentBets.length === 0}
+        status={
+          currentBets.length > 0
+            ? `${currentBets.length} bet${currentBets.length === 1 ? '' : 's'} · $${totalPlaced.toFixed(2)} wagered`
+            : null
+        }
+      >
+        <RouletteFelt
+          betAmount={betAmount}
+          onPlaceBet={handlePlaceBet}
+          isSpinning={isSpinning}
+          balance={balance}
+          placedBets={currentBets}
+        />
+      </BetControls>
+
       {gameResult ? (
         <div className="rounded-md bg-white/5 px-3 py-2 text-xs ring-1 ring-white/10">
           <div className="flex items-center justify-between">
@@ -292,33 +306,7 @@ const RouletteGame = () => {
           </div>
         </div>
       ) : null}
-    </div>
-  );
 
-  const panel = (
-    <div className="flex flex-col gap-4">
-      <RouletteBettingPanel
-        betAmount={betAmount}
-        setBetAmount={setBetAmount}
-        onPlaceBet={handlePlaceBet}
-        isSpinning={isSpinning}
-        balance={balance}
-        placedBets={currentBets}
-      />
-      <BetPanel
-        bet={betAmount}
-        onBetChange={setBetAmount}
-        min={0.1}
-        max={1000}
-        balance={balance}
-        onPlaceBet={handleSpin}
-        betLabel={isSpinning ? 'Wait…' : 'Spin'}
-        loading={isSpinning}
-        disabled={isSpinning || currentBets.length === 0}
-        primaryVariant="primary"
-        extra={extras}
-        betInputId="roulette-stake-amount"
-      />
       {/* Hidden test-shim alias: legacy E2E specs look for a "Place Bet"
           button; treat it as a click-through to the spin handler. Enabled
           whenever a spin is not in flight — the spec clicks a chip first

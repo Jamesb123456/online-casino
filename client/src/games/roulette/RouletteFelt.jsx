@@ -6,7 +6,7 @@ import { useReducedMotion } from '../../components/casino/MotionSafe';
 import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
 
 /**
- * RouletteBettingPanel — felt-textured bet board.
+ * RouletteFelt — felt-textured bet board.
  *
  * Click any cell to drop a chip worth `betAmount` on that bet position. Each
  * click emits onPlaceBet({ type, value, amount }). Multiple clicks stack chips
@@ -14,10 +14,9 @@ import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
  *
  * Props:
  *   betAmount   number  — current chip denomination (controlled)
- *   setBetAmount fn     — chip-value setter
  *   onPlaceBet  fn      — emits { type, value, amount } per click
  *   isSpinning  bool    — disables interaction
- *   balance     number  — informational only
+ *   balance     number  — informational only (used to gate clicks)
  *   placedBets  array   — optional [{ type, value, amount }] to render chips
  *                         when not provided, falls back to internal state.
  */
@@ -53,8 +52,6 @@ function betKey(b) {
   return `${b.type}:${b.value ?? ''}`;
 }
 
-const CHIP_DENOMS = [1, 5, 10, 25, 50, 100];
-
 const FeltSvgNoise = () => (
   <svg
     aria-hidden="true"
@@ -68,9 +65,8 @@ const FeltSvgNoise = () => (
   </svg>
 );
 
-function RouletteBettingPanel({
+function RouletteFelt({
   betAmount = 10,
-  setBetAmount = () => {},
   onPlaceBet = () => {},
   isSpinning = false,
   balance = 0,
@@ -92,19 +88,6 @@ function RouletteBettingPanel({
     });
     return map;
   }, [bets]);
-
-  const handleChange = useCallback(
-    (e) => {
-      const raw = e.target.value;
-      if (raw === '' || raw === '-') {
-        setBetAmount(0);
-        return;
-      }
-      const parsed = parseFloat(raw);
-      setBetAmount(Number.isFinite(parsed) ? parsed : 0);
-    },
-    [setBetAmount],
-  );
 
   const placeBet = useCallback(
     (type, value) => {
@@ -129,15 +112,7 @@ function RouletteBettingPanel({
     [betAmount, balance, isSpinning, onPlaceBet, placedBets, play],
   );
 
-  const clearLocalBets = useCallback(() => {
-    setInternalBets([]);
-  }, []);
-
   // Build standard European roulette grid: 0 down the left, then 1..36 in 3 rows × 12 cols.
-  // Layout cells (row → col):
-  //   row 0: 3, 6, 9, ..., 36   (top row)
-  //   row 1: 2, 5, 8, ..., 35
-  //   row 2: 1, 4, 7, ..., 34
   const numberGrid = useMemo(() => {
     const rows = [[], [], []];
     for (let col = 0; col < 12; col += 1) {
@@ -191,11 +166,10 @@ function RouletteBettingPanel({
     isSpinning ? 'cursor-not-allowed opacity-60 pointer-events-none' : '',
   ].join(' ');
 
-  const insufficient = Number(betAmount) > Number(balance);
+  const totalPlaced = bets.reduce((acc, b) => acc + Number(b.amount || 0), 0);
 
   return (
-    <div className="flex flex-col gap-4" role="group" aria-label="Roulette bet board">
-      {/* Felt board with bet positions */}
+    <div className="flex flex-col gap-2" role="group" aria-label="Roulette bet board">
       <div
         className="relative overflow-hidden rounded-2xl border border-emerald-900/60 p-3 shadow-card"
         style={{
@@ -325,81 +299,16 @@ function RouletteBettingPanel({
         </div>
       </div>
 
-      {/* Chip denomination row */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <label
-            htmlFor="roulette-bet-amount"
-            className="text-xs uppercase tracking-wider text-text-secondary"
-          >
-            Chip value
-          </label>
-          <span className="text-xs text-text-muted">
-            Total placed:{' '}
-            <span className="font-mono tabular-nums text-accent-gold-light">
-              ${bets.reduce((acc, b) => acc + Number(b.amount || 0), 0).toFixed(2)}
-            </span>
+      {bets.length > 0 ? (
+        <div className="flex items-center justify-end text-xs text-text-muted">
+          Total placed:{' '}
+          <span className="ml-1 font-mono tabular-nums text-accent-gold-light">
+            ${totalPlaced.toFixed(2)}
           </span>
         </div>
-        <div className="flex items-stretch gap-2">
-          <input
-            id="roulette-bet-amount"
-            type="number"
-            inputMode="decimal"
-            min="0.1"
-            step="0.1"
-            value={betAmount}
-            onChange={handleChange}
-            disabled={isSpinning}
-            aria-label="Bet Amount"
-            className="h-[44px] flex-1 rounded-md border border-border-light bg-bg-base px-3 text-right font-mono text-base tabular-nums text-text-primary focus-visible:border-accent-gold focus-visible:ring-2 focus-visible:ring-accent-gold focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          />
-        </div>
-        <div className="grid grid-cols-6 gap-1.5" role="group" aria-label="Chip presets">
-          {CHIP_DENOMS.map((d) => {
-            const active = Number(betAmount) === d;
-            return (
-              <button
-                key={d}
-                type="button"
-                onClick={() => !isSpinning && setBetAmount(d)}
-                disabled={isSpinning}
-                aria-pressed={active}
-                aria-label={`${d}`}
-                className={[
-                  'h-[44px] rounded-md text-xs font-semibold transition cursor-pointer',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-gold',
-                  active
-                    ? 'bg-accent-gold text-bg-base shadow-glow-amber'
-                    : 'border border-white/10 bg-white/5 text-text-primary hover:border-accent-gold hover:bg-accent-gold/10',
-                  isSpinning ? 'cursor-not-allowed opacity-60' : '',
-                ].join(' ')}
-              >
-                {d}
-              </button>
-            );
-          })}
-        </div>
-
-        {insufficient ? (
-          <p className="text-xs text-status-error" role="alert">
-            Chip value above balance.
-          </p>
-        ) : null}
-
-        {!Array.isArray(placedBets) && bets.length > 0 ? (
-          <button
-            type="button"
-            onClick={clearLocalBets}
-            disabled={isSpinning}
-            className="h-[36px] rounded-md border border-white/10 bg-white/5 text-xs font-medium text-text-secondary transition hover:border-accent-rose hover:text-accent-rose focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-rose cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Clear local chips
-          </button>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
 
-export default RouletteBettingPanel;
+export default RouletteFelt;

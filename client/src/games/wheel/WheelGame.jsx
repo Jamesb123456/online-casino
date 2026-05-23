@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import WheelBoard from './WheelBoard';
 import GameShell from '../../components/casino/GameShell';
-import BetPanel from '../../components/casino/BetPanel';
+import BetControls from '../_shared/BetControls';
 import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -24,6 +24,7 @@ import {
 } from './wheelUtils';
 
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
+const QUICK_AMOUNTS = [1, 5, 10, 25, 50, 100];
 
 function ResultPill({ result }) {
   const isWin = result.profit >= 0;
@@ -174,8 +175,11 @@ const WheelGame = () => {
     setIsSpinning(false);
   }, [pendingServerResult, targetAngle, segments, betAmount, difficulty, burst, play]);
 
-  // BetPanel extras: difficulty tiers.
-  const extras = (
+  const balance = Number(user?.balance) || 0;
+
+  // Difficulty selector + segment/multiplier readouts rendered into the
+  // BetControls `children` slot.
+  const difficultyControls = (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-1.5">
         <span className="text-xs uppercase tracking-wider text-text-secondary">
@@ -224,30 +228,31 @@ const WheelGame = () => {
       </div>
       <div className="flex items-center justify-between rounded-md bg-white/5 px-3 py-2 text-xs ring-1 ring-white/10">
         <span className="text-text-secondary">Potential win</span>
-        <span className="font-mono tabular-nums text-lime-300">
+        <span className={[
+          'font-mono tabular-nums',
+          recentWin ? 'text-lime-300' : 'text-lime-300',
+        ].join(' ')}>
           ${((Number(betAmount) || 0) * (maxMultiplier || 0)).toFixed(2)}
         </span>
       </div>
     </div>
   );
 
-  const balance = Number(user?.balance) || 0;
-
   const panel = (
-    <BetPanel
-      bet={betAmount}
-      onBetChange={setBetAmount}
-      min={0.1}
+    <BetControls
+      value={betAmount}
+      onChange={setBetAmount}
+      min={1}
       max={1000}
       balance={balance}
-      recentWin={recentWin}
-      onPlaceBet={handleSpin}
-      betLabel={isSpinning ? 'Spinning…' : 'Spin'}
-      loading={isSpinning}
-      disabled={isSpinning}
-      extra={extras}
-      betInputId="wheel-bet-amount"
-    />
+      quickAmounts={QUICK_AMOUNTS}
+      halveDouble
+      primaryAction={handleSpin}
+      primaryLabel={isSpinning ? 'Spinning…' : 'Spin'}
+      primaryDisabled={isSpinning || betAmount <= 0}
+    >
+      {difficultyControls}
+    </BetControls>
   );
 
   // Hidden test-shim aliases: legacy/E2E selectors expect a "Spin the wheel"

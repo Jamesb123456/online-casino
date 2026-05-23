@@ -1,39 +1,44 @@
 // Smoke / characterization tests for PlinkoGame.
 //
-// Locks the current pre-refactor behaviour: Drop Ball -> plinkoSocketService
-// .startGame(betAmount, rows, risk, cb), onGameResult sets the animation path,
-// and PlinkoBoard's onAnimationComplete updates the history pills.
+// Locks post-B1.2 behaviour: Drop Ball -> useGameSocket emit('plinko:drop_ball',
+// { betAmount, rows, risk }, cb), the 'plinko:game_result' handler sets the
+// animation path, and PlinkoBoard's onAnimationComplete updates the history
+// pills. Wire-level contract (event names + payload keys + ack shape) is
+// preserved from the legacy plinkoSocketService.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// --- Socket service mock --------------------------------------------------
-const { capturedHandlers, plinkoSocketServiceMock } = vi.hoisted(() => {
-  const handlers = {};
-  const makeOn = (key) => vi.fn((cb) => {
-    handlers[key] = cb;
-    return vi.fn();
+// --- useGameSocket mock ---------------------------------------------------
+// Captures the `events` map handed to the hook so the test can drive
+// individual socket events (game_result, error, balanceUpdate) imperatively.
+const { capturedEvents, useGameSocketMock, emitMock } = vi.hoisted(() => {
+  const events = { current: {} };
+  const emit = vi.fn((event, _payload, cb) => {
+    if (event === 'plinko:drop_ball') {
+      // Mimic the server ack: success with a deterministic path.
+      cb?.({ success: true, path: [0, 1, 0, 1, 0, 1, 0, 1] });
+    }
   });
-  return {
-    capturedHandlers: handlers,
-    plinkoSocketServiceMock: {
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn(),
-      startGame: vi.fn((_bet, _rows, _risk, cb) => {
-        // Mimic the server ack: success with a deterministic path.
-        cb?.({ success: true, path: [0, 1, 0, 1, 0, 1, 0, 1] });
-      }),
-      onGameResult: makeOn('gameResult'),
-      onError: makeOn('error'),
-      onBalanceUpdate: makeOn('balanceUpdate'),
-    },
-  };
+  const hook = vi.fn((_gameType, opts) => {
+    events.current = (opts && opts.events) || {};
+    return {
+      socket: null,
+      status: 'connected',
+      lastError: null,
+      serverSeedHash: null,
+      emit,
+    };
+  });
+  return { capturedEvents: events, useGameSocketMock: hook, emitMock: emit };
 });
 
-vi.mock('@/services/socket/plinkoSocketService', () => ({
-  default: plinkoSocketServiceMock,
+vi.mock('@/games/_shared/useGameSocket', () => ({
+  __esModule: true,
+  default: useGameSocketMock,
+  useGameSocket: useGameSocketMock,
 }));
 
 // canvas-confetti has no real backend under jsdom — neuter it so WinBurst
@@ -84,7 +89,7 @@ const renderGame = () =>
 describe('PlinkoGame (smoke)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(capturedHandlers).forEach((k) => delete capturedHandlers[k]);
+    capturedEvents.current = {};
     plinkoBoardCtx.onAnimationComplete = null;
   });
 
@@ -109,37 +114,44 @@ describe('PlinkoGame (smoke)', () => {
     expect(screen.getByLabelText(/rows/i)).toBeInTheDocument();
   });
 
-  it('clicking Drop Ball calls plinkoSocketService.startGame with (betAmount, rows, risk, cb)', async () => {
+  it('opens the plinko socket via useGameSocket', () => {
     renderGame();
-    await waitFor(() => expect(plinkoSocketServiceMock.connect).toHaveBeenCalled());
+    expect(useGameSocketMock).toHaveBeenCalled();
+    expect(useGameSocketMock.mock.calls[0][0]).toBe('plinko');
+  });
+
+  it('clicking Drop Ball emits plinko:drop_ball with { betAmount, rows, risk } + ack', async () => {
+    renderGame();
 
     fireEvent.click(screen.getByRole('button', { name: /drop ball/i }));
 
-    await waitFor(() => expect(plinkoSocketServiceMock.startGame).toHaveBeenCalled());
-    const args = plinkoSocketServiceMock.startGame.mock.calls[0];
-    expect(args[0]).toBe(10); // default betAmount
-    expect(args[1]).toBe(16); // default rows
-    expect(args[2]).toBe('medium'); // default risk
-    expect(typeof args[3]).toBe('function');
+    await waitFor(() => expect(emitMock).toHaveBeenCalled());
+    const dropCall = emitMock.mock.calls.find(([event]) => event === 'plinko:drop_ball');
+    expect(dropCall).toBeDefined();
+    const [, payload, ack] = dropCall;
+    expect(payload).toEqual({ betAmount: 10, rows: 16, risk: 'medium' }); // defaults
+    expect(typeof ack).toBe('function');
   });
 
-  it('changing risk and rows propagates to the next startGame payload', async () => {
+  it('changing risk and rows propagates to the next drop_ball payload', async () => {
     renderGame();
-    await waitFor(() => expect(plinkoSocketServiceMock.connect).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /^high$/i }));
     fireEvent.change(screen.getByLabelText(/rows/i), { target: { value: '8' } });
     fireEvent.click(screen.getByRole('button', { name: /drop ball/i }));
 
-    await waitFor(() => expect(plinkoSocketServiceMock.startGame).toHaveBeenCalled());
-    const args = plinkoSocketServiceMock.startGame.mock.calls[0];
-    expect(args[1]).toBe(8);
-    expect(args[2]).toBe('high');
+    await waitFor(() => {
+      const drops = emitMock.mock.calls.filter(([event]) => event === 'plinko:drop_ball');
+      expect(drops.length).toBeGreaterThan(0);
+    });
+    const dropCall = emitMock.mock.calls.find(([event]) => event === 'plinko:drop_ball');
+    const [, payload] = dropCall;
+    expect(payload.rows).toBe(8);
+    expect(payload.risk).toBe('high');
   });
 
   it('completing the animation pushes a multiplier pill into the history', async () => {
     renderGame();
-    await waitFor(() => expect(plinkoSocketServiceMock.connect).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /drop ball/i }));
     await waitFor(() => expect(plinkoBoardCtx.onAnimationComplete).toBeTypeOf('function'));
@@ -157,20 +169,19 @@ describe('PlinkoGame (smoke)', () => {
     });
   });
 
-  it('onBalanceUpdate event updates the auth balance via updateBalance', async () => {
+  it('balanceUpdate event invokes the handler wired through useGameSocket', () => {
     renderGame();
-    await waitFor(() => expect(capturedHandlers.balanceUpdate).toBeTypeOf('function'));
+    expect(capturedEvents.current.balanceUpdate).toBeTypeOf('function');
     // Smoke check: handler is wired and accepts the documented payload shape.
     act(() => {
-      capturedHandlers.balanceUpdate?.({ balance: 1234 });
+      capturedEvents.current.balanceUpdate?.({ balance: 1234 });
     });
     // No throw == subscription contract preserved.
-    expect(plinkoSocketServiceMock.onBalanceUpdate).toHaveBeenCalled();
   });
 
-  it('disconnects the socket on unmount', () => {
-    const { unmount } = renderGame();
-    unmount();
-    expect(plinkoSocketServiceMock.disconnect).toHaveBeenCalled();
+  it('subscribes to plinko:game_result and plinko:error via the events map', () => {
+    renderGame();
+    expect(capturedEvents.current['plinko:game_result']).toBeTypeOf('function');
+    expect(capturedEvents.current['plinko:error']).toBeTypeOf('function');
   });
 });

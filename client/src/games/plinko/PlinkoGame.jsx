@@ -5,7 +5,7 @@ import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
 import PlinkoBoard from './PlinkoBoard';
 import { getPlinkoMultipliers } from './plinkoUtils';
-import plinkoSocketService from '../../services/socket/plinkoSocketService';
+import useGameSocket from '../_shared/useGameSocket';
 import TestShim from '../_shared/TestShim';
 import { useToast } from '../../contexts/ToastContext';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -61,57 +61,47 @@ const PlinkoGame = () => {
 
   const multipliers = useMemo(() => getPlinkoMultipliers(risk, rows), [risk, rows]);
 
-  // Socket lifecycle.
-  useEffect(() => {
-    let cancelled = false;
-    let unsubGameResult = () => {};
-    let unsubError = () => {};
-    let unsubBalance = () => {};
-
-    const init = async () => {
-      try {
-        await plinkoSocketService.connect();
-      } catch {
-        if (!cancelled) {
-          toast.error('Failed to connect to Plinko server. Please refresh.');
-        }
-        return;
-      }
-      if (cancelled) return;
-
-      unsubGameResult = plinkoSocketService.onGameResult((result) => {
+  // Socket wiring. `useGameSocket` owns connect/disconnect; we just declare
+  // the events we care about and read `status` / `lastError` for UI feedback.
+  const events = useMemo(
+    () => ({
+      'plinko:game_result': (result) => {
         if (result && result.path) {
           setAnimationPath(result.path);
           setIsAnimating(true);
         }
-      });
-      unsubError = plinkoSocketService.onError((error) => {
+      },
+      'plinko:error': (error) => {
         setIsAnimating(false);
         toast.error(error?.message || 'An error occurred. Please try again.');
-      });
-      unsubBalance = plinkoSocketService.onBalanceUpdate((data) => {
+      },
+      balanceUpdate: (data) => {
         if (data?.balance != null) updateBalance(data.balance);
-      });
-    };
+      },
+    }),
+    [toast, updateBalance],
+  );
 
-    init();
+  const { status, lastError, emit } = useGameSocket('plinko', { events });
 
-    return () => {
-      cancelled = true;
-      unsubGameResult();
-      unsubError();
-      unsubBalance();
-      plinkoSocketService.disconnect();
-    };
-  }, [updateBalance, toast]);
+  // Surface connect failures the same way the legacy service did.
+  useEffect(() => {
+    if (status === 'error') {
+      toast.error('Failed to connect to Plinko server. Please refresh.');
+    }
+  }, [status, lastError, toast]);
 
   const handlePlaceBet = useCallback(() => {
     if (isAnimating || betAmount <= 0) return;
+    if (status !== 'connected') {
+      toast.error('Not connected to Plinko server. Please wait or refresh.');
+      return;
+    }
     setAnimationPath(null);
     pendingBetRef.current = { betAmount, risk, rows };
     setIsAnimating(true);
     // BetPanel plays 'bet' itself on click; no need to double up.
-    plinkoSocketService.startGame(betAmount, rows, risk, (result) => {
+    emit('plinko:drop_ball', { betAmount, rows, risk }, (result) => {
       if (result && result.success && result.path) {
         setAnimationPath(result.path);
       } else {
@@ -120,7 +110,7 @@ const PlinkoGame = () => {
         toast.error(result?.error || 'Failed to start game. Please try again.');
       }
     });
-  }, [isAnimating, betAmount, risk, rows, toast]);
+  }, [isAnimating, betAmount, risk, rows, status, emit, toast]);
 
   const handleAnimationComplete = useCallback(
     (bucketIndex) => {

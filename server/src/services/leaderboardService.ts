@@ -2,6 +2,25 @@ import { db } from '../../drizzle/db.js';
 import { sql } from 'drizzle-orm';
 
 /**
+ * Row shape produced by both leaderboard queries. Numeric columns can be
+ * either string (DECIMAL from mysql2) or number (COUNT), so keep them as a
+ * union for callers that coerce with Number(...).
+ */
+export interface LeaderboardRow {
+  id: number;
+  username: string;
+  totalWinnings: number | string;
+  totalGames: number | string;
+}
+
+/**
+ * mysql2 returns `[rows, fields]` but Drizzle's `.execute()` typing leaks
+ * through depending on the driver. The route consumer normalises the tuple
+ * shape itself, so we declare the wider union here.
+ */
+export type LeaderboardQueryResult = LeaderboardRow[] | [LeaderboardRow[], unknown] | unknown;
+
+/**
  * Leaderboard Service
  *
  * Encapsulates the raw SQL queries that back the public `/api/leaderboard`
@@ -26,7 +45,7 @@ class LeaderboardService {
    * Returns the raw `db.execute()` result so the route can normalise the
    * mysql2 `[rows, fields]` tuple as it does today.
    */
-  async getTopWinners(since: Date | null, limit: number): Promise<unknown> {
+  async getTopWinners(since: Date | null, limit: number): Promise<LeaderboardQueryResult> {
     if (since) {
       const dateStr = since.toISOString().slice(0, 19).replace('T', ' ');
       return db.execute(sql`

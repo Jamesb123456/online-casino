@@ -42,9 +42,11 @@ export interface UserActiveRow {
 
 export interface SettingsRow {
   key: string;
-  value: any;
-  updated_at: any;
-  updated_by: any;
+  // settings.value is a JSON column; mysql2 may return it as the parsed
+  // object or as a JSON string depending on driver options.
+  value: unknown;
+  updated_at: Date | string | null;
+  updated_by: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,18 +57,18 @@ export interface SettingsRow {
  * mysql2 returns `[rows, fields]`. The activity-summary code historically
  * tolerated both shapes (driver-quirk safety). Preserve that here.
  */
-function unwrapFirstRow(result: any): any {
+function unwrapFirstRow<T = unknown>(result: unknown): T | undefined {
   if (Array.isArray(result)) {
     const head = result[0];
-    if (Array.isArray(head)) return head[0];
-    return head;
+    if (Array.isArray(head)) return head[0] as T | undefined;
+    return head as T | undefined;
   }
-  return result;
+  return result as T | undefined;
 }
 
 /** Returns the rows array regardless of driver wrapping. */
-function unwrapRows(result: any): any[] {
-  return ((result as any)[0] || []) as any[];
+function unwrapRows<T = unknown>(result: unknown): T[] {
+  return (((result as unknown) as T[][])[0] || []) as T[];
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +113,7 @@ export async function deactivateUser(userId: number): Promise<void> {
  * Used by GET /api/responsible-gaming/activity-summary.
  */
 export async function getActivitySummaryLast7Days(userId: number): Promise<ActivitySummaryRow> {
-  const result: any = await db.execute(sql`
+  const result = await db.execute(sql`
       SELECT
         COUNT(*) as totalTransactions,
         COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
@@ -121,7 +123,7 @@ export async function getActivitySummaryLast7Days(userId: number): Promise<Activ
         AND transaction_type IN ('game_win', 'game_loss')
         AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     `);
-  return (unwrapFirstRow(result) || {}) as ActivitySummaryRow;
+  return (unwrapFirstRow<ActivitySummaryRow>(result) || {}) as ActivitySummaryRow;
 }
 
 /**
@@ -129,7 +131,7 @@ export async function getActivitySummaryLast7Days(userId: number): Promise<Activ
  * See {@link getActivitySummaryLast7Days} for shape semantics.
  */
 export async function getActivitySummaryLast30Days(userId: number): Promise<ActivitySummaryRow> {
-  const result: any = await db.execute(sql`
+  const result = await db.execute(sql`
       SELECT
         COUNT(*) as totalTransactions,
         COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
@@ -139,7 +141,7 @@ export async function getActivitySummaryLast30Days(userId: number): Promise<Acti
         AND transaction_type IN ('game_win', 'game_loss')
         AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
     `);
-  return (unwrapFirstRow(result) || {}) as ActivitySummaryRow;
+  return (unwrapFirstRow<ActivitySummaryRow>(result) || {}) as ActivitySummaryRow;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +164,7 @@ export async function listSettings(): Promise<SettingsRow[]> {
         FROM settings
         ORDER BY \`key\` ASC`
   );
-  return unwrapRows(result) as SettingsRow[];
+  return unwrapRows<SettingsRow>(result);
 }
 
 /**
@@ -175,7 +177,7 @@ export async function getSetting(key: string): Promise<SettingsRow | undefined> 
         WHERE \`key\` = ${key}
         LIMIT 1`
   );
-  const rows = unwrapRows(result) as SettingsRow[];
+  const rows = unwrapRows<SettingsRow>(result);
   return rows[0];
 }
 

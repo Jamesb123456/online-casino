@@ -1,9 +1,15 @@
 import Decimal from 'decimal.js';
-import { sql, eq, and, desc } from 'drizzle-orm';
+import { sql, eq, and, desc, type SQL } from 'drizzle-orm';
 import { db } from '../../drizzle/db.js';
 import { alerts } from '../../drizzle/schema.js';
 import type { Alert } from '../../drizzle/schema.js';
 import LoggingService from './loggingService.js';
+
+// Raw mysql2 result row for the settings key/value lookup.
+type SettingRow = { key: string; value: unknown };
+type CountRow = { c: number | string };
+// mysql2 returns [rows, fields] but the wrapping varies under mocks.
+type Mysql2Result<R> = [R[], unknown] | R[] | { insertId?: number; affectedRows?: number };
 
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -77,9 +83,9 @@ class AlertService {
     const result = await db.execute(
       sql`SELECT \`key\`, \`value\` FROM settings WHERE \`key\` IN (${ALERT_KEYS.bigWin}, ${ALERT_KEYS.houseLow}, ${ALERT_KEYS.rapidBetsPerMin})`,
     );
-    const rows = (result as any)[0] || [];
+    const rows: SettingRow[] = (result as unknown as SettingRow[][])[0] || [];
 
-    const lookup: Record<string, any> = {};
+    const lookup: Record<string, unknown> = {};
     for (const r of rows) {
       lookup[r.key] = this._parseSettingValue(r.value);
     }
@@ -97,17 +103,17 @@ class AlertService {
     return thresholds;
   }
 
-  _parseSettingValue(raw: any): any {
+  _parseSettingValue(raw: unknown): unknown {
     if (raw == null) return null;
     if (typeof raw === 'object') return raw;
     try {
-      return JSON.parse(raw);
+      return JSON.parse(String(raw));
     } catch {
       return raw;
     }
   }
 
-  _toNumberOrDefault(value: any, fallback: number): number {
+  _toNumberOrDefault(value: unknown, fallback: number): number {
     if (value == null) return fallback;
     try {
       const n = new Decimal(String(value)).toNumber();
@@ -148,7 +154,7 @@ class AlertService {
     return this.getThresholds();
   }
 
-  _assertNonNegative(value: any, label: string): void {
+  _assertNonNegative(value: unknown, label: string): void {
     const n = Number(value);
     if (!Number.isFinite(n) || n < 0) {
       throw new Error(`invalid_threshold:${label}`);
@@ -164,15 +170,16 @@ class AlertService {
     severity: AlertSeverity,
     userId: number | null,
     gameType: string | null,
-    details: Record<string, any>,
+    details: Record<string, unknown>,
   ): Promise<Alert> {
     const detailsJson = JSON.stringify(details ?? {});
-    const result: any = await db.execute(
+    const result = (await db.execute(
       sql`INSERT INTO alerts (type, severity, user_id, game_type, details, acknowledged, created_at)
           VALUES (${type}, ${severity}, ${userId ?? null}, ${gameType ?? null}, ${detailsJson}, false, NOW())`,
-    );
+    )) as Mysql2Result<never>;
 
-    const insertId = result?.[0]?.insertId ?? result?.insertId ?? null;
+    const r = result as { insertId?: number } & Array<{ insertId?: number }>;
+    const insertId = r?.[0]?.insertId ?? r?.insertId ?? null;
 
     LoggingService.logSystemEvent(
       'alert_emitted',
@@ -214,17 +221,19 @@ class AlertService {
     const limit = Math.min(Math.max(Number(opts.limit ?? 50) || 50, 1), 200);
     const offset = Math.max(Number(opts.offset ?? 0) || 0, 0);
 
-    const conditions: any[] = [];
+    const conditions: SQL[] = [];
     if (unreadOnly) conditions.push(eq(alerts.acknowledged, false));
     if (type) conditions.push(eq(alerts.type, String(type)));
 
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
+    // Drizzle's query builder is chain-narrow; keep `any` here to allow the
+    // optional `.where()` insertion without restructuring the chain.
     let rowsQuery: any = db.select().from(alerts);
     if (whereClause) rowsQuery = rowsQuery.where(whereClause);
-    const rows = await rowsQuery.orderBy(desc(alerts.createdAt)).limit(limit).offset(offset);
+    const rows: Alert[] = await rowsQuery.orderBy(desc(alerts.createdAt)).limit(limit).offset(offset);
 
-    const totalRes: any = await db.execute(
+    const totalRes = (await db.execute(
       whereClause
         ? unreadOnly && type
           ? sql`SELECT COUNT(*) AS c FROM alerts WHERE acknowledged = false AND type = ${type}`
@@ -232,15 +241,15 @@ class AlertService {
             ? sql`SELECT COUNT(*) AS c FROM alerts WHERE acknowledged = false`
             : sql`SELECT COUNT(*) AS c FROM alerts WHERE type = ${type}`
         : sql`SELECT COUNT(*) AS c FROM alerts`,
-    );
+    )) as unknown as CountRow[][];
     const total = Number(totalRes?.[0]?.[0]?.c ?? 0);
 
-    const unreadRes: any = await db.execute(
+    const unreadRes = (await db.execute(
       sql`SELECT COUNT(*) AS c FROM alerts WHERE acknowledged = false`,
-    );
+    )) as unknown as CountRow[][];
     const unreadCount = Number(unreadRes?.[0]?.[0]?.c ?? 0);
 
-    return { rows: rows as Alert[], total, unreadCount };
+    return { rows, total, unreadCount };
   }
 
   async acknowledge(id: number, adminId: number | null): Promise<Alert> {
@@ -260,13 +269,13 @@ class AlertService {
   }
 
   async acknowledgeAll(adminId: number | null): Promise<number> {
-    const result: any = await db.execute(
+    const result = (await db.execute(
       sql`UPDATE alerts
           SET acknowledged = true,
               acknowledged_at = NOW(),
               acknowledged_by = ${adminId ?? null}
           WHERE acknowledged = false`,
-    );
+    )) as unknown as { affectedRows?: number } & Array<{ affectedRows?: number }>;
     const affected = result?.[0]?.affectedRows ?? result?.affectedRows ?? 0;
     return Number(affected) || 0;
   }

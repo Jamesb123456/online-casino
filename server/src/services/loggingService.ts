@@ -82,6 +82,19 @@ const winstonLogger = winston.createLogger({
 // Type definitions
 // ──────────────────────────────────────────────
 
+/**
+ * Arbitrary structured payload attached to a log entry. Stored as the
+ * `event_details` JSON column, so callers may pass anything JSON-serialisable.
+ * Kept permissive so handlers can pile metadata into a single object.
+ */
+export type LogEventDetails = Record<string, unknown>;
+
+/** Common metadata keys for auth/admin/system logs (extras allowed). */
+export type LogMetadata = Record<string, unknown>;
+
+/** Log level accepted by `logSystemEvent`. Maps to Winston levels. */
+export type LogSystemLevel = 'info' | 'warning' | 'warn' | 'error' | 'debug';
+
 interface LogFilters {
   userId?: string;
   gameType?: string;
@@ -101,12 +114,12 @@ interface QueryFilters {
   };
 }
 
-interface ParsedLogEntry {
+export interface ParsedLogEntry {
   id?: number;
   userId?: number | null;
   gameType: string;
   eventType: string;
-  eventDetails: any;
+  eventDetails: unknown;
   sessionId?: number | null;
   timestamp: Date;
   username?: string | null;
@@ -142,7 +155,7 @@ class LoggingService {
    * @param {Object} eventDetails - Game-specific data
    * @param {string} sessionId - Optional game session ID
    */
-  static async logGameAction(userId: string, gameType: string, eventType: string, eventDetails: any = {}, sessionId: number | null = null): Promise<void> {
+  static async logGameAction(userId: string, gameType: string, eventType: string, eventDetails: LogEventDetails = {}, sessionId: number | null = null): Promise<void> {
     try {
       await GameLog.create({
         userId: parseInt(userId),
@@ -164,7 +177,7 @@ class LoggingService {
    * @param {string} eventType - Authentication event type (login, logout, failed_login)
    * @param {Object} metadata - Additional metadata (IP, user agent, etc.)
    */
-  static async logAuthAction(userId: string, eventType: string, metadata: any = {}): Promise<void> {
+  static async logAuthAction(userId: string, eventType: string, metadata: LogMetadata = {}): Promise<void> {
     try {
       await GameLog.create({
         userId: parseInt(userId),
@@ -184,7 +197,7 @@ class LoggingService {
    * @param {string} eventType - Admin event type
    * @param {Object} targetData - Data about what was affected
    */
-  static async logAdminAction(adminId: string, eventType: string, targetData: any = {}): Promise<void> {
+  static async logAdminAction(adminId: string, eventType: string, targetData: LogMetadata = {}): Promise<void> {
     try {
       await GameLog.create({
         userId: parseInt(adminId),
@@ -204,7 +217,7 @@ class LoggingService {
    * @param {Object} data - Event data
    * @param {string} level - Log level (info, warning, error)
    */
-  static async logSystemEvent(event: string, data: any = {}, level: string = 'info'): Promise<void> {
+  static async logSystemEvent(event: string, data: LogMetadata = {}, level: LogSystemLevel | string = 'info'): Promise<void> {
     // Also write to Winston so system events appear in log files / console
     const winstonLevel = level === 'warning' ? 'warn' : level;
     winstonLogger.log(winstonLevel, `system_event: ${event}`, data);
@@ -308,7 +321,12 @@ class LoggingService {
       const { db } = await import('../../drizzle/db.js');
 
       const result = await db.delete(gameLogs).where(lt(gameLogs.timestamp, cutoffDate));
-      const deletedCount = (result as any)[0]?.affectedRows || 0;
+      // mysql2 returns [ResultSetHeader, FieldPacket[]] for writes; the
+      // header carries `affectedRows`. Mocks may return a bare object.
+      const deletedCount =
+        (result as unknown as Array<{ affectedRows?: number }>)?.[0]?.affectedRows ||
+        (result as unknown as { affectedRows?: number })?.affectedRows ||
+        0;
 
       winstonLogger.info(`Log cleanup complete: ${deletedCount} logs deleted`);
       return deletedCount;
@@ -321,7 +339,7 @@ class LoggingService {
   /**
    * Convenience wrappers used by socket handlers (backwards-compat)
    */
-  static async logGameEvent(gameType: string, eventType: string, eventDetails: any = {}, userId?: string | number, sessionId?: string | number): Promise<void> {
+  static async logGameEvent(gameType: string, eventType: string, eventDetails: LogEventDetails = {}, userId?: string | number, sessionId?: string | number): Promise<void> {
     try {
       await GameLog.create({
         userId: userId !== undefined && userId !== null ? Number(userId) : null,
@@ -335,19 +353,19 @@ class LoggingService {
     }
   }
 
-  static async logBetPlaced(gameType: string, sessionId: string | number | null, userId: string | number, amount: number, metadata: any = {}): Promise<void> {
+  static async logBetPlaced(gameType: string, sessionId: string | number | null, userId: string | number, amount: number, metadata: LogMetadata = {}): Promise<void> {
     await this.logGameEvent(gameType, 'bet_placed', { amount, ...metadata }, userId, sessionId ?? undefined);
   }
 
-  static async logBetResult(gameType: string, sessionId: string | number | null, userId: string | number, betAmount: number, winAmount: number, isWin: boolean, metadata: any = {}): Promise<void> {
+  static async logBetResult(gameType: string, sessionId: string | number | null, userId: string | number, betAmount: number, winAmount: number, isWin: boolean, metadata: LogMetadata = {}): Promise<void> {
     await this.logGameEvent(gameType, 'game_result', { betAmount, winAmount, isWin, ...metadata }, userId, sessionId ?? undefined);
   }
 
-  static async logGameStart(gameType: string, sessionId: string | number | null, metadata: any = {}): Promise<void> {
+  static async logGameStart(gameType: string, sessionId: string | number | null, metadata: LogMetadata = {}): Promise<void> {
     await this.logGameEvent(gameType, 'game_start', metadata, undefined, sessionId ?? undefined);
   }
 
-  static async logGameEnd(gameType: string, sessionId: string | number | null, metadata: any = {}): Promise<void> {
+  static async logGameEnd(gameType: string, sessionId: string | number | null, metadata: LogMetadata = {}): Promise<void> {
     await this.logGameEvent(gameType, 'game_end', metadata, undefined, sessionId ?? undefined);
   }
 }

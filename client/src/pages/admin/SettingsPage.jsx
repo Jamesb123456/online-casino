@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import useAuth from '../../hooks/useAuth';
+import useSiteSettings from '../../hooks/admin/useSiteSettings';
 import { CURRENCY_NAME } from '../../lib/formatCredits';
 import { MIN_HOUSE_EDGE_FRACTION } from '../../lib/payoutMath';
 
@@ -24,125 +25,25 @@ const SettingsPage = () => {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
 
-  // ------------------------- Card 1: Currency & defaults -------------------
-  const [defaultNewUserBalance, setDefaultNewUserBalance] = useState('');
-  const [defaultsLoading, setDefaultsLoading] = useState(true);
+  // Per-card saving flags stay locally; the fetch + form-state lives in the
+  // useSiteSettings hook.
   const [defaultsSaving, setDefaultsSaving] = useState(false);
-
-  // ------------------------- Card 2: Payout caps ----------------------------
-  const [capsForm, setCapsForm] = useState({ perRound: '', perUserPerDay: '', perDay: '' });
-  const [capsLoading, setCapsLoading] = useState(true);
   const [capsSaving, setCapsSaving] = useState(false);
-
-  // ------------------------- Card 3: Alert thresholds -----------------------
-  const [alertsForm, setAlertsForm] = useState({ bigWin: '', houseLow: '', rapidBetsPerMin: '' });
-  const [alertsLoading, setAlertsLoading] = useState(true);
   const [alertsSaving, setAlertsSaving] = useState(false);
-
-  // ------------------------- Card 4: Login rewards --------------------------
-  const [rewardsForm, setRewardsForm] = useState({ min: '', max: '', streakBonus: '', capPerDay: '' });
-  const [rewardsLoading, setRewardsLoading] = useState(true);
   const [rewardsSaving, setRewardsSaving] = useState(false);
-
-  // ------------------------- Card 5: Min house edge floor -------------------
-  const [houseEdgeFloor, setHouseEdgeFloor] = useState('');
-  const [floorLoading, setFloorLoading] = useState(true);
   const [floorSaving, setFloorSaving] = useState(false);
+
+  const {
+    defaults: { defaultNewUserBalance, setDefaultNewUserBalance, loading: defaultsLoading },
+    caps: { capsForm, setCapsForm, loading: capsLoading },
+    alerts: { alertsForm, setAlertsForm, loading: alertsLoading },
+    rewards: { rewardsForm, setRewardsForm, loading: rewardsLoading },
+    floor: { houseEdgeFloor, setHouseEdgeFloor, loading: floorLoading },
+  } = useSiteSettings({ onError: toast.error });
 
   useEffect(() => {
     document.title = 'Settings | Platinum Casino';
   }, []);
-
-  // ------------------------- Fetchers (per card, isolated) ------------------
-  const fetchDefaultNewUserBalance = useCallback(async () => {
-    try {
-      setDefaultsLoading(true);
-      const res = await api.get('/admin/settings/default_new_user_balance');
-      const v = res?.value;
-      setDefaultNewUserBalance(v == null ? '' : String(v));
-    } catch (err) {
-      // 404 just means the setting hasn't been written yet — show blank.
-      if (!/HTTP 404/.test(err?.message || '') && !/not found/i.test(err?.message || '')) {
-        toast.error(`Failed to load default new-user balance: ${err.message}`);
-      }
-      setDefaultNewUserBalance('');
-    } finally {
-      setDefaultsLoading(false);
-    }
-  }, [toast]);
-
-  const fetchCaps = useCallback(async () => {
-    try {
-      setCapsLoading(true);
-      const res = await api.get('/admin/house/caps');
-      const caps = res?.caps || {};
-      setCapsForm({
-        perRound: caps.perRound == null ? '' : String(caps.perRound),
-        perUserPerDay: caps.perUserPerDay == null ? '' : String(caps.perUserPerDay),
-        perDay: caps.perDay == null ? '' : String(caps.perDay),
-      });
-    } catch (err) {
-      toast.error(`Failed to load payout caps: ${err.message}`);
-    } finally {
-      setCapsLoading(false);
-    }
-  }, [toast]);
-
-  const fetchAlerts = useCallback(async () => {
-    try {
-      setAlertsLoading(true);
-      const res = await api.get('/admin/alerts/settings');
-      setAlertsForm({
-        bigWin: res?.bigWin == null ? '' : String(res.bigWin),
-        houseLow: res?.houseLow == null ? '' : String(res.houseLow),
-        rapidBetsPerMin: res?.rapidBetsPerMin == null ? '' : String(res.rapidBetsPerMin),
-      });
-    } catch (err) {
-      toast.error(`Failed to load alert thresholds: ${err.message}`);
-    } finally {
-      setAlertsLoading(false);
-    }
-  }, [toast]);
-
-  const fetchRewards = useCallback(async () => {
-    try {
-      setRewardsLoading(true);
-      const res = await api.get('/admin/login-rewards/config');
-      setRewardsForm({
-        min: res?.min == null ? '' : String(res.min),
-        max: res?.max == null ? '' : String(res.max),
-        streakBonus: res?.streakBonus == null ? '' : String(res.streakBonus),
-        capPerDay: res?.capPerDay == null ? '' : String(res.capPerDay),
-      });
-    } catch (err) {
-      toast.error(`Failed to load login reward config: ${err.message}`);
-    } finally {
-      setRewardsLoading(false);
-    }
-  }, [toast]);
-
-  const fetchHouseEdgeFloor = useCallback(async () => {
-    try {
-      setFloorLoading(true);
-      const res = await api.get('/admin/settings/min_house_edge_floor');
-      const v = res?.value;
-      setHouseEdgeFloor(v == null ? '' : String(v));
-    } catch {
-      // Setting may not exist yet — silently default to empty so the form
-      // still renders. Saving will create the row.
-      setHouseEdgeFloor('');
-    } finally {
-      setFloorLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDefaultNewUserBalance();
-    fetchCaps();
-    fetchAlerts();
-    fetchRewards();
-    fetchHouseEdgeFloor();
-  }, [fetchDefaultNewUserBalance, fetchCaps, fetchAlerts, fetchRewards, fetchHouseEdgeFloor]);
 
   // ------------------------- Savers (per card, isolated) --------------------
   const handleSaveDefaults = async (e) => {

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import StatCard from './charts/StatCard';
 import AnalyticsAreaChart from './charts/AnalyticsAreaChart';
 import Loading from '../ui/Loading';
 import Badge from '../ui/Badge';
-import analyticsService from '../../services/admin/analyticsService';
+import usePlayerProfile from '../../hooks/admin/usePlayerProfile';
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -118,69 +118,27 @@ const PlayerProfile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
 
-  /* ---- state ---- */
-  const [profile, setProfile] = useState(null);
-  const [sessions, setSessions] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [gameFilter, setGameFilter] = useState('');
-  const [sortBy, setSortBy] = useState('startTime');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [page, setPage] = useState(1);
-  const limit = 15;
+  /* ---- data + query state from extracted hook ---- */
+  const {
+    profile,
+    sessions,
+    loading,
+    error,
+    sessionsLoading,
+    gameFilter,
+    sortBy,
+    sortOrder,
+    page,
+    limit,
+    setPage,
+    handleGameFilterChange,
+    handleSortChange: setSort,
+  } = usePlayerProfile(userId);
 
-  /* ---- fetch profile on mount ---- */
-  useEffect(() => {
-    let cancelled = false;
-    const fetchProfile = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await analyticsService.getPlayerProfile(userId);
-        if (!cancelled) setProfile(result);
-      } catch (err) {
-        console.error('Failed to load player profile:', err);
-        if (!cancelled) setError(err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchProfile();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  /* ---- fetch sessions when filters / page change ---- */
-  useEffect(() => {
-    let cancelled = false;
-    const fetchSessions = async () => {
-      setSessionsLoading(true);
-      try {
-        const params = { page, limit, sortBy, sortOrder };
-        if (gameFilter) params.gameType = gameFilter;
-        const result = await analyticsService.getPlayerSessions(userId, params);
-        if (!cancelled) setSessions(result);
-      } catch (err) {
-        console.error('Failed to load player sessions:', err);
-      } finally {
-        if (!cancelled) setSessionsLoading(false);
-      }
-    };
-    fetchSessions();
-    return () => { cancelled = true; };
-  }, [userId, page, gameFilter, sortBy, sortOrder]);
-
-  /* ---- reset page when filters change ---- */
-  const handleGameFilterChange = (value) => {
-    setGameFilter(value);
-    setPage(1);
-  };
-
+  /* ---- map select index → SORT_OPTIONS entry ---- */
   const handleSortChange = (value) => {
     const opt = SORT_OPTIONS[Number(value)] || SORT_OPTIONS[0];
-    setSortBy(opt.sortBy);
-    setSortOrder(opt.sortOrder);
-    setPage(1);
+    setSort(opt.sortBy, opt.sortOrder);
   };
 
   /* ---- derived sort index for the select ---- */

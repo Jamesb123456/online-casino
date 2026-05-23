@@ -1,39 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import adminService from '../../services/admin/adminService';
+import usePlayerList from '../../hooks/admin/usePlayerList';
 import { FaSort, FaSortUp, FaSortDown } from 'react-icons/fa';
 
 /**
  * Player Management Component
- * Provides interface for administrators to manage players
+ * Provides interface for administrators to manage players.
+ *
+ * Data-fetching, paging, sort, and filter state are encapsulated in
+ * the {@link usePlayerList} hook so this component is focused on
+ * presentation and the CRUD modal interactions.
  */
 const PlayerManagement = () => {
   const navigate = useNavigate();
-  // State for players data
-  const [players, setPlayers] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Sorting and pagination
-  const [sortField, setSortField] = useState('username');
-  const [sortDirection, setSortDirection] = useState('asc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'active', 'inactive'
-  const [roleFilter, setRoleFilter] = useState('all'); // 'all', 'user', 'admin'
-  
+
+  // Table data + query state (paging / sort / filters)
+  const {
+    players,
+    isLoading,
+    totalUsers,
+    totalPages,
+    currentPage,
+    rowsPerPage,
+    sortField,
+    sortDirection,
+    searchTerm,
+    activeFilter,
+    roleFilter,
+    setCurrentPage,
+    handleSortChange,
+    handleSearchChange,
+    handleFilterChange,
+    handleRowsPerPageChange,
+    refetch: fetchPlayers,
+  } = usePlayerList();
+
   // State for modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [currentPlayer, setCurrentPlayer] = useState(null);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     username: '',
@@ -42,89 +54,13 @@ const PlayerManagement = () => {
     role: 'player',
     isActive: true
   });
-  
-  const [fundAmount, setFundAmount] = useState(0);
-  
-  // Fetch players data from API
-  const fetchPlayers = async () => {
-    setIsLoading(true);
-    try {
-      // Prepare query params for direct database table access
-      const params = {
-        page: currentPage,
-        limit: rowsPerPage,
-        sortBy: sortField,
-        sortDir: sortDirection
-      };
-      
-      // Add filters if set
-      if (searchTerm) params.searchTerm = searchTerm;
-      if (activeFilter !== 'all') params.activeOnly = activeFilter === 'active';
-      if (roleFilter !== 'all') params.role = roleFilter;
-      
-      const response = await adminService.getPlayers(params);
-      
-      if (response && response.players) {
-        setPlayers(response.players);
-        setTotalUsers(response.totalCount || response.players.length);
-        setTotalPages(Math.ceil((response.totalCount || response.players.length) / rowsPerPage));
-      } else {
-        setPlayers([]);
-        setTotalUsers(0);
-        setTotalPages(1);
-      }
-    } catch (error) {
-      setPlayers([]);
-      setTotalUsers(0);
-      setTotalPages(1);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  // Fetch players when parameters change
-  useEffect(() => {
-    fetchPlayers();
-  }, [currentPage, rowsPerPage, sortField, sortDirection, searchTerm, activeFilter, roleFilter]);
-  
-  // Handle sort toggle
-  const handleSortChange = (field) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-    setCurrentPage(1); // Reset to first page on sort change
-  };
-  
+  const [fundAmount, setFundAmount] = useState(0);
+
   // Get sort icon for column
   const getSortIcon = (field) => {
     if (sortField !== field) return <FaSort className="text-text-muted" />;
     return sortDirection === 'asc' ? <FaSortUp /> : <FaSortDown />;
-  };
-  
-  // Handle search input changes - debounced search
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    setCurrentPage(1); // Reset to first page on search
-  };
-  
-  // Handle filter changes
-  const handleFilterChange = (filterType, value) => {
-    if (filterType === 'active') {
-      setActiveFilter(value);
-    } else if (filterType === 'role') {
-      setRoleFilter(value);
-    }
-    setCurrentPage(1); // Reset to first page on filter change
-  };
-  
-  // Handle rows per page change
-  const handleRowsPerPageChange = (e) => {
-    setRowsPerPage(parseInt(e.target.value));
-    setCurrentPage(1); // Reset to first page
   };
   
   // Format date
@@ -275,7 +211,7 @@ const PlayerManagement = () => {
               className="w-full p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary"
               placeholder="Search by username..."
               value={searchTerm}
-              onChange={handleSearchChange}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
 
@@ -390,7 +326,7 @@ const PlayerManagement = () => {
                   id="rows-per-page"
                   className="p-2 bg-bg-elevated border border-border-light rounded-lg text-text-primary cursor-pointer"
                   value={rowsPerPage}
-                  onChange={handleRowsPerPageChange}
+                  onChange={(e) => handleRowsPerPageChange(e.target.value)}
                 >
                   <option value="10">10 per page</option>
                   <option value="20">20 per page</option>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/admin/AdminLayout';
 import api from '../../services/api';
@@ -7,6 +7,7 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Modal from '../../components/ui/Modal';
 import useAuth from '../../hooks/useAuth';
+import useTournamentsList from '../../hooks/admin/useTournamentsList';
 
 const GAME_OPTIONS = ['crash', 'plinko', 'wheel', 'roulette', 'blackjack', 'landmines', 'dice'];
 const SCORING_OPTIONS = [
@@ -64,10 +65,14 @@ const TournamentsAdminPage = () => {
   const isAdmin = currentUser?.role === 'admin';
   const canWrite = isWriteRole(currentUser?.role);
 
-  const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('');
+  const {
+    rows,
+    total,
+    loading,
+    statusFilter,
+    setStatusFilter,
+    fetchList,
+  } = useTournamentsList({ onError: toast.error });
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -93,23 +98,6 @@ const TournamentsAdminPage = () => {
   useEffect(() => {
     document.title = 'Tournaments | Platinum Casino';
   }, []);
-
-  const fetchList = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = { limit: 100 };
-      if (statusFilter) params.status = statusFilter;
-      const res = await api.get('/admin/tournaments', { params });
-      setRows(res.rows || []);
-      setTotal(Number(res.total) || 0);
-    } catch (error) {
-      toast.error(`Failed to load tournaments: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, toast]);
-
-  useEffect(() => { fetchList(); }, [fetchList]);
 
   const handleDistChange = (idx, field, value) => {
     setDistRows((s) => s.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));

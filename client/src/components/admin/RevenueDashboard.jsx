@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import StatCard from './charts/StatCard';
 import PeriodSelector from './charts/PeriodSelector';
 import AnalyticsLineChart from './charts/AnalyticsLineChart';
 import AnalyticsBarChart from './charts/AnalyticsBarChart';
 import AnalyticsPieChart from './charts/AnalyticsPieChart';
 import AnalyticsAreaChart from './charts/AnalyticsAreaChart';
-import analyticsService from '../../services/admin/analyticsService';
 import Loading from '../ui/Loading';
+import useRevenueMetrics from '../../hooks/admin/useRevenueMetrics';
 
 /** Formatting helpers */
 const formatCurrency = (val) =>
@@ -37,28 +37,16 @@ const GRANULARITY_OPTIONS = [
  * deposit/withdrawal comparison, player activity, and a period summary.
  */
 const RevenueDashboard = () => {
-  const [period, setPeriod] = useState('30d');
-  const [granularity, setGranularity] = useState('day');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await analyticsService.getRevenue({ period, granularity });
-        setData(result);
-      } catch (err) {
-        console.error('Failed to fetch revenue data:', err);
-        setError('Failed to load revenue data. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [period, granularity]);
+  const {
+    data,
+    loading,
+    error,
+    period,
+    granularity,
+    setPeriod,
+    setGranularity,
+    retry,
+  } = useRevenueMetrics();
 
   /* ---------- Loading state ---------- */
   if (loading) {
@@ -83,7 +71,7 @@ const RevenueDashboard = () => {
           <p className="text-status-error text-lg">{error}</p>
           <button
             type="button"
-            onClick={() => { setLoading(true); setError(null); }}
+            onClick={retry}
             className="px-4 py-2 bg-accent-gold text-bg-base rounded-lg font-medium hover:bg-accent-gold/90 transition-colors"
           >
             Retry

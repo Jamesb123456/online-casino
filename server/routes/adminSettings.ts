@@ -21,10 +21,9 @@
  */
 
 import express, { Request, Response } from 'express';
-import { sql } from 'drizzle-orm';
 import { authenticate as auth, adminOnly, adminOrOperatorOrViewer } from '../middleware/auth.js';
 import LoggingService from '../src/services/loggingService.js';
-import { db } from '../drizzle/db.js';
+import responsibleGamingService from '../src/services/responsibleGamingService.js';
 import type { AuthenticatedRequest } from '../types/index.js';
 
 const router = express.Router();
@@ -82,12 +81,8 @@ function parseStoredValue(raw: any): any {
 // ---------------------------------------------------------------------------
 router.get('/', auth, adminOrOperatorOrViewer, async (_req: Request, res: Response) => {
   try {
-    const result = await db.execute(
-      sql`SELECT \`key\`, \`value\`, updated_at, updated_by
-          FROM settings
-          ORDER BY \`key\` ASC`
-    );
-    const rows = ((result as any)[0] || []).map((r: any) => ({
+    const rawRows = await responsibleGamingService.listSettings();
+    const rows = rawRows.map((r: any) => ({
       key: r.key,
       value: parseStoredValue(r.value),
       updatedAt: r.updated_at,
@@ -112,13 +107,7 @@ router.get('/:key', auth, adminOrOperatorOrViewer, async (req: Request, res: Res
       return res.status(400).json({ message: 'Invalid setting key' });
     }
 
-    const result = await db.execute(
-      sql`SELECT \`key\`, \`value\`, updated_at, updated_by
-          FROM settings
-          WHERE \`key\` = ${key}
-          LIMIT 1`
-    );
-    const row = (result as any)[0]?.[0];
+    const row = await responsibleGamingService.getSetting(key);
     if (!row) {
       return res.status(404).json({ message: 'Setting not found' });
     }
@@ -167,11 +156,7 @@ router.put('/:key', auth, adminOnly, async (req: Request, res: Response) => {
     const adminId = (req as AuthenticatedRequest).user?.userId ?? null;
     const json = JSON.stringify(body.value);
 
-    await db.execute(
-      sql`INSERT INTO settings (\`key\`, \`value\`, updated_by, updated_at)
-          VALUES (${key}, ${json}, ${adminId ?? null}, NOW())
-          ON DUPLICATE KEY UPDATE \`value\` = ${json}, updated_by = ${adminId ?? null}, updated_at = NOW()`
-    );
+    await responsibleGamingService.upsertSetting(key, json, adminId);
 
     LoggingService.logSystemEvent('admin_setting_updated', { adminId, key });
 

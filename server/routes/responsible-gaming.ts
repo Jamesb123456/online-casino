@@ -1,10 +1,8 @@
 // @ts-nocheck
 import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { db } from '../drizzle/db.js';
-import { users } from '../drizzle/schema.js';
-import { eq } from 'drizzle-orm';
 import LoggingService from '../src/services/loggingService.js';
+import responsibleGamingService from '../src/services/responsibleGamingService.js';
 
 const router = express.Router();
 
@@ -25,12 +23,7 @@ router.get('/limits', authenticate, async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const [user] = await db
-      .select({
-        isActive: users.isActive,
-      })
-      .from(users)
-      .where(eq(users.id, userId));
+    const user = await responsibleGamingService.getUserActiveState(userId);
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -72,10 +65,7 @@ router.post('/self-exclude', authenticate, async (req: Request, res: Response) =
 
     const cooldownUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-    await db
-      .update(users)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+    await responsibleGamingService.deactivateUser(userId);
 
     LoggingService.logSystemEvent('self_exclusion', {
       userId,
@@ -106,34 +96,14 @@ router.get('/activity-summary', authenticate, async (req: Request, res: Response
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const { sql: rawSql } = await import('drizzle-orm');
-
     // Get last 7 days and last 30 days summaries
-    const [summary7d] = await db.execute(rawSql`
-      SELECT
-        COUNT(*) as totalTransactions,
-        COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
-        COALESCE(SUM(CASE WHEN transaction_type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
-      FROM transactions
-      WHERE user_id = ${userId}
-        AND transaction_type IN ('game_win', 'game_loss')
-        AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    `) as any;
+    const summary7d = await responsibleGamingService.getActivitySummaryLast7Days(userId);
+    const summary30d = await responsibleGamingService.getActivitySummaryLast30Days(userId);
 
-    const [summary30d] = await db.execute(rawSql`
-      SELECT
-        COUNT(*) as totalTransactions,
-        COALESCE(SUM(CASE WHEN transaction_type = 'game_loss' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalLosses,
-        COALESCE(SUM(CASE WHEN transaction_type = 'game_win' THEN CAST(amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWins
-      FROM transactions
-      WHERE user_id = ${userId}
-        AND transaction_type IN ('game_win', 'game_loss')
-        AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-    `) as any;
-
-    // mysql2 returns [rows, fields]
-    const week = Array.isArray(summary7d) ? summary7d[0] : summary7d;
-    const month = Array.isArray(summary30d) ? summary30d[0] : summary30d;
+    // The service tolerates mysql2's `[rows, fields]` wrapper, so these
+    // are already row-shaped objects (or `{}` when empty).
+    const week: any = summary7d || {};
+    const month: any = summary30d || {};
 
     res.json({
       last7Days: {

@@ -19,6 +19,7 @@
  */
 import { RoundBasedEngine } from '../_engine/rounds.js';
 import type { ActiveBet, RoundResolution } from '../_engine/rounds.js';
+import { RingBuffer } from '../_engine/history.js';
 import pf from '../_engine/provablyFair.js';
 import LoggingService from '../../services/loggingService.js';
 import GameConfigService from '../../services/gameConfigService.js';
@@ -86,7 +87,7 @@ export class RouletteEngine extends RoundBasedEngine {
   /** Players currently connected to the namespace. */
   private readonly activePlayers: Map<number, ActivePlayer> = new Map();
   /** Last 100 round outcomes. */
-  private readonly history: HistoryEntry[] = [];
+  private readonly history: RingBuffer<HistoryEntry> = new RingBuffer<HistoryEntry>(MAX_HISTORY);
   /** All placed bets for the current round, indexed by userId. */
   private readonly currentBets: Map<number, PlacedBet[]> = new Map();
   /** Internal phase label exposed to the client. */
@@ -501,9 +502,6 @@ export class RouletteEngine extends RoundBasedEngine {
       timestamp: new Date(),
     };
     this.history.push(entry);
-    if (this.history.length > MAX_HISTORY) {
-      this.history.splice(0, this.history.length - MAX_HISTORY);
-    }
 
     // Global result broadcast
     for (const sub of this.subscribers) {
@@ -590,7 +588,7 @@ export class RouletteEngine extends RoundBasedEngine {
   }
   /** Test-only: peek at the history list. */
   __getHistory(): ReadonlyArray<HistoryEntry> {
-    return this.history;
+    return this.history.toArray();
   }
 }
 

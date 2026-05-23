@@ -14,6 +14,7 @@
  *   ack:  { success, gameId, path, multiplier, winAmount, profit, balance }
  */
 import { InstantResolveEngine } from '../_engine/instant.js';
+import { RingBuffer } from '../_engine/history.js';
 import { generatePath } from './path.js';
 import { resolveBucketMultiplier, type PlinkoRisk } from './buckets.js';
 import LoggingService from '../../services/loggingService.js';
@@ -45,7 +46,7 @@ export class PlinkoEngine extends InstantResolveEngine {
   readonly gameType: GameType = 'plinko';
 
   /** Bounded round history broadcast back on join, mirroring legacy behaviour. */
-  protected readonly history: PlinkoHistoryEntry[] = [];
+  protected readonly history: RingBuffer<PlinkoHistoryEntry> = new RingBuffer<PlinkoHistoryEntry>(MAX_HISTORY);
 
   // ── Validation ─────────────────────────────────────────────────────
 
@@ -138,9 +139,6 @@ export class PlinkoEngine extends InstantResolveEngine {
       profit,
       timestamp: Date.now(),
     });
-    if (this.history.length > MAX_HISTORY) {
-      this.history.splice(0, this.history.length - MAX_HISTORY);
-    }
 
     LoggingService.logGameEvent('plinko', 'drop_resolved', {
       userId: ctx.user.userId,

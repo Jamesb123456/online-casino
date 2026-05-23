@@ -31,6 +31,7 @@
  */
 
 import { RoundBasedEngine, type ActiveBet, type RoundResolution } from '../_engine/rounds.js';
+import { RingBuffer } from '../_engine/history.js';
 import pf from '../_engine/provablyFair.js';
 import gameConfigService from '../../services/gameConfigService.js';
 import balanceService from '../../services/balanceService.js';
@@ -87,7 +88,7 @@ export class CrashEngine extends RoundBasedEngine {
   private started = false;
 
   /** Recent crash points, newest at the end. */
-  private history: CrashHistoryEntry[] = [];
+  private history: RingBuffer<CrashHistoryEntry> = new RingBuffer<CrashHistoryEntry>(HISTORY_LIMIT);
   /** Active players keyed by userId — drives `activePlayers`/`playerJoined`/`playerLeft`. */
   private activePlayers: Map<number, CrashActivePlayer> = new Map();
   /** Map userId -> socket so we can target per-user emits. */
@@ -672,7 +673,6 @@ export class CrashEngine extends RoundBasedEngine {
       timestamp: Date.now(),
     };
     this.history.push(entry);
-    if (this.history.length > HISTORY_LIMIT) this.history.shift();
 
     const nextSeconds = this.revealDurationMs() / 1000;
     for (const sub of this.subscribers) {

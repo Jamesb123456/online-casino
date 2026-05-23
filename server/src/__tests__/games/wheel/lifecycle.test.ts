@@ -220,8 +220,8 @@ describe('WheelEngine.processResults', () => {
     expect(events).toContain('balanceUpdate');
 
     // History was pushed.
-    expect((engine as any).history).toHaveLength(1);
-    expect((engine as any).history[0].segmentIndex).toBe(11);
+    expect((engine as any).history.length).toBe(1);
+    expect((engine as any).history.slice()[0].segmentIndex).toBe(11);
   });
 
   it('handles losers (segment 0 -> 0x) — no recordWin call, still emits result', async () => {

@@ -14,6 +14,7 @@
  * is responsible for invoking `start()` after construction.
  */
 import { RoundBasedEngine, type ActiveBet, type RoundResolution } from '../_engine/rounds.js';
+import { RingBuffer } from '../_engine/history.js';
 import gameConfigService from '../../services/gameConfigService.js';
 import LoggingService from '../../services/loggingService.js';
 import type {
@@ -73,7 +74,7 @@ export class WheelEngine extends RoundBasedEngine {
   protected readonly activePlayers: Map<number, ActivePlayer> = new Map();
 
   /** Most-recent rounds (latest-last), capped at MAX_HISTORY. */
-  protected readonly history: WheelHistoryEntry[] = [];
+  protected readonly history: RingBuffer<WheelHistoryEntry> = new RingBuffer<WheelHistoryEntry>(MAX_HISTORY);
 
   /** Cached config snapshot refreshed each betting phase. */
   protected currentPayoutTable: Record<string, number[]> | null = null;
@@ -453,9 +454,6 @@ export class WheelEngine extends RoundBasedEngine {
       segmentIndex,
       timestamp: new Date(),
     });
-    if (this.history.length > MAX_HISTORY) {
-      this.history.splice(0, this.history.length - MAX_HISTORY);
-    }
 
     // Include a default-difficulty (medium) multiplier and a color hint so
     // observer clients without an active bet still receive a meaningful

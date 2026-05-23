@@ -1,5 +1,6 @@
 import { db } from '../../drizzle/db.js';
 import { sql } from 'drizzle-orm';
+import { unwrapRows } from './_dbHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Result row types
@@ -228,10 +229,6 @@ function getDateGroupExpr(granularity: string): string {
     case 'day':
     default:     return "DATE(gs.start_time)";
   }
-}
-
-function unwrapRows<T = unknown>(result: unknown): T[] {
-  return (((result as unknown) as T[][])[0] || []) as T[];
 }
 
 function cutoffToMysqlString(cutoff: Date | null): string | null {

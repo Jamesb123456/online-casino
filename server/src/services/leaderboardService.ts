@@ -1,5 +1,6 @@
 import { db } from '../../drizzle/db.js';
 import { sql } from 'drizzle-orm';
+import { unwrapRows } from './_dbHelpers.js';
 
 /**
  * Row shape produced by both leaderboard queries. Numeric columns can be
@@ -14,13 +15,6 @@ export interface LeaderboardRow {
 }
 
 /**
- * mysql2 returns `[rows, fields]` but Drizzle's `.execute()` typing leaks
- * through depending on the driver. The route consumer normalises the tuple
- * shape itself, so we declare the wider union here.
- */
-export type LeaderboardQueryResult = LeaderboardRow[] | [LeaderboardRow[], unknown] | unknown;
-
-/**
  * Leaderboard Service
  *
  * Encapsulates the raw SQL queries that back the public `/api/leaderboard`
@@ -33,22 +27,24 @@ export type LeaderboardQueryResult = LeaderboardRow[] | [LeaderboardRow[], unkno
  * Both queries return the same row shape:
  *   { id, username, totalWinnings, totalGames }
  *
- * The route layer remains responsible for assembling the `{ period, leaderboard }`
- * JSON envelope and unwrapping the mysql2 `[rows, fields]` tuple — callers get
- * the raw `db.execute()` result back so the wire contract is preserved exactly.
+ * Unwrapping the mysql2 `[rows, fields]` (or any other driver envelope) is
+ * handled here via the shared `unwrapRows` helper. The route layer receives
+ * a clean `LeaderboardRow[]` and is responsible only for assembling the
+ * `{ period, leaderboard }` JSON envelope.
  */
 class LeaderboardService {
   /**
    * Top-winners query, optionally restricted to transactions created after
    * `since`. When `since` is null the query returns all-time totals.
    *
-   * Returns the raw `db.execute()` result so the route can normalise the
-   * mysql2 `[rows, fields]` tuple as it does today.
+   * Returns the unwrapped rows so callers do not need to know about driver
+   * envelope shapes.
    */
-  async getTopWinners(since: Date | null, limit: number): Promise<LeaderboardQueryResult> {
+  async getTopWinners(since: Date | null, limit: number): Promise<LeaderboardRow[]> {
+    let rawResult: unknown;
     if (since) {
       const dateStr = since.toISOString().slice(0, 19).replace('T', ' ');
-      return db.execute(sql`
+      rawResult = await db.execute(sql`
         SELECT
           u.id,
           u.username,
@@ -62,22 +58,24 @@ class LeaderboardService {
         ORDER BY totalWinnings DESC
         LIMIT ${limit}
       `);
+    } else {
+      rawResult = await db.execute(sql`
+        SELECT
+          u.id,
+          u.username,
+          COALESCE(SUM(CASE WHEN t.transaction_type = 'game_win' THEN CAST(t.amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWinnings,
+          COUNT(CASE WHEN t.transaction_type IN ('game_win', 'game_loss') THEN 1 END) as totalGames
+        FROM users u
+        LEFT JOIN transactions t ON u.id = t.user_id
+        WHERE u.is_active = 1
+        GROUP BY u.id, u.username
+        HAVING totalWinnings > 0
+        ORDER BY totalWinnings DESC
+        LIMIT ${limit}
+      `);
     }
 
-    return db.execute(sql`
-      SELECT
-        u.id,
-        u.username,
-        COALESCE(SUM(CASE WHEN t.transaction_type = 'game_win' THEN CAST(t.amount AS DECIMAL(15,2)) ELSE 0 END), 0) as totalWinnings,
-        COUNT(CASE WHEN t.transaction_type IN ('game_win', 'game_loss') THEN 1 END) as totalGames
-      FROM users u
-      LEFT JOIN transactions t ON u.id = t.user_id
-      WHERE u.is_active = 1
-      GROUP BY u.id, u.username
-      HAVING totalWinnings > 0
-      ORDER BY totalWinnings DESC
-      LIMIT ${limit}
-    `);
+    return unwrapRows<LeaderboardRow>(rawResult);
   }
 }
 

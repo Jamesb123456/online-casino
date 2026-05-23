@@ -19,6 +19,18 @@ vi.mock('drizzle-orm', () => ({
   // Tagged-template stub that captures the literal segments and the
   // interpolated values so tests can assert on the embedded SQL & params.
   sql: (strings, ...values) => ({ strings, values }),
+  // `relations(...)` is referenced by drizzle/schema.ts, which is pulled
+  // in transitively when the service imports loggingService via the
+  // shared db-helpers module.
+  relations: () => ({}),
+}));
+
+// Stub LoggingService so the service module (via _dbHelpers.ts) does not
+// need to instantiate Winston/file-system transports during this test.
+vi.mock('../../services/loggingService.js', () => ({
+  default: {
+    logSystemEvent: vi.fn(),
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -55,11 +67,12 @@ describe('LeaderboardService', () => {
       const rows = [
         { id: 1, username: 'p1', totalWinnings: 100, totalGames: 5 },
       ];
+      // Plain row-array envelope — unwrap returns it as-is.
       mockDbExecute.mockResolvedValueOnce(rows);
 
       const result = await LeaderboardService.getTopWinners(null, 10);
 
-      expect(result).toBe(rows);
+      expect(result).toEqual(rows);
       expect(mockDbExecute).toHaveBeenCalledTimes(1);
       const text = joinedSql();
       // Unfiltered branch should NOT include a created_at constraint in the
@@ -85,14 +98,15 @@ describe('LeaderboardService', () => {
       expect(values[1]).toBe(25);
     });
 
-    it('returns the raw db.execute() result so the route can unwrap mysql2 tuples', async () => {
-      // mysql2 driver returns [rows, fields]. The service must NOT unwrap.
+    it('unwraps mysql2 [rows, fields] tuples and returns just the rows', async () => {
+      // mysql2 driver returns [rows, fields]. The service now unwraps so
+      // route callers get a clean row array regardless of driver shape.
       const rows = [{ id: 9, username: 'whale', totalWinnings: 9999, totalGames: 7 }];
       mockDbExecute.mockResolvedValueOnce([rows, []]);
 
       const result = await LeaderboardService.getTopWinners(null, 10);
 
-      expect(result).toEqual([rows, []]);
+      expect(result).toEqual(rows);
     });
 
     it('propagates db errors', async () => {

@@ -33,15 +33,13 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // Query top winners by total winnings from transactions
-    // Uses game_win transaction type to calculate total winnings
-    const results = await LeaderboardService.getTopWinners(dateFilter, limitNum);
-
-    // mysql2 returns [rows, fields] tuple
-    const rows = Array.isArray(results) && Array.isArray(results[0]) ? results[0] : results;
+    // Uses game_win transaction type to calculate total winnings.
+    // The service unwraps the driver envelope and returns clean rows.
+    const leaderboard = await LeaderboardService.getTopWinners(dateFilter, limitNum);
 
     res.json({
       period,
-      leaderboard: rows,
+      leaderboard,
     });
   } catch (error) {
     LoggingService.logSystemEvent('leaderboard_fetch_error', { error: (error as Error)?.message }, 'error');

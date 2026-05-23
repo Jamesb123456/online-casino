@@ -1,57 +1,52 @@
 // Smoke / characterization tests for RouletteGame.
 //
-// These lock the current pre-refactor behaviour so a follow-up refactor can't
-// silently change the place-bet payload, the result-pill rendering, or the
-// disconnect cleanup. They intentionally exercise the *real* betting panel so
-// we cover the click -> rouletteSocketService.placeBet wiring end to end.
+// Locks post-B1.4 behaviour: subscribe via useGameSocket(events), place a bet
+// by emit('roulette:place_bet', payload, ack), join with emit('roulette:join'),
+// spin with emit('roulette:spin', { bets }, ack). Wire-level contract (event
+// names + payload keys + ack shape) is preserved from the legacy
+// rouletteSocketService.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// --- Socket service mock --------------------------------------------------
-// Capture every event handler the component subscribes to so the test can
-// fire results back into the component. Use vi.hoisted so the shared refs are
-// initialised before vi.mock factories execute.
-const { capturedHandlers, rouletteSocketServiceMock } = vi.hoisted(() => {
-  const handlers = {};
-  const makeOn = (key) => vi.fn((cb) => {
-    handlers[key] = cb;
-    return vi.fn();
-  });
-  return {
-    capturedHandlers: handlers,
-    rouletteSocketServiceMock: {
-      setUser: vi.fn(),
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn(),
-      joinGame: vi.fn().mockResolvedValue({ success: true, balance: 1000, history: [] }),
-      placeBet: vi.fn().mockResolvedValue({
+// --- useGameSocket mock ---------------------------------------------------
+// Captures the `events` map handed to the hook so the test can drive
+// individual socket events imperatively. The `emit` spy answers ack-style
+// callbacks with deterministic stubs that mirror the legacy service.
+const { capturedEvents, useGameSocketMock, emitMock } = vi.hoisted(() => {
+  const events = { current: {} };
+  const emit = vi.fn((event, payload, cb) => {
+    if (event === 'roulette:join') {
+      cb?.({ success: true, balance: 1000, history: [] });
+    } else if (event === 'roulette:place_bet') {
+      cb?.({
         success: true,
         balance: 990,
-        currentBets: [{ type: 'STRAIGHT', value: '0', amount: 10 }],
-      }),
-      spin: vi.fn().mockResolvedValue({ success: true }),
-      ensureConnected: vi.fn().mockResolvedValue(undefined),
-      onActivePlayers: makeOn('activePlayers'),
-      onPlayerJoined: makeOn('playerJoined'),
-      onPlayerLeft: makeOn('playerLeft'),
-      onCurrentBets: makeOn('currentBets'),
-      onPlayerBet: makeOn('playerBet'),
-      onBalanceUpdate: makeOn('balanceUpdate'),
-      onBettingStart: makeOn('bettingStart'),
-      onBettingEnd: makeOn('bettingEnd'),
-      onSpinStarted: makeOn('spinStarted'),
-      onSpinResult: makeOn('spinResult'),
-      onPersonalResult: makeOn('personalResult'),
-      onRoundComplete: makeOn('roundComplete'),
-    },
-  };
+        currentBets: [{ type: payload?.type, value: payload?.value, amount: payload?.amount }],
+      });
+    } else if (event === 'roulette:spin') {
+      cb?.({ success: true });
+    }
+  });
+  const hook = vi.fn((_gameType, opts) => {
+    events.current = (opts && opts.events) || {};
+    return {
+      socket: null,
+      status: 'connected',
+      lastError: null,
+      serverSeedHash: null,
+      emit,
+    };
+  });
+  return { capturedEvents: events, useGameSocketMock: hook, emitMock: emit };
 });
 
-vi.mock('@/services/socket/rouletteSocketService', () => ({
-  default: rouletteSocketServiceMock,
+vi.mock('@/games/_shared/useGameSocket', () => ({
+  __esModule: true,
+  default: useGameSocketMock,
+  useGameSocket: useGameSocketMock,
 }));
 
 // canvas-confetti has no real backend under jsdom — neuter it so WinBurst
@@ -98,7 +93,7 @@ const renderGame = () =>
 describe('RouletteGame (smoke)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.keys(capturedHandlers).forEach((k) => delete capturedHandlers[k]);
+    capturedEvents.current = {};
   });
 
   it('renders without crashing under mocked auth + socket', () => {
@@ -117,33 +112,57 @@ describe('RouletteGame (smoke)', () => {
     expect(screen.getByText(/^Balance$/i)).toBeInTheDocument();
   });
 
-  it('clicking a bet cell calls rouletteSocketService.placeBet with { type, value, amount }', async () => {
+  it('opens the roulette socket via useGameSocket', () => {
     renderGame();
-    // Wait for the connect/joinGame chain to settle so the panel is interactive.
-    await waitFor(() => expect(rouletteSocketServiceMock.connect).toHaveBeenCalled());
+    expect(useGameSocketMock).toHaveBeenCalled();
+    expect(useGameSocketMock.mock.calls[0][0]).toBe('roulette');
+  });
+
+  it('emits roulette:join once the socket is connected', async () => {
+    renderGame();
+    await waitFor(() => {
+      const joinCall = emitMock.mock.calls.find(([event]) => event === 'roulette:join');
+      expect(joinCall).toBeDefined();
+    });
+  });
+
+  it('clicking a bet cell emits roulette:place_bet with { type, value, amount } + ack', async () => {
+    renderGame();
+    // Wait for the join to settle so the panel is interactive.
+    await waitFor(() => {
+      const joinCall = emitMock.mock.calls.find(([event]) => event === 'roulette:join');
+      expect(joinCall).toBeDefined();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /Select bet on 0/i }));
 
-    await waitFor(() =>
-      expect(rouletteSocketServiceMock.placeBet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'STRAIGHT',
-          value: '0',
-          amount: expect.any(Number),
-        }),
-      ),
+    await waitFor(() => {
+      const betCall = emitMock.mock.calls.find(([event]) => event === 'roulette:place_bet');
+      expect(betCall).toBeDefined();
+    });
+    const betCall = emitMock.mock.calls.find(([event]) => event === 'roulette:place_bet');
+    const [, payload, ack] = betCall;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        type: 'STRAIGHT',
+        value: '0',
+        amount: expect.any(Number),
+      }),
     );
+    expect(typeof ack).toBe('function');
   });
 
-  it('updates UI when onSpinResult + onPersonalResult fire from the server', async () => {
+  it('updates UI when roulette:spin_result + roulette:personal_result fire from the server', async () => {
     renderGame();
-    await waitFor(() => expect(capturedHandlers.spinResult).toBeTypeOf('function'));
+    await waitFor(() =>
+      expect(capturedEvents.current['roulette:spin_result']).toBeTypeOf('function'),
+    );
 
     act(() => {
-      capturedHandlers.spinResult?.({ winningNumber: 17 });
+      capturedEvents.current['roulette:spin_result']?.({ winningNumber: 17 });
     });
     act(() => {
-      capturedHandlers.personalResult?.({
+      capturedEvents.current['roulette:personal_result']?.({
         winningNumber: 17,
         winningColor: 'black',
         bets: [{ type: 'STRAIGHT', value: '17', amount: 10, isWinner: true, profit: 350 }],
@@ -159,9 +178,23 @@ describe('RouletteGame (smoke)', () => {
     });
   });
 
-  it('disconnects the socket on unmount', () => {
-    const { unmount } = renderGame();
-    unmount();
-    expect(rouletteSocketServiceMock.disconnect).toHaveBeenCalled();
+  it('subscribes to all twelve server-pushed events via the events map', () => {
+    renderGame();
+    [
+      'roulette:activePlayers',
+      'roulette:playerJoined',
+      'roulette:playerLeft',
+      'roulette:currentBets',
+      'roulette:playerBet',
+      'balanceUpdate',
+      'bettingStart',
+      'bettingEnd',
+      'roulette:spin_started',
+      'roulette:spin_result',
+      'roulette:personal_result',
+      'roulette:round_complete',
+    ].forEach((event) => {
+      expect(capturedEvents.current[event]).toBeTypeOf('function');
+    });
   });
 });

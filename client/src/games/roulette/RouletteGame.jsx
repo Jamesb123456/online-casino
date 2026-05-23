@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import RouletteWheel from './RouletteWheel';
 import RouletteBettingPanel from './RouletteBettingPanel';
 import RoulettePlayersList from './RoulettePlayersList';
@@ -10,7 +10,7 @@ import { useWinBurst } from '../../components/casino/WinBurst';
 import { useSound } from '../../components/casino/SoundProvider';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import rouletteSocketService from '../../services/socket/rouletteSocketService';
+import useGameSocket from '../_shared/useGameSocket';
 import { BET_TYPES, ROULETTE_NUMBERS } from './rouletteUtils';
 
 const numberColor = (n) =>
@@ -41,6 +41,9 @@ const RouletteGame = () => {
   const { burst, WinBurst: WinBurstNode } = useWinBurst();
 
   // Bet/round state
+  // NOTE: This local `balance` mirror of AuthContext is intentionally kept
+  // during the B1.4 socket-hook migration. B2 will remove the local mirror
+  // and source balance directly from AuthContext in a separate commit.
   const [balance, setBalance] = useState(Number(user?.balance) || 0);
   const [betAmount, setBetAmount] = useState(10);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -51,133 +54,125 @@ const RouletteGame = () => {
   const [winningNumber, setWinningNumber] = useState(null);
   const [gameHistory, setGameHistory] = useState([]);
   const [currentBets, setCurrentBets] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
 
   // Multiplayer state
   const [activePlayers, setActivePlayers] = useState([]);
   const [multiplayerBets, setMultiplayerBets] = useState([]);
 
+  // Socket wiring via the shared hook. Subscribe to all twelve server events
+  // by name; the hook handles connect / reconnect / cleanup automatically.
+  const events = useMemo(
+    () => ({
+      'roulette:activePlayers': (players) => {
+        setActivePlayers(players);
+      },
+      'roulette:playerJoined': (player) => {
+        setActivePlayers((prev) => [...prev, player]);
+      },
+      'roulette:playerLeft': (player) => {
+        setActivePlayers((prev) => prev.filter((p) => p.id !== player.id));
+      },
+      'roulette:currentBets': (bets) => {
+        setMultiplayerBets(bets);
+      },
+      'roulette:playerBet': (bet) => {
+        setMultiplayerBets((prev) => [...prev, bet]);
+      },
+      balanceUpdate: (data) => {
+        if (data?.balance != null) {
+          setBalance(data.balance);
+          if (typeof updateBalance === 'function') updateBalance(data.balance);
+        }
+      },
+      bettingStart: () => {
+        setIsSpinning(false);
+        setSpinPhase(null);
+        setShowResult(false);
+        setCurrentBets([]);
+        setMultiplayerBets([]);
+      },
+      bettingEnd: () => {
+        // betting closed, spin pending
+      },
+      'roulette:spin_started': (data) => {
+        setIsSpinning(true);
+        setSpinPhase('start');
+        setSpinData(data?.spinData);
+        setShowResult(false);
+      },
+      'roulette:spin_result': (data) => {
+        setSpinPhase('result');
+        setWinningNumber(data?.winningNumber);
+        setTimeout(() => setShowResult(true), 800);
+      },
+      'roulette:personal_result': (data) => {
+        const totalBet = data?.bets
+          ? data.bets.reduce((sum, b) => sum + Number(b.amount || 0), 0)
+          : 0;
+        const profit = Number(data?.totalProfit) || 0;
+        const winnings = Number(data?.totalWinnings) || 0;
+        const wn = data?.winningNumber ?? winningNumber;
+        const entry = {
+          id: Date.now(),
+          winningNumber: wn,
+          winningColor: data?.winningColor || numberColor(wn),
+          bets: data?.bets || [],
+          totalBetAmount: totalBet,
+          totalWinnings: winnings,
+          totalProfit: profit,
+          timestamp: new Date(),
+        };
+        setGameResult(entry);
+        setGameHistory((prev) => [entry, ...prev].slice(0, 50));
+        setCurrentBets([]);
+
+        // Win/loss feedback
+        if (profit > 0 && totalBet > 0) {
+          const multiplier = (winnings || 0) / Math.max(0.01, totalBet);
+          burst({ multiplier, amount: winnings });
+        } else if (totalBet > 0) {
+          try {
+            play('lose');
+          } catch {
+            /* ignore */
+          }
+        }
+      },
+      'roulette:round_complete': () => {
+        setIsSpinning(false);
+      },
+    }),
+    [updateBalance, burst, play, winningNumber],
+  );
+
+  const { status, emit } = useGameSocket('roulette', { events });
+  const isConnected = status === 'connected';
+
+  // Tiny helper: wrap `emit` in a Promise that resolves on a success-ack and
+  // rejects on an error-ack. Local-only; not promoted to the hook because most
+  // games don't need it.
+  const emitWithAck = useCallback(
+    (event, payload) =>
+      new Promise((resolve, reject) => {
+        emit(event, payload, (response) => {
+          if (response && response.success) resolve(response);
+          else reject(new Error(response?.error || `Request failed: ${event}`));
+        });
+      }),
+    [emit],
+  );
+
+  // Join the room once the socket is up. Mirrors the legacy
+  // `await rouletteSocketService.joinGame()` lifecycle but driven by status.
   useEffect(() => {
-    const unsubs = [];
-
-    const connectSocket = async () => {
-      try {
-        const userInfo = user
-          ? { userId: user.id, username: user.username, avatar: user.avatar || null }
-          : null;
-
-        if (userInfo) rouletteSocketService.setUser(userInfo);
-        await rouletteSocketService.connect(userInfo);
-        setIsConnected(true);
-
-        const gameData = await rouletteSocketService.joinGame();
-        if (gameData?.success) {
-          setBalance(gameData.balance);
-          setGameHistory(gameData.history || []);
-        }
-
-        unsubs.push(rouletteSocketService.onActivePlayers((players) => {
-          setActivePlayers(players);
-        }));
-        unsubs.push(rouletteSocketService.onPlayerJoined((player) => {
-          setActivePlayers((prev) => [...prev, player]);
-        }));
-        unsubs.push(rouletteSocketService.onPlayerLeft((player) => {
-          setActivePlayers((prev) => prev.filter((p) => p.id !== player.id));
-        }));
-        unsubs.push(rouletteSocketService.onCurrentBets((bets) => {
-          setMultiplayerBets(bets);
-        }));
-        unsubs.push(rouletteSocketService.onPlayerBet((bet) => {
-          setMultiplayerBets((prev) => [...prev, bet]);
-        }));
-        unsubs.push(rouletteSocketService.onBalanceUpdate((data) => {
-          if (data?.balance != null) {
-            setBalance(data.balance);
-            if (typeof updateBalance === 'function') updateBalance(data.balance);
-          }
-        }));
-        unsubs.push(rouletteSocketService.onBettingStart(() => {
-          setIsSpinning(false);
-          setSpinPhase(null);
-          setShowResult(false);
-          setCurrentBets([]);
-          setMultiplayerBets([]);
-        }));
-        unsubs.push(rouletteSocketService.onBettingEnd(() => {
-          // betting closed, spin pending
-        }));
-        unsubs.push(rouletteSocketService.onSpinStarted((data) => {
-          setIsSpinning(true);
-          setSpinPhase('start');
-          setSpinData(data?.spinData);
-          setShowResult(false);
-        }));
-        unsubs.push(rouletteSocketService.onSpinResult((data) => {
-          setSpinPhase('result');
-          setWinningNumber(data?.winningNumber);
-          setTimeout(() => setShowResult(true), 800);
-        }));
-        unsubs.push(rouletteSocketService.onPersonalResult((data) => {
-          const totalBet = data?.bets
-            ? data.bets.reduce((sum, b) => sum + Number(b.amount || 0), 0)
-            : 0;
-          const profit = Number(data?.totalProfit) || 0;
-          const winnings = Number(data?.totalWinnings) || 0;
-          const wn = data?.winningNumber ?? winningNumber;
-          const entry = {
-            id: Date.now(),
-            winningNumber: wn,
-            winningColor: data?.winningColor || numberColor(wn),
-            bets: data?.bets || [],
-            totalBetAmount: totalBet,
-            totalWinnings: winnings,
-            totalProfit: profit,
-            timestamp: new Date(),
-          };
-          setGameResult(entry);
-          setGameHistory((prev) => [entry, ...prev].slice(0, 50));
-          setCurrentBets([]);
-
-          // Win/loss feedback
-          if (profit > 0 && totalBet > 0) {
-            const multiplier = (winnings || 0) / Math.max(0.01, totalBet);
-            burst({ multiplier, amount: winnings });
-          } else if (totalBet > 0) {
-            try {
-              play('lose');
-            } catch {
-              /* ignore */
-            }
-          }
-        }));
-        unsubs.push(rouletteSocketService.onRoundComplete(() => {
-          setIsSpinning(false);
-        }));
-      } catch (error) {
-        // Surface a toast but don't break the page.
-        console.error('Error connecting to roulette game:', error);
+    if (status !== 'connected') return;
+    emit('roulette:join', {}, (gameData) => {
+      if (gameData?.success) {
+        setBalance(gameData.balance);
+        setGameHistory(gameData.history || []);
       }
-    };
-
-    connectSocket();
-
-    return () => {
-      unsubs.forEach((unsub) => {
-        try {
-          unsub && unsub();
-        } catch {
-          /* ignore */
-        }
-      });
-      try {
-        rouletteSocketService.disconnect();
-      } catch {
-        /* ignore */
-      }
-      setIsConnected(false);
-    };
-  }, []);
+    });
+  }, [status, emit]);
 
   const handlePlaceBet = useCallback(
     (bet) => {
@@ -189,8 +184,7 @@ const RouletteGame = () => {
         return;
       }
 
-      rouletteSocketService
-        .placeBet({ type: bet.type, value: bet.value, amount: amt })
+      emitWithAck('roulette:place_bet', { type: bet.type, value: bet.value, amount: amt })
         .then((response) => {
           if (response?.success) {
             setBalance(response.balance);
@@ -203,7 +197,7 @@ const RouletteGame = () => {
           toast.error?.(err?.message || 'Failed to place bet');
         });
     },
-    [isSpinning, balance, toast],
+    [isSpinning, balance, toast, emitWithAck],
   );
 
   const handleSpin = useCallback(async () => {
@@ -212,22 +206,49 @@ const RouletteGame = () => {
       toast.warning?.('Place at least one bet before spinning');
       return;
     }
+    if (status !== 'connected') {
+      toast.error?.('Cannot connect to game server. Please refresh the page.');
+      return;
+    }
+
+    const formattedBets = currentBets.map((bet) => ({
+      ...bet,
+      value: String(bet.value),
+    }));
+
+    // 10s safety timeout guards against a silent server hang — matches the
+    // legacy behaviour exactly.
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      toast.error?.('Spin request timed out');
+      setIsSpinning(false);
+    }, 10000);
+
     try {
-      try {
-        await rouletteSocketService.ensureConnected();
-      } catch {
-        toast.error?.('Cannot connect to game server. Please refresh the page.');
-        return;
-      }
-      const response = await rouletteSocketService.spin(currentBets);
+      const response = await new Promise((resolve, reject) => {
+        emit('roulette:spin', { bets: formattedBets }, (resp) => {
+          if (resp && resp.success) resolve(resp);
+          else reject(new Error(resp?.error || 'Error spinning wheel'));
+        });
+      });
+
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+
       if (!response?.success) {
         toast.error?.('Error spinning the wheel. Please try again.');
       }
     } catch (error) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       toast.error?.(error?.message || 'An unexpected error occurred.');
       setIsSpinning(false);
     }
-  }, [isSpinning, currentBets, toast]);
+  }, [isSpinning, currentBets, status, toast, emit]);
 
   const totalPlaced = currentBets.reduce((sum, b) => sum + Number(b.amount || 0), 0);
 

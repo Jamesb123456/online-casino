@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import RouletteWheel from './RouletteWheel';
 import RouletteFelt from './RouletteFelt';
 import RoulettePlayersList from './RoulettePlayersList';
@@ -149,6 +149,15 @@ const RouletteGame = () => {
   const { status, emit } = useGameSocket('roulette', { events });
   const isConnected = status === 'connected';
 
+  // Refs used for spin-recovery: the 10s timeout closure needs the *current*
+  // status (not the stale value at spin-time), and the join effect needs to
+  // know whether a spin is in flight so it can recover after a reconnect.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  const spinInFlightRef = useRef(false);
+
   // No connect-failure toast effect historically — `gameName` is omitted so
   // `useGameError` only provides the stable `reportError` helper. Per-action
   // toasts below preserve their original copy.
@@ -170,6 +179,9 @@ const RouletteGame = () => {
 
   // Join the room once the socket is up. Mirrors the legacy
   // `await rouletteSocketService.joinGame()` lifecycle but driven by status.
+  // If a spin was in flight when the socket dropped, this reconnect path
+  // also clears the lingering spinning UI — the join ack returns fresh
+  // balance + history so the player catches up cleanly.
   useEffect(() => {
     if (status !== 'connected') return;
     emit('roulette:join', {}, (gameData) => {
@@ -178,6 +190,11 @@ const RouletteGame = () => {
           updateBalance(gameData.balance);
         }
         setGameHistory(gameData.history || []);
+      }
+      if (spinInFlightRef.current) {
+        spinInFlightRef.current = false;
+        setIsSpinning(false);
+        setShowResult(false);
       }
     });
   }, [status, emit, updateBalance]);
@@ -226,14 +243,25 @@ const RouletteGame = () => {
       value: String(bet.value),
     }));
 
-    // 10s safety timeout guards against a silent server hang — matches the
-    // legacy behaviour exactly.
+    // 10s safety timeout guards against a silent server hang. If the socket
+    // dropped between now and the timeout firing, the server-side spin still
+    // ran — don't blow away local state, let the join effect catch us up on
+    // reconnect.
     let settled = false;
+    spinInFlightRef.current = true;
     const timeoutId = setTimeout(() => {
       if (settled) return;
       settled = true;
-      reportError(null, 'Spin request timed out');
-      setIsSpinning(false);
+      if (statusRef.current === 'connected') {
+        // Genuine server hang: socket is up, no ack ever came.
+        spinInFlightRef.current = false;
+        reportError(null, 'Spin request timed out');
+        setIsSpinning(false);
+      } else {
+        // Socket dropped mid-spin. The wager already debited server-side;
+        // wait for the join effect to recover state on reconnect.
+        toast.warning?.('Lost connection during spin — refreshing…');
+      }
     }, 10000);
 
     try {
@@ -247,6 +275,7 @@ const RouletteGame = () => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
+      spinInFlightRef.current = false;
 
       if (!response?.success) {
         reportError(null, 'Error spinning the wheel. Please try again.');
@@ -255,6 +284,7 @@ const RouletteGame = () => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
+      spinInFlightRef.current = false;
       reportError(error, 'An unexpected error occurred.');
       setIsSpinning(false);
     }

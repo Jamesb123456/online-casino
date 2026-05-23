@@ -41,11 +41,10 @@ const RouletteGame = () => {
   const { play } = useSound();
   const { burst, WinBurst: WinBurstNode } = useWinBurst();
 
-  // Bet/round state
-  // NOTE: This local `balance` mirror of AuthContext is intentionally kept
-  // during the B1.4 socket-hook migration. B2 will remove the local mirror
-  // and source balance directly from AuthContext in a separate commit.
-  const [balance, setBalance] = useState(Number(user?.balance) || 0);
+  // Balance comes from AuthContext (single source of truth). Server pushes
+  // via balanceUpdate / join / placeBet acks call updateBalance(), which
+  // propagates here automatically.
+  const balance = Number(user?.balance ?? 0);
   const [betAmount, setBetAmount] = useState(10);
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinPhase, setSpinPhase] = useState(null);
@@ -80,9 +79,8 @@ const RouletteGame = () => {
         setMultiplayerBets((prev) => [...prev, bet]);
       },
       balanceUpdate: (data) => {
-        if (data?.balance != null) {
-          setBalance(data.balance);
-          if (typeof updateBalance === 'function') updateBalance(data.balance);
+        if (data?.balance != null && typeof updateBalance === 'function') {
+          updateBalance(data.balance);
         }
       },
       bettingStart: () => {
@@ -174,11 +172,13 @@ const RouletteGame = () => {
     if (status !== 'connected') return;
     emit('roulette:join', {}, (gameData) => {
       if (gameData?.success) {
-        setBalance(gameData.balance);
+        if (gameData.balance != null && typeof updateBalance === 'function') {
+          updateBalance(gameData.balance);
+        }
         setGameHistory(gameData.history || []);
       }
     });
-  }, [status, emit]);
+  }, [status, emit, updateBalance]);
 
   const handlePlaceBet = useCallback(
     (bet) => {
@@ -193,7 +193,9 @@ const RouletteGame = () => {
       emitWithAck('roulette:place_bet', { type: bet.type, value: bet.value, amount: amt })
         .then((response) => {
           if (response?.success) {
-            setBalance(response.balance);
+            if (response.balance != null && typeof updateBalance === 'function') {
+              updateBalance(response.balance);
+            }
             setCurrentBets(response.currentBets || []);
           } else {
             reportError(response?.error, 'Failed to place bet');
@@ -203,7 +205,7 @@ const RouletteGame = () => {
           reportError(err, 'Failed to place bet');
         });
     },
-    [isSpinning, balance, toast, reportError, emitWithAck],
+    [isSpinning, balance, toast, reportError, emitWithAck, updateBalance],
   );
 
   const handleSpin = useCallback(async () => {

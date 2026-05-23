@@ -23,7 +23,6 @@ const {
   stopAmbientSpy,
   announceSpy,
   burstSpy,
-  removeEventListenerSpy,
 } = vi.hoisted(() => ({
   handlers: {},
   emitSpy: vi.fn(),

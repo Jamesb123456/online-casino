@@ -36,7 +36,7 @@ router.get('/users', auth, adminOnly, async (req: Request, res: Response) => {
     // Apply optional filters: searchTerm (username substring), activeOnly, role.
     const searchTerm = (req.query.searchTerm ? String(req.query.searchTerm) : '').trim().toLowerCase();
     const activeOnlyRaw = req.query.activeOnly;
-    const activeOnly = activeOnlyRaw === undefined ? null : activeOnlyRaw === 'true' || activeOnlyRaw === true;
+    const activeOnly = activeOnlyRaw === undefined ? null : activeOnlyRaw === 'true';
     const roleFilter = req.query.role ? String(req.query.role) : '';
 
     const filtered = users.filter(user => {

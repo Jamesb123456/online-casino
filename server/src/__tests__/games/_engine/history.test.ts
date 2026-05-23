@@ -96,6 +96,14 @@ describe('RingBuffer', () => {
     expect(buf.length).toBe(0);
     expect(buf.slice()).toEqual([]);
   });
+
+  it('does not leak external mutations into the buffer', () => {
+    const buf = new RingBuffer<{ x: number }>(5);
+    buf.push({ x: 1 });
+    const slice = buf.slice();
+    slice[0].x = 999;
+    expect(buf.slice()[0].x).toBe(1);
+  });
 });
 
 /**

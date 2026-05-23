@@ -13,8 +13,10 @@
  *     at a time.)
  *   - `slice()` mirrors `Array.prototype.slice` semantics, including negative
  *     indices (`slice(-10)` returns the last 10 items, newest-last).
- *   - The returned array from `slice()` / `toArray()` is a fresh copy — the
- *     caller cannot mutate the internal store.
+ *   - The returned array from `slice()` / `toArray()` is a fresh array of
+ *     deep-cloned items (via `structuredClone`) — neither array-level
+ *     mutations (push/splice) nor mutations to nested properties of items
+ *     leak back into the buffer's internal store.
  */
 export class RingBuffer<T> {
   private items: T[] = [];
@@ -45,10 +47,13 @@ export class RingBuffer<T> {
 
   /**
    * Same semantics as `Array.prototype.slice` — supports negative indices.
-   * Returns a fresh array; mutating it does not affect the buffer.
+   * Returns a fresh array of deep-cloned items; mutating the result (or any
+   * nested property on an item) does not affect the buffer's internal store.
+   * History entries are small plain-JSON shapes so the clone cost is trivial
+   * and only paid on read paths (per round, not per tick).
    */
   slice(start?: number, end?: number): T[] {
-    return this.items.slice(start, end);
+    return this.items.slice(start, end).map((item) => structuredClone(item));
   }
 
   /** Read a single item by (possibly negative) index, matching `Array` indexing. */
@@ -61,9 +66,9 @@ export class RingBuffer<T> {
     return this.items[Symbol.iterator]();
   }
 
-  /** Return a shallow copy of all retained items, oldest-first. */
+  /** Return a deep-cloned copy of all retained items, oldest-first. */
   toArray(): T[] {
-    return this.items.slice();
+    return this.items.map((item) => structuredClone(item));
   }
 
   /** Drop all retained items. */

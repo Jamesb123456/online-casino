@@ -1,9 +1,51 @@
 import Decimal from 'decimal.js';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { db } from '../../drizzle/db.js';
 import LoggingService from './loggingService.js';
 import balanceService from './balanceService.js';
 import type { Tournament, TournamentEntry } from '../../drizzle/schema.js';
+
+// ---------------------------------------------------------------------------
+// Internal structural types
+// ---------------------------------------------------------------------------
+
+/**
+ * Raw row shape returned from the mysql2 driver via Drizzle's `db.execute`.
+ * We accept both snake_case (driver default) and camelCase (in case the driver
+ * is configured to camelize) keys. Everything is permissively typed because
+ * mysql2 returns mixed scalar types depending on column type (number/string/Date).
+ */
+type RawRow = Record<string, unknown>;
+type TournamentRow = RawRow;
+type TournamentEntryRow = RawRow;
+
+/**
+ * mysql2 / Drizzle `db.execute` returns `[rows, fields]` for SELECT and
+ * `{ insertId, affectedRows, ... }` (wrapped in a tuple) for INSERT/UPDATE.
+ * Tests also pass plain arrays. This permissive type covers all of those.
+ */
+type RawExecuteResult = unknown;
+
+interface InsertExecResult {
+  insertId?: number | string;
+  [key: string]: unknown;
+}
+
+function rowsOf(result: RawExecuteResult): RawRow[] {
+  // Drizzle/mysql2 returns [rows, fields]; tests pass [rows]. Both safe.
+  const r = result as unknown as RawRow[][] | undefined;
+  return (r && r[0]) || [];
+}
+
+function firstRow(result: RawExecuteResult): RawRow | undefined {
+  return rowsOf(result)[0];
+}
+
+function extractInsertId(result: RawExecuteResult): number | string | null {
+  const r = result as unknown as (InsertExecResult | InsertExecResult[]);
+  if (Array.isArray(r)) return r[0]?.insertId ?? null;
+  return (r && (r as InsertExecResult).insertId) ?? null;
+}
 
 Decimal.set({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
@@ -54,34 +96,45 @@ function toMySqlDateTime(d: Date): string {
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
-function parsePrizeDistribution(raw: any): Record<string, number> {
+function parsePrizeDistribution(raw: unknown): Record<string, number> {
   if (raw == null) return {};
   if (typeof raw === 'string') {
     try { return JSON.parse(raw); } catch { return {}; }
   }
-  return raw;
+  return raw as Record<string, number>;
 }
 
-function hydrate(row: any): Tournament {
+/**
+ * Coerce a raw column value (string/number/Date/null) into a Date or null.
+ * mysql2 may return any of those depending on column type and driver options.
+ */
+function toDateOrNull(v: unknown): Date | null {
+  if (v == null) return null;
+  return new Date(v as string | number | Date);
+}
+
+function hydrate(row: TournamentRow): Tournament {
+  const startRaw = row.start_time ?? row.startTime;
+  const endRaw = row.end_time ?? row.endTime;
   return {
     id: Number(row.id),
     name: row.name,
     gameType: row.game_type ?? row.gameType,
     scoring: row.scoring,
-    startTime: row.start_time ? new Date(row.start_time) : (row.startTime ? new Date(row.startTime) : null as any),
-    endTime: row.end_time ? new Date(row.end_time) : (row.endTime ? new Date(row.endTime) : null as any),
+    startTime: toDateOrNull(startRaw),
+    endTime: toDateOrNull(endRaw),
     prizePool: String(row.prize_pool ?? row.prizePool ?? '0'),
     prizeDistribution: parsePrizeDistribution(row.prize_distribution ?? row.prizeDistribution),
     status: row.status,
     createdBy: row.created_by == null ? null : Number(row.created_by ?? row.createdBy),
-    finalizedAt: row.finalized_at ? new Date(row.finalized_at) : (row.finalizedAt ? new Date(row.finalizedAt) : null),
+    finalizedAt: toDateOrNull(row.finalized_at ?? row.finalizedAt),
     finalizedBy: (row.finalized_by ?? row.finalizedBy) == null ? null : Number(row.finalized_by ?? row.finalizedBy),
-    createdAt: row.created_at ? new Date(row.created_at) : (row.createdAt ? new Date(row.createdAt) : new Date()),
-    updatedAt: row.updated_at ? new Date(row.updated_at) : (row.updatedAt ? new Date(row.updatedAt) : new Date()),
+    createdAt: toDateOrNull(row.created_at ?? row.createdAt) ?? new Date(),
+    updatedAt: toDateOrNull(row.updated_at ?? row.updatedAt) ?? new Date(),
   } as Tournament;
 }
 
-function hydrateEntry(row: any): TournamentEntry {
+function hydrateEntry(row: TournamentEntryRow): TournamentEntry {
   return {
     id: Number(row.id),
     tournamentId: Number(row.tournament_id ?? row.tournamentId),
@@ -92,8 +145,8 @@ function hydrateEntry(row: any): TournamentEntry {
     biggestWin: String(row.biggest_win ?? row.biggestWin ?? '0'),
     rank: (row.rank ?? row.entryRank) == null ? null : Number(row.rank ?? row.entryRank),
     prizeAmount: (row.prize_amount ?? row.prizeAmount) == null ? null : String(row.prize_amount ?? row.prizeAmount),
-    createdAt: row.created_at ? new Date(row.created_at) : (row.createdAt ? new Date(row.createdAt) : new Date()),
-    updatedAt: row.updated_at ? new Date(row.updated_at) : (row.updatedAt ? new Date(row.updatedAt) : new Date()),
+    createdAt: toDateOrNull(row.created_at ?? row.createdAt) ?? new Date(),
+    updatedAt: toDateOrNull(row.updated_at ?? row.updatedAt) ?? new Date(),
   } as TournamentEntry;
 }
 
@@ -108,10 +161,10 @@ class TournamentService {
     if (!input || typeof input.name !== 'string' || input.name.length < 1 || input.name.length > 120) {
       throw new Error('invalid_name');
     }
-    if (!KNOWN_GAMES.includes(input.gameType as any)) {
+    if (!(KNOWN_GAMES as readonly string[]).includes(input.gameType)) {
       throw new Error('invalid_game_type');
     }
-    if (!SCORING_RULES.includes(input.scoring as any)) {
+    if (!(SCORING_RULES as readonly string[]).includes(input.scoring)) {
       throw new Error('invalid_scoring');
     }
     const start = toDate(input.startTime);
@@ -161,14 +214,14 @@ class TournamentService {
     const pool = new Decimal(input.prizePool).toFixed(2);
     const distJson = JSON.stringify(input.prizeDistribution);
 
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`INSERT INTO tournaments
             (name, game_type, scoring, start_time, end_time, prize_pool, prize_distribution, status, created_by, created_at, updated_at)
           VALUES
             (${input.name}, ${input.gameType}, ${input.scoring}, ${toMySqlDateTime(start)}, ${toMySqlDateTime(end)},
              ${pool}, ${distJson}, 'scheduled', ${input.createdBy ?? null}, NOW(), NOW())`
     );
-    const insertId = result?.[0]?.insertId ?? result?.insertId ?? null;
+    const insertId = extractInsertId(result);
     if (!insertId) throw new Error('tournament_create_failed');
 
     // Invalidate active cache for this game.
@@ -186,7 +239,7 @@ class TournamentService {
       throw new Error('tournament_not_editable');
     }
 
-    const sets: any[] = [];
+    const sets: SQL[] = [];
     if (Object.prototype.hasOwnProperty.call(patch, 'name')) {
       if (typeof patch.name !== 'string' || patch.name.length < 1 || patch.name.length > 120) {
         throw new Error('invalid_name');
@@ -194,18 +247,18 @@ class TournamentService {
       sets.push(sql`name = ${patch.name}`);
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'gameType')) {
-      if (!KNOWN_GAMES.includes(patch.gameType as any)) throw new Error('invalid_game_type');
+      if (!(KNOWN_GAMES as readonly string[]).includes(patch.gameType as string)) throw new Error('invalid_game_type');
       sets.push(sql`game_type = ${patch.gameType}`);
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'scoring')) {
-      if (!SCORING_RULES.includes(patch.scoring as any)) throw new Error('invalid_scoring');
+      if (!(SCORING_RULES as readonly string[]).includes(patch.scoring as string)) throw new Error('invalid_scoring');
       sets.push(sql`scoring = ${patch.scoring}`);
     }
 
     // For start/end, require both-or-neither consistency check using the
     // resulting values (existing values may stay).
-    const newStart = patch.startTime != null ? toDate(patch.startTime) : new Date(existing.startTime as any);
-    const newEnd = patch.endTime != null ? toDate(patch.endTime) : new Date(existing.endTime as any);
+    const newStart = patch.startTime != null ? toDate(patch.startTime) : new Date(existing.startTime as Date);
+    const newEnd = patch.endTime != null ? toDate(patch.endTime) : new Date(existing.endTime as Date);
     if (!(newStart.getTime() < newEnd.getTime())) {
       throw new Error('start_must_precede_end');
     }
@@ -213,12 +266,12 @@ class TournamentService {
     if (patch.endTime != null) sets.push(sql`end_time = ${toMySqlDateTime(newEnd)}`);
 
     if (Object.prototype.hasOwnProperty.call(patch, 'prizePool')) {
-      const pool = new Decimal(patch.prizePool as any);
+      const pool = new Decimal(patch.prizePool as Decimal.Value);
       if (!pool.isFinite() || pool.lte(0)) throw new Error('prize_pool_must_be_positive');
       sets.push(sql`prize_pool = ${pool.toFixed(2)}`);
     }
     if (Object.prototype.hasOwnProperty.call(patch, 'prizeDistribution')) {
-      this.validatePrizeDistribution(patch.prizeDistribution as any);
+      this.validatePrizeDistribution(patch.prizeDistribution as Record<string, number>);
       sets.push(sql`prize_distribution = ${JSON.stringify(patch.prizeDistribution)}`);
     }
 
@@ -254,52 +307,54 @@ class TournamentService {
     const limit = Math.min(Math.max(Number(opts.limit ?? 50) || 50, 1), 200);
     const offset = Math.max(Number(opts.offset ?? 0) || 0, 0);
 
-    const conditions: string[] = [];
-    const params: any = { status: opts.status ?? null, gameType: opts.gameType ?? null };
+    const params: { status: string | null; gameType: string | null } = {
+      status: opts.status ?? null,
+      gameType: opts.gameType ?? null,
+    };
+
+    const countOf = (result: RawExecuteResult): number => Number(firstRow(result)?.c ?? 0);
 
     // We assemble the WHERE clause via tagged SQL to keep parameterisation safe.
     if (opts.status && opts.gameType) {
-      const result: any = await db.execute(
+      const result: RawExecuteResult = await db.execute(
         sql`SELECT * FROM tournaments WHERE status = ${params.status} AND game_type = ${params.gameType}
             ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
       );
-      const totalRes: any = await db.execute(
+      const totalRes: RawExecuteResult = await db.execute(
         sql`SELECT COUNT(*) AS c FROM tournaments WHERE status = ${params.status} AND game_type = ${params.gameType}`
       );
-      const rows = (result?.[0] || []).map(hydrate);
-      const total = Number(totalRes?.[0]?.[0]?.c ?? 0);
-      return { rows, total };
+      return { rows: rowsOf(result).map(hydrate), total: countOf(totalRes) };
     }
     if (opts.status) {
-      const result: any = await db.execute(
+      const result: RawExecuteResult = await db.execute(
         sql`SELECT * FROM tournaments WHERE status = ${params.status}
             ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
       );
-      const totalRes: any = await db.execute(
+      const totalRes: RawExecuteResult = await db.execute(
         sql`SELECT COUNT(*) AS c FROM tournaments WHERE status = ${params.status}`
       );
-      return { rows: (result?.[0] || []).map(hydrate), total: Number(totalRes?.[0]?.[0]?.c ?? 0) };
+      return { rows: rowsOf(result).map(hydrate), total: countOf(totalRes) };
     }
     if (opts.gameType) {
-      const result: any = await db.execute(
+      const result: RawExecuteResult = await db.execute(
         sql`SELECT * FROM tournaments WHERE game_type = ${params.gameType}
             ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
       );
-      const totalRes: any = await db.execute(
+      const totalRes: RawExecuteResult = await db.execute(
         sql`SELECT COUNT(*) AS c FROM tournaments WHERE game_type = ${params.gameType}`
       );
-      return { rows: (result?.[0] || []).map(hydrate), total: Number(totalRes?.[0]?.[0]?.c ?? 0) };
+      return { rows: rowsOf(result).map(hydrate), total: countOf(totalRes) };
     }
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT * FROM tournaments ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
     );
-    const totalRes: any = await db.execute(sql`SELECT COUNT(*) AS c FROM tournaments`);
-    return { rows: (result?.[0] || []).map(hydrate), total: Number(totalRes?.[0]?.[0]?.c ?? 0) };
+    const totalRes: RawExecuteResult = await db.execute(sql`SELECT COUNT(*) AS c FROM tournaments`);
+    return { rows: rowsOf(result).map(hydrate), total: countOf(totalRes) };
   }
 
   async getById(id: number): Promise<Tournament | null> {
-    const result: any = await db.execute(sql`SELECT * FROM tournaments WHERE id = ${id} LIMIT 1`);
-    const row = result?.[0]?.[0];
+    const result: RawExecuteResult = await db.execute(sql`SELECT * FROM tournaments WHERE id = ${id} LIMIT 1`);
+    const row = firstRow(result);
     return row ? hydrate(row) : null;
   }
 
@@ -314,13 +369,13 @@ class TournamentService {
     if (cached && cached.expiresAt > now) {
       return cached.value;
     }
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT * FROM tournaments
           WHERE status = 'active' AND game_type = ${gameType}
             AND start_time <= NOW() AND end_time >= NOW()
           ORDER BY end_time ASC LIMIT 1`
     );
-    const row = result?.[0]?.[0];
+    const row = firstRow(result);
     const value = row ? hydrate(row) : null;
     this._activeCache.set(gameType, { value, expiresAt: now + ACTIVE_CACHE_TTL_MS });
     return value;
@@ -362,10 +417,10 @@ class TournamentService {
           ON DUPLICATE KEY UPDATE updated_at = updated_at`
     );
 
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT * FROM tournament_entries WHERE tournament_id = ${tournamentId} AND user_id = ${userId} LIMIT 1`
     );
-    const row = result?.[0]?.[0];
+    const row = firstRow(result);
     if (!row) return null;
     return { entry: hydrateEntry(row), scoring: t.scoring as ScoringRule };
   }
@@ -416,21 +471,20 @@ class TournamentService {
 
   async getLeaderboard(tournamentId: number, limit = 50): Promise<TournamentEntry[]> {
     const lim = Math.min(Math.max(Number(limit) || 50, 1), 500);
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT * FROM tournament_entries
           WHERE tournament_id = ${tournamentId}
           ORDER BY score DESC, total_wagered DESC, id ASC
           LIMIT ${lim}`
     );
-    const rows = result?.[0] || [];
-    return rows.map(hydrateEntry);
+    return rowsOf(result).map(hydrateEntry);
   }
 
   async getUserEntry(tournamentId: number, userId: number): Promise<TournamentEntry | null> {
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT * FROM tournament_entries WHERE tournament_id = ${tournamentId} AND user_id = ${userId} LIMIT 1`
     );
-    const row = result?.[0]?.[0];
+    const row = firstRow(result);
     return row ? hydrateEntry(row) : null;
   }
 
@@ -442,11 +496,11 @@ class TournamentService {
   async getUserRank(tournamentId: number, userId: number): Promise<number | null> {
     const entry = await this.getUserEntry(tournamentId, userId);
     if (!entry) return null;
-    const result: any = await db.execute(
+    const result: RawExecuteResult = await db.execute(
       sql`SELECT COUNT(*) AS c FROM tournament_entries
           WHERE tournament_id = ${tournamentId} AND score > ${entry.score}`
     );
-    const better = Number(result?.[0]?.[0]?.c ?? 0);
+    const better = Number(firstRow(result)?.c ?? 0);
     return better + 1;
   }
 
@@ -468,10 +522,10 @@ class TournamentService {
     // local TZ, so comparing `new Date(row.end_time).getTime()` to `Date.now()`
     // on a non-UTC host is off by the UTC offset. Always compare against
     // the database's clock instead.
-    const endCheck: any = await db.execute(
+    const endCheck: RawExecuteResult = await db.execute(
       sql`SELECT (end_time <= NOW()) AS ended FROM tournaments WHERE id = ${tournamentId} LIMIT 1`
     );
-    const endedFlag = endCheck?.[0]?.[0]?.ended;
+    const endedFlag = firstRow(endCheck)?.ended;
     if (endedFlag == null) throw new Error('tournament_not_found');
     // MySQL boolean returns are driver-dependent (1/0, true/false, '1'/'0').
     if (!(endedFlag === 1 || endedFlag === true || endedFlag === '1')) {
@@ -571,11 +625,11 @@ class TournamentService {
   async sweepStatusTransitions(): Promise<void> {
     try {
       // Find scheduled tournaments whose start has passed; bump to active.
-      const result: any = await db.execute(
+      const result: RawExecuteResult = await db.execute(
         sql`SELECT id, game_type FROM tournaments
             WHERE status = 'scheduled' AND start_time <= NOW()`
       );
-      const rows = result?.[0] || [];
+      const rows = rowsOf(result);
       if (rows.length === 0) return;
 
       await db.execute(
@@ -583,7 +637,7 @@ class TournamentService {
             WHERE status = 'scheduled' AND start_time <= NOW()`
       );
       for (const r of rows) {
-        const gameType = r.game_type ?? r.gameType;
+        const gameType = (r.game_type ?? r.gameType) as string | undefined;
         if (gameType) this._activeCache.delete(gameType);
         LoggingService.logSystemEvent('tournament_activated', { id: Number(r.id), gameType });
       }

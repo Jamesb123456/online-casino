@@ -18,19 +18,6 @@ vi.mock('@/services/api', () => ({
   api: { get: vi.fn().mockResolvedValue(null), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 
-vi.mock('@/services/socket/rouletteSocketService', () => ({
-  default: {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    emit: vi.fn(),
-    onError: vi.fn(() => vi.fn()),
-    onResult: vi.fn(() => vi.fn()),
-    onBalanceUpdate: vi.fn(() => vi.fn()),
-  },
-}));
-
 vi.mock('@/layouts/MainLayout', () => ({
   default: ({ children }) => <div data-testid="main-layout">{children}</div>,
 }));

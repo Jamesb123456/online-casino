@@ -3,30 +3,6 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-vi.mock('@/services/socket/rouletteSocketService', () => ({
-  default: {
-    setUser: vi.fn(),
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn(),
-    joinGame: vi.fn().mockResolvedValue({ success: true, balance: 1000, history: [] }),
-    placeBet: vi.fn(),
-    spin: vi.fn(),
-    ensureConnected: vi.fn().mockResolvedValue(undefined),
-    onActivePlayers: vi.fn(() => vi.fn()),
-    onPlayerJoined: vi.fn(() => vi.fn()),
-    onPlayerLeft: vi.fn(() => vi.fn()),
-    onCurrentBets: vi.fn(() => vi.fn()),
-    onPlayerBet: vi.fn(() => vi.fn()),
-    onBalanceUpdate: vi.fn(() => vi.fn()),
-    onBettingStart: vi.fn(() => vi.fn()),
-    onBettingEnd: vi.fn(() => vi.fn()),
-    onSpinStarted: vi.fn(() => vi.fn()),
-    onSpinResult: vi.fn(() => vi.fn()),
-    onPersonalResult: vi.fn(() => vi.fn()),
-    onRoundComplete: vi.fn(() => vi.fn()),
-  },
-}));
-
 vi.mock('@/contexts/AuthContext', () => ({
   AuthContext: React.createContext({
     user: { id: 1, username: 'testuser', balance: 1000 },

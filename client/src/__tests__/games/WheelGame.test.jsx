@@ -3,32 +3,6 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-vi.mock('@/services/socket/wheelSocketService', () => ({
-  default: {
-    connect: vi.fn(() => Promise.resolve()),
-    disconnect: vi.fn(),
-    setUser: vi.fn(),
-    placeBet: vi.fn(() => Promise.resolve({
-      segmentIndex: 0,
-      multiplier: 1,
-      winAmount: 1,
-      profit: 0,
-      targetAngle: 0,
-    })),
-    onActivePlayers: vi.fn(() => vi.fn()),
-    onCurrentBets: vi.fn(() => vi.fn()),
-    onPlayerBet: vi.fn(() => vi.fn()),
-    onPlayerJoined: vi.fn(() => vi.fn()),
-    onPlayerLeft: vi.fn(() => vi.fn()),
-    onGameState: vi.fn(() => vi.fn()),
-    onResult: vi.fn(() => vi.fn()),
-    onError: vi.fn(() => vi.fn()),
-    onBetsUpdate: vi.fn(() => vi.fn()),
-    onPlayersUpdate: vi.fn(() => vi.fn()),
-    onBalanceUpdate: vi.fn(() => vi.fn()),
-  },
-}));
-
 vi.mock('@/contexts/AuthContext', () => ({
   AuthContext: React.createContext({
     user: { id: 1, username: 'testuser', balance: 1000 },

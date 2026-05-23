@@ -3,17 +3,6 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-vi.mock('@/services/socket/plinkoSocketService', () => ({
-  default: {
-    connect: vi.fn(() => Promise.resolve()),
-    disconnect: vi.fn(),
-    startGame: vi.fn(),
-    onGameResult: vi.fn(() => vi.fn()),
-    onError: vi.fn(() => vi.fn()),
-    onBalanceUpdate: vi.fn(() => vi.fn()),
-  },
-}));
-
 vi.mock('@/contexts/AuthContext', () => ({
   AuthContext: React.createContext({
     user: { id: 1, username: 'testuser', balance: 1000 },

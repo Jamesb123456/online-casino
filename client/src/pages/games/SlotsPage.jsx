@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import MainLayout from '../../layouts/MainLayout';
 import SlotsGame from '../../games/slots/SlotsGame';
 import RulesButton from '../../components/games/RulesButton';
-import slotsRules from '../../games/slots/rules';
+import { rulesData as slotsRulesData } from '../../games/slots/rules.jsx';
 
 const SlotsPage = () => {
   useEffect(() => {
@@ -15,7 +15,7 @@ const SlotsPage = () => {
           <h1 className="text-3xl md:text-4xl font-heading font-bold tracking-tight text-text-primary">
             <span className="text-game-slots drop-shadow-[0_0_18px_rgba(236,72,153,0.55)]">Slots</span>
           </h1>
-          <RulesButton gameType="slots" gameName="Slots" rules={slotsRules} />
+          <RulesButton gameType="slots" gameName="Slots" rulesData={slotsRulesData} />
         </div>
         <div className="mb-6">
           <p className="text-text-secondary">

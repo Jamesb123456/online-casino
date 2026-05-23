@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import RulesModal from './RulesModal';
 
-const RulesButton = ({ gameType, gameName, rules, className = '' }) => {
+const RulesButton = ({ gameType, gameName, rulesData, rules, className = '' }) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -22,6 +22,7 @@ const RulesButton = ({ gameType, gameName, rules, className = '' }) => {
         gameName={gameName}
         open={open}
         onClose={() => setOpen(false)}
+        rulesData={rulesData}
       >
         {rules}
       </RulesModal>

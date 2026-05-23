@@ -3,6 +3,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import { api } from '../../services/api';
 import { formatCredits } from '../../lib/formatCredits';
+import { renderRules } from '../../games/_shared/rulesSchema.jsx';
 
 const formatHouseEdge = (edge) => {
   const num = Number(edge);
@@ -10,7 +11,10 @@ const formatHouseEdge = (edge) => {
   return `${(num * 100).toFixed(2)}%`;
 };
 
-const RulesModal = ({ gameType, gameName, open, onClose, children }) => {
+const RulesModal = ({ gameType, gameName, open, onClose, rulesData, children }) => {
+  // Prefer data-driven rendering when `rulesData` is provided; fall back to
+  // `children` for backwards compatibility (e.g. existing RulesModal tests).
+  const body = rulesData ? renderRules(rulesData) : children;
   const [status, setStatus] = useState('idle');
   const [config, setConfig] = useState(null);
   const [error, setError] = useState(null);
@@ -47,7 +51,7 @@ const RulesModal = ({ gameType, gameName, open, onClose, children }) => {
     >
       <div className="space-y-5">
         <div className="text-sm text-text-secondary space-y-4 leading-relaxed">
-          {children}
+          {body}
         </div>
 
         <div className="rounded-lg border border-border bg-bg-base/60 p-4">
